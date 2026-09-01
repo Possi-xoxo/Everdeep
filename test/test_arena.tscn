@@ -1,0 +1,189 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="PackedScene" path="res://player/player.tscn" id="1_player"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+size = Vector3(30, 0.5, 30)
+[sub_resource type="BoxShape3D" id="BoxShape_floor"]
+size = Vector3(30, 0.5, 30)
+[sub_resource type="BoxMesh" id="BoxMesh_wall"]
+size = Vector3(8, 3, 0.6)
+[sub_resource type="BoxShape3D" id="BoxShape_wall"]
+size = Vector3(8, 3, 0.6)
+[sub_resource type="BoxMesh" id="BoxMesh_block"]
+size = Vector3(3, 2, 3)
+[sub_resource type="BoxShape3D" id="BoxShape_block"]
+size = Vector3(3, 2, 3)
+[sub_resource type="BoxMesh" id="BoxMesh_low_platform"]
+size = Vector3(4, 0.6, 3)
+[sub_resource type="BoxShape3D" id="BoxShape_low_platform"]
+size = Vector3(4, 0.6, 3)
+[sub_resource type="BoxMesh" id="BoxMesh_walkway"]
+size = Vector3(8, 0.5, 2)
+[sub_resource type="BoxShape3D" id="BoxShape_walkway"]
+size = Vector3(8, 0.5, 2)
+[sub_resource type="ConvexPolygonShape3D" id="ConvexShape_ordinary_ramp"]
+points = PackedVector3Array(-2, -0.2, 2, 2, -0.2, 2, -2, -0.2, -2, 2, -0.2, -2, -2, 0, 2, 2, 0, 2, -2, 1, -2, 2, 1, -2)
+[sub_resource type="ConvexPolygonShape3D" id="ConvexShape_shallow_ramp"]
+points = PackedVector3Array(-2.5, -0.2, 2.25, 2.5, -0.2, 2.25, -2.5, -0.2, -2.25, 2.5, -0.2, -2.25, -2.5, 0, 2.25, 2.5, 0, 2.25, -2.5, 0.6, -2.25, 2.5, 0.6, -2.25)
+
+[node name="TestArena" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-55, -35, 0)
+shadow_enabled = true
+
+[node name="Floor" type="StaticBody3D" parent="."]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("BoxMesh_floor")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("BoxShape_floor")
+
+[node name="NorthWall" type="StaticBody3D" parent="."]
+position = Vector3(0, 1.5, -7)
+[node name="MeshInstance3D" type="MeshInstance3D" parent="NorthWall"]
+mesh = SubResource("BoxMesh_wall")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="NorthWall"]
+shape = SubResource("BoxShape_wall")
+
+[node name="SideWall" type="StaticBody3D" parent="."]
+position = Vector3(6, 1.5, 1)
+rotation_degrees = Vector3(0, 90, 0)
+[node name="MeshInstance3D" type="MeshInstance3D" parent="SideWall"]
+mesh = SubResource("BoxMesh_wall")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="SideWall"]
+shape = SubResource("BoxShape_wall")
+
+[node name="CameraTestBlock" type="StaticBody3D" parent="."]
+position = Vector3(-4, 1, 3)
+[node name="MeshInstance3D" type="MeshInstance3D" parent="CameraTestBlock"]
+mesh = SubResource("BoxMesh_block")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="CameraTestBlock"]
+shape = SubResource("BoxShape_block")
+
+[node name="ElevatedBlock" type="StaticBody3D" parent="."]
+position = Vector3(3, 1, 7)
+[node name="MeshInstance3D" type="MeshInstance3D" parent="ElevatedBlock"]
+mesh = SubResource("BoxMesh_block")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ElevatedBlock"]
+shape = SubResource("BoxShape_block")
+
+[node name="LowJumpPlatform" type="StaticBody3D" parent="."]
+position = Vector3(-5, 0.3, 8)
+[node name="MeshInstance3D" type="MeshInstance3D" parent="LowJumpPlatform"]
+mesh = SubResource("BoxMesh_low_platform")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="LowJumpPlatform"]
+shape = SubResource("BoxShape_low_platform")
+
+[node name="RaisedWalkway" type="StaticBody3D" parent="."]
+position = Vector3(-5, 1.5, -3)
+[node name="MeshInstance3D" type="MeshInstance3D" parent="RaisedWalkway"]
+mesh = SubResource("BoxMesh_walkway")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RaisedWalkway"]
+shape = SubResource("BoxShape_walkway")
+
+[node name="StepTraversalTests" type="Node3D" parent="."]
+
+[node name="SmallLedge_10cm" type="CSGBox3D" parent="StepTraversalTests"]
+position = Vector3(10, 0.3, 9)
+size = Vector3(2.5, 0.1, 2.5)
+use_collision = true
+
+[node name="SmallLedge_20cm" type="CSGBox3D" parent="StepTraversalTests"]
+position = Vector3(10, 0.35, 6)
+size = Vector3(2.5, 0.2, 2.5)
+use_collision = true
+
+[node name="SmallLedge_30cm" type="CSGBox3D" parent="StepTraversalTests"]
+position = Vector3(10, 0.4, 3)
+size = Vector3(2.5, 0.3, 2.5)
+use_collision = true
+
+[node name="OrdinaryStairs" type="Node3D" parent="StepTraversalTests"]
+
+[node name="Step1" type="CSGBox3D" parent="StepTraversalTests/OrdinaryStairs"]
+position = Vector3(9, 0.35, -1)
+size = Vector3(4, 0.2, 1)
+[node name="Step2" type="CSGBox3D" parent="StepTraversalTests/OrdinaryStairs"]
+position = Vector3(9, 0.45, -2)
+size = Vector3(4, 0.4, 1)
+[node name="Step3" type="CSGBox3D" parent="StepTraversalTests/OrdinaryStairs"]
+position = Vector3(9, 0.55, -3)
+size = Vector3(4, 0.6, 1)
+[node name="Step4" type="CSGBox3D" parent="StepTraversalTests/OrdinaryStairs"]
+position = Vector3(9, 0.65, -4)
+size = Vector3(4, 0.8, 1)
+[node name="TopPlatform" type="CSGBox3D" parent="StepTraversalTests/OrdinaryStairs"]
+position = Vector3(9, 0.75, -6)
+size = Vector3(4, 1, 3)
+use_collision = true
+
+[node name="RampCollision" type="StaticBody3D" parent="StepTraversalTests/OrdinaryStairs"]
+position = Vector3(9, 0.25, -2.5)
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StepTraversalTests/OrdinaryStairs/RampCollision"]
+shape = SubResource("ConvexShape_ordinary_ramp")
+
+[node name="TooTallStep" type="CSGBox3D" parent="StepTraversalTests"]
+position = Vector3(13, 0.55, -1)
+size = Vector3(2, 0.6, 3)
+use_collision = true
+
+[node name="LowCeilingStep" type="Node3D" parent="StepTraversalTests"]
+[node name="Step" type="CSGBox3D" parent="StepTraversalTests/LowCeilingStep"]
+position = Vector3(13, 0.4, 4)
+size = Vector3(2, 0.3, 2)
+use_collision = true
+[node name="Ceiling" type="CSGBox3D" parent="StepTraversalTests/LowCeilingStep"]
+position = Vector3(13, 2.25, 4)
+size = Vector3(3, 0.3, 3)
+use_collision = true
+
+[node name="DiagonalLedge" type="CSGBox3D" parent="StepTraversalTests"]
+position = Vector3(5, 0.4, 11)
+rotation_degrees = Vector3(0, 35, 0)
+size = Vector3(5, 0.3, 2)
+use_collision = true
+
+[node name="ThresholdProgression" type="Node3D" parent="StepTraversalTests"]
+[node name="Step_40cm_Pass" type="CSGBox3D" parent="StepTraversalTests/ThresholdProgression"]
+position = Vector3(-11, 0.45, 11)
+size = Vector3(2.5, 0.4, 2.5)
+use_collision = true
+[node name="Step_50cm_Block" type="CSGBox3D" parent="StepTraversalTests/ThresholdProgression"]
+position = Vector3(-11, 0.5, 7.5)
+size = Vector3(2.5, 0.5, 2.5)
+use_collision = true
+[node name="Step_70cm_Block" type="CSGBox3D" parent="StepTraversalTests/ThresholdProgression"]
+position = Vector3(-11, 0.6, 4)
+size = Vector3(2.5, 0.7, 2.5)
+use_collision = true
+
+[node name="VeryThinLip" type="CSGBox3D" parent="StepTraversalTests"]
+position = Vector3(0, 0.325, 11)
+size = Vector3(5, 0.15, 0.08)
+use_collision = true
+
+[node name="ShallowWideStairs" type="Node3D" parent="StepTraversalTests"]
+[node name="WideStep1" type="CSGBox3D" parent="StepTraversalTests/ShallowWideStairs"]
+position = Vector3(0, 0.325, -9)
+size = Vector3(5, 0.15, 1.5)
+[node name="WideStep2" type="CSGBox3D" parent="StepTraversalTests/ShallowWideStairs"]
+position = Vector3(0, 0.4, -10.5)
+size = Vector3(5, 0.3, 1.5)
+[node name="WideStep3" type="CSGBox3D" parent="StepTraversalTests/ShallowWideStairs"]
+position = Vector3(0, 0.475, -12)
+size = Vector3(5, 0.45, 1.5)
+[node name="WideTop" type="CSGBox3D" parent="StepTraversalTests/ShallowWideStairs"]
+position = Vector3(0, 0.55, -13.75)
+size = Vector3(5, 0.6, 2)
+use_collision = true
+
+[node name="RampCollision" type="StaticBody3D" parent="StepTraversalTests/ShallowWideStairs"]
+position = Vector3(0, 0.25, -10.5)
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StepTraversalTests/ShallowWideStairs/RampCollision"]
+shape = SubResource("ConvexShape_shallow_ramp")
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+position = Vector3(0, 0.3, 4)

@@ -1,0 +1,52 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://player/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://player/player_camera.gd" id="2_camera"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape_player"]
+radius = 0.45
+height = 1.8
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_player"]
+radius = 0.45
+height = 1.8
+
+[sub_resource type="BoxMesh" id="BoxMesh_facing"]
+size = Vector3(0.24, 0.18, 0.55)
+
+[node name="Player" type="CharacterBody3D" node_paths=PackedStringArray("camera_rig", "movement_camera", "visual_root")]
+script = ExtResource("1_player")
+camera_rig = NodePath("CameraRig")
+movement_camera = NodePath("CameraRig/YawPivot/PitchPivot/SpringArm3D/Camera3D")
+visual_root = NodePath("VisualRoot")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+position = Vector3(0, 0.9, 0)
+shape = SubResource("CapsuleShape_player")
+
+[node name="VisualRoot" type="Node3D" parent="."]
+position = Vector3(0, 0.9, 0)
+
+[node name="PlaceholderMesh" type="MeshInstance3D" parent="VisualRoot"]
+mesh = SubResource("CapsuleMesh_player")
+
+[node name="FacingMarker" type="MeshInstance3D" parent="VisualRoot"]
+position = Vector3(0, 0.18, -0.48)
+mesh = SubResource("BoxMesh_facing")
+
+[node name="CameraRig" type="Node3D" parent="."]
+script = ExtResource("2_camera")
+
+[node name="YawPivot" type="Node3D" parent="CameraRig"]
+
+[node name="PitchPivot" type="Node3D" parent="CameraRig/YawPivot"]
+rotation = Vector3(-0.20944, 0, 0)
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig/YawPivot/PitchPivot"]
+spring_length = 4.5
+margin = 0.12
+collision_mask = 1
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig/YawPivot/PitchPivot/SpringArm3D"]
+current = true
+near = 0.08
