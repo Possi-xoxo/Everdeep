@@ -7,11 +7,18 @@ enum LocomotionState {
 	DODGING,
 }
 
-@export_category("Movement")
+@export_category("Ground Movement")
 @export_range(0.1, 20.0, 0.1) var walk_speed: float = 5.0
 @export_range(0.1, 30.0, 0.1) var sprint_speed: float = 8.0
+@export_range(0.1, 100.0, 0.1) var ground_acceleration: float = 28.0
+@export_range(0.1, 100.0, 0.1) var ground_deceleration: float = 42.0
+@export_range(0.1, 150.0, 0.1) var turn_acceleration: float = 70.0
+@export_range(0.1, 150.0, 0.1) var lateral_damping: float = 85.0
+@export_range(0.0, 1.0, 0.05) var turn_alignment_threshold: float = 0.7
+@export_range(0.1, 30.0, 0.1) var ground_rotation_speed: float = 16.0
+
+@export_category("Air Movement")
 @export_range(0.1, 100.0, 0.1) var acceleration: float = 22.0
-@export_range(0.1, 100.0, 0.1) var deceleration: float = 28.0
 @export_range(0.1, 30.0, 0.1) var rotation_speed: float = 12.0
 @export_range(0.1, 5.0, 0.05) var gravity_multiplier: float = 1.5
 
@@ -113,15 +120,60 @@ func _update_grounded_movement(input_direction: Vector3, delta: float) -> void:
 		and not movement_direction.is_zero_approx()
 	)
 	var target_speed := sprint_speed if is_sprinting else walk_speed
-	var target_velocity := movement_direction * target_speed
 	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
-	var rate := acceleration if not movement_direction.is_zero_approx() else deceleration
-	horizontal_velocity = horizontal_velocity.move_toward(target_velocity, rate * delta)
+	horizontal_velocity = _resolve_grounded_velocity(
+		horizontal_velocity,
+		movement_direction,
+		target_speed,
+		delta
+	)
 	velocity.x = horizontal_velocity.x
 	velocity.z = horizontal_velocity.z
 
 	if not movement_direction.is_zero_approx():
-		_rotate_toward(movement_direction, delta)
+		_rotate_toward(movement_direction, delta, 1.0, ground_rotation_speed)
+
+
+func _resolve_grounded_velocity(
+	current_velocity: Vector3,
+	desired_direction: Vector3,
+	target_speed: float,
+	delta: float
+) -> Vector3:
+	current_velocity.y = 0.0
+	if desired_direction.is_zero_approx():
+		return current_velocity.move_toward(Vector3.ZERO, ground_deceleration * delta)
+
+	desired_direction.y = 0.0
+	desired_direction = desired_direction.normalized()
+	var current_speed := current_velocity.length()
+	if current_speed <= 0.001:
+		return current_velocity.move_toward(
+			desired_direction * target_speed,
+			ground_acceleration * delta
+		)
+
+	var current_direction := current_velocity / current_speed
+	var alignment := clampf(current_direction.dot(desired_direction), -1.0, 1.0)
+	var turn_weight := clampf(
+		(turn_alignment_threshold - alignment) / maxf(turn_alignment_threshold, 0.001),
+		0.0,
+		1.0
+	)
+	var response_rate := lerpf(ground_acceleration, turn_acceleration, turn_weight)
+
+	# Resolve intended travel separately from obsolete sideways momentum. This
+	# preserves some weight during a turn without making the player skate along
+	# the old direction.
+	var parallel_speed := current_velocity.dot(desired_direction)
+	var parallel_velocity := desired_direction * parallel_speed
+	var lateral_velocity := current_velocity - parallel_velocity
+	parallel_velocity = parallel_velocity.move_toward(
+		desired_direction * target_speed,
+		response_rate * delta
+	)
+	lateral_velocity = lateral_velocity.move_toward(Vector3.ZERO, lateral_damping * delta)
+	return parallel_velocity + lateral_velocity
 
 
 func _update_airborne_movement(input_direction: Vector3, delta: float) -> void:
@@ -191,9 +243,19 @@ func _update_dodge(delta: float) -> void:
 	_rotate_toward(_dodge_direction, delta)
 
 
-func _rotate_toward(direction: Vector3, delta: float, speed_multiplier: float = 1.0) -> void:
+func _rotate_toward(
+	direction: Vector3,
+	delta: float,
+	speed_multiplier: float = 1.0,
+	base_rotation_speed: float = -1.0
+) -> void:
 	var target_yaw := atan2(-direction.x, -direction.z)
-	var effective_rotation_speed := rotation_speed * maxf(speed_multiplier, 0.0)
+	var selected_rotation_speed := (
+		base_rotation_speed
+		if base_rotation_speed >= 0.0
+		else rotation_speed
+	)
+	var effective_rotation_speed := selected_rotation_speed * maxf(speed_multiplier, 0.0)
 	if visual_root != null:
 		visual_root.rotation.y = lerp_angle(
 			visual_root.rotation.y,
