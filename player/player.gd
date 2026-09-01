@@ -98,27 +98,29 @@ func _get_camera_relative_input() -> Vector3:
 
 func _update_grounded_movement(input_direction: Vector3, delta: float) -> void:
 	var is_attacking := _is_attacking()
-	var movement_direction := input_direction
-	var movement_multiplier := 1.0
 	if is_attacking and combat_controller != null:
-		movement_direction = combat_controller.get_committed_move_direction()
-		movement_multiplier = combat_controller.get_movement_multiplier()
+		var attack_velocity := combat_controller.calculate_attack_velocity(input_direction, delta)
+		velocity.x = attack_velocity.x
+		velocity.z = attack_velocity.z
+		var attack_facing := combat_controller.get_attack_facing_direction()
+		if not attack_facing.is_zero_approx():
+			_rotate_toward(attack_facing, delta, combat_controller.attack_rotation_multiplier)
+		return
+
+	var movement_direction := input_direction
 	var is_sprinting := (
 		Input.is_action_pressed("sprint")
 		and not movement_direction.is_zero_approx()
-		and not is_attacking
 	)
 	var target_speed := sprint_speed if is_sprinting else walk_speed
-	var target_velocity := movement_direction * target_speed * movement_multiplier
+	var target_velocity := movement_direction * target_speed
 	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
 	var rate := acceleration if not movement_direction.is_zero_approx() else deceleration
-	if is_attacking:
-		rate *= maxf(movement_multiplier, 0.1)
 	horizontal_velocity = horizontal_velocity.move_toward(target_velocity, rate * delta)
 	velocity.x = horizontal_velocity.x
 	velocity.z = horizontal_velocity.z
 
-	if not movement_direction.is_zero_approx() and not is_attacking:
+	if not movement_direction.is_zero_approx():
 		_rotate_toward(movement_direction, delta)
 
 
@@ -189,16 +191,23 @@ func _update_dodge(delta: float) -> void:
 	_rotate_toward(_dodge_direction, delta)
 
 
-func _rotate_toward(direction: Vector3, delta: float) -> void:
+func _rotate_toward(direction: Vector3, delta: float, speed_multiplier: float = 1.0) -> void:
 	var target_yaw := atan2(-direction.x, -direction.z)
+	var effective_rotation_speed := rotation_speed * maxf(speed_multiplier, 0.0)
 	if visual_root != null:
 		visual_root.rotation.y = lerp_angle(
 			visual_root.rotation.y,
 			target_yaw - global_rotation.y,
-			1.0 - exp(-rotation_speed * delta)
+			1.0 - exp(-effective_rotation_speed * delta)
 		)
 	else:
-		rotation.y = lerp_angle(rotation.y, target_yaw, 1.0 - exp(-rotation_speed * delta))
+		rotation.y = lerp_angle(rotation.y, target_yaw, 1.0 - exp(-effective_rotation_speed * delta))
+
+
+func get_facing_direction() -> Vector3:
+	var facing := -visual_root.global_basis.z if visual_root != null else -global_basis.z
+	facing.y = 0.0
+	return facing.normalized()
 
 
 func _apply_gravity(delta: float) -> void:
