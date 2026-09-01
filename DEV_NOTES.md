@@ -1,4 +1,4 @@
-# Everdeep 0.0.1 — Locomotion Foundation
+# Everdeep 0.0.2 — Combat Prototype 0.02A
 
 ## Implemented
 
@@ -11,6 +11,8 @@
 - Movement derives its horizontal forward/right basis from the active player camera; only `VisualRoot` rotates, keeping camera orbit independent from character facing.
 - Escape releases the mouse; clicking the game recaptures it.
 - A lit graybox test arena with floor, walls, camera-collision obstacles, and an elevated block.
+- A committed light attack with reusable hitbox, hurtbox, damage-packet, and health components.
+- Two stationary target dummies for single-target and multi-target hit testing.
 
 ## Files
 
@@ -18,6 +20,12 @@
 - `res://player/player.gd` — movement, facing, gravity, sprint, and dodge.
 - `res://player/player_camera.gd` — camera orbit and mouse capture.
 - `res://test/test_arena.tscn` — main development scene.
+- `res://combat/damage_packet.gd` — structured hit data.
+- `res://combat/health.gd` — reusable health and damage signals.
+- `res://combat/hurtbox.gd` — reusable damage receiver forwarding to Health.
+- `res://combat/melee_hitbox.gd` — active-window damage and per-swing target tracking.
+- `res://combat/player_combat_controller.gd` — attack timing, commitment, temporary swing, and localized hit stop.
+- `res://combat/testing/target_dummy.tscn` — reusable stationary combat target.
 
 ## Controls
 
@@ -25,6 +33,7 @@
 - **Left Shift (hold):** sprint while moving
 - **Space:** jump while grounded
 - **Left Alt:** dodge in input direction, or facing direction when idle
+- **Left Mouse Button:** light attack while grounded and mouse-captured
 - **Mouse:** orbit camera
 - **Escape / click:** release / recapture mouse
 
@@ -42,6 +51,24 @@ The experimental automatic step solver was removed. The player again uses the st
 
 Sprint remains a held movement modifier rather than an exclusive state. Jumping is represented by `AIRBORNE`; there is no duplicate `is_grounded`, `is_jumping`, or `is_dodging` flag. Enable `debug_locomotion_transitions` on the Player to log state changes only when they occur. Future traversal states can extend the enum and state dispatch, but none are implemented yet.
 
+## Combat prototype 0.02A
+
+The Player contains `CombatController` and `VisualRoot/WeaponSocket`, with a placeholder weapon and child melee `Hitbox`. Combat uses `NEUTRAL` and `LIGHT_ATTACK`, with phases `STARTUP`, `ACTIVE`, and `RECOVERY`. Defaults are 0.18 s startup, 0.12 s active, and 0.30 s recovery. The hitbox is enabled only during Active and deals 20 damage.
+
+Attack movement uses `attack_movement_multiplier = 0.30`. Starting an attack captures the current horizontal movement direction, prevents input from redirecting facing during the swing, and disables sprint influence until recovery ends. Extra attack inputs are ignored. Attacks begin only while grounded, cannot begin during dodge, and cannot be interrupted by dodge or jump. Air attacks, jump attacks, sprint attacks, cancels, and input buffering are not implemented.
+
+`DamagePacket` carries damage, source, hit position, and hit direction. `MeleeHitbox` clears its target-ID set at attack start, so each Health component can be damaged only once per swing while different targets can each be hit. `Hurtbox` contains no entity-specific behavior and forwards packets to its assigned `HealthComponent`. Health exposes maximum/current health and emits `damaged`, `health_depleted`, and `health_reset` signals.
+
+Each target dummy has 100 health, flashes and tilts on damage, compresses on depletion, and resets after 1 second. Hit stop is localized: a confirmed hit pauses the attack timeline and weapon swing for 0.05 s and sets attack movement influence to zero during that interval. It does not change `Engine.time_scale`, pause the SceneTree, or interrupt camera/input processing.
+
+Combat collision separation:
+
+- Layer 1: existing world and physical bodies
+- Layer 3 (`4`): melee hitboxes
+- Layer 4 (`8`): hurtboxes
+
+Weapon hitboxes mask only hurtboxes and do not collide with world geometry. Enable `debug_combat_events` on `CombatController` or `debug_hits` on `Hitbox` for concise event logging; both default off.
+
 ## Known limitations
 
-This is intentionally animation-free. Jump has no buffering, coyote time, variable height, or extra jumps. There is no automatic step-up, mantle, or ledge-climb behavior; traversable architectural stairs should use ramp or sufficiently shallow collision. Mouse/keyboard is the only configured input scheme. Camera collision uses the spring arm's default shape.
+This is intentionally animation-free. The weapon-socket arc is temporary prototype visualization, not the future animation system. Combat has one light attack only: no combos, buffering, stamina, lock-on, player health, enemy attacks, armor, poise, or final VFX/audio. Jump has no buffering, coyote time, variable height, or extra jumps. There is no automatic step-up, mantle, or ledge-climb behavior; traversable architectural stairs should use ramp or sufficiently shallow collision. Mouse/keyboard is the only configured input scheme. Camera collision uses the spring arm's default shape.

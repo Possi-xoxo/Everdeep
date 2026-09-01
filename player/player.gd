@@ -28,6 +28,7 @@ enum LocomotionState {
 @export var camera_rig: Node3D
 @export var movement_camera: Camera3D
 @export var visual_root: Node3D
+@export var combat_controller: PlayerCombatController
 
 @export_category("Debug")
 @export var debug_locomotion_transitions: bool = false
@@ -46,6 +47,8 @@ func _ready() -> void:
 		movement_camera = get_node_or_null("CameraRig/YawPivot/PitchPivot/SpringArm3D/Camera3D") as Camera3D
 	if visual_root == null:
 		visual_root = get_node_or_null("VisualRoot") as Node3D
+	if combat_controller == null:
+		combat_controller = get_node_or_null("CombatController") as PlayerCombatController
 
 
 func _physics_process(delta: float) -> void:
@@ -94,17 +97,29 @@ func _get_camera_relative_input() -> Vector3:
 
 
 func _update_grounded_movement(input_direction: Vector3, delta: float) -> void:
-	var is_sprinting := Input.is_action_pressed("sprint") and not input_direction.is_zero_approx()
+	var is_attacking := _is_attacking()
+	var movement_direction := input_direction
+	var movement_multiplier := 1.0
+	if is_attacking and combat_controller != null:
+		movement_direction = combat_controller.get_committed_move_direction()
+		movement_multiplier = combat_controller.get_movement_multiplier()
+	var is_sprinting := (
+		Input.is_action_pressed("sprint")
+		and not movement_direction.is_zero_approx()
+		and not is_attacking
+	)
 	var target_speed := sprint_speed if is_sprinting else walk_speed
-	var target_velocity := input_direction * target_speed
+	var target_velocity := movement_direction * target_speed * movement_multiplier
 	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
-	var rate := acceleration if not input_direction.is_zero_approx() else deceleration
+	var rate := acceleration if not movement_direction.is_zero_approx() else deceleration
+	if is_attacking:
+		rate *= maxf(movement_multiplier, 0.1)
 	horizontal_velocity = horizontal_velocity.move_toward(target_velocity, rate * delta)
 	velocity.x = horizontal_velocity.x
 	velocity.z = horizontal_velocity.z
 
-	if not input_direction.is_zero_approx():
-		_rotate_toward(input_direction, delta)
+	if not movement_direction.is_zero_approx() and not is_attacking:
+		_rotate_toward(movement_direction, delta)
 
 
 func _update_airborne_movement(input_direction: Vector3, delta: float) -> void:
@@ -135,6 +150,7 @@ func _can_dodge() -> bool:
 		and _dodge_time_remaining <= 0.0
 		and _dodge_cooldown_remaining <= 0.0
 		and is_on_floor()
+		and not _is_attacking()
 	)
 
 
@@ -143,7 +159,16 @@ func _can_jump() -> bool:
 		locomotion_state == LocomotionState.GROUNDED
 		and _dodge_time_remaining <= 0.0
 		and is_on_floor()
+		and not _is_attacking()
 	)
+
+
+func can_begin_light_attack() -> bool:
+	return locomotion_state == LocomotionState.GROUNDED and is_on_floor()
+
+
+func _is_attacking() -> bool:
+	return combat_controller != null and combat_controller.is_attacking()
 
 
 func _start_dodge(input_direction: Vector3) -> void:

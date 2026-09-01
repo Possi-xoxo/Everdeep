@@ -1,7 +1,9 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://player/player.gd" id="1_player"]
 [ext_resource type="Script" path="res://player/player_camera.gd" id="2_camera"]
+[ext_resource type="Script" path="res://combat/player_combat_controller.gd" id="3_combat"]
+[ext_resource type="Script" path="res://combat/melee_hitbox.gd" id="4_hitbox"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape_player"]
 radius = 0.45
@@ -14,11 +16,24 @@ height = 1.8
 [sub_resource type="BoxMesh" id="BoxMesh_facing"]
 size = Vector3(0.24, 0.18, 0.55)
 
-[node name="Player" type="CharacterBody3D" node_paths=PackedStringArray("camera_rig", "movement_camera", "visual_root")]
+[sub_resource type="StandardMaterial3D" id="Material_weapon"]
+albedo_color = Color(0.18, 0.22, 0.28, 1)
+metallic = 0.65
+roughness = 0.3
+
+[sub_resource type="BoxMesh" id="BoxMesh_weapon"]
+material = SubResource("Material_weapon")
+size = Vector3(0.14, 0.14, 1.6)
+
+[sub_resource type="BoxShape3D" id="BoxShape_hitbox"]
+size = Vector3(1.6, 1.2, 2)
+
+[node name="Player" type="CharacterBody3D" node_paths=PackedStringArray("camera_rig", "movement_camera", "visual_root", "combat_controller")]
 script = ExtResource("1_player")
 camera_rig = NodePath("CameraRig")
 movement_camera = NodePath("CameraRig/YawPivot/PitchPivot/SpringArm3D/Camera3D")
 visual_root = NodePath("VisualRoot")
+combat_controller = NodePath("CombatController")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 position = Vector3(0, 0.9, 0)
@@ -33,6 +48,29 @@ mesh = SubResource("CapsuleMesh_player")
 [node name="FacingMarker" type="MeshInstance3D" parent="VisualRoot"]
 position = Vector3(0, 0.18, -0.48)
 mesh = SubResource("BoxMesh_facing")
+
+[node name="WeaponSocket" type="Node3D" parent="VisualRoot"]
+position = Vector3(0.55, 0.25, 0)
+
+[node name="PlaceholderWeapon" type="MeshInstance3D" parent="VisualRoot/WeaponSocket"]
+position = Vector3(0, 0, -0.8)
+mesh = SubResource("BoxMesh_weapon")
+
+[node name="Hitbox" type="Area3D" parent="VisualRoot/WeaponSocket"]
+position = Vector3(0, 0, -1.1)
+collision_layer = 4
+collision_mask = 8
+monitorable = false
+script = ExtResource("4_hitbox")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="VisualRoot/WeaponSocket/Hitbox"]
+shape = SubResource("BoxShape_hitbox")
+
+[node name="CombatController" type="Node" parent="." node_paths=PackedStringArray("actor", "weapon_socket", "hitbox")]
+script = ExtResource("3_combat")
+actor = NodePath("..")
+weapon_socket = NodePath("../VisualRoot/WeaponSocket")
+hitbox = NodePath("../VisualRoot/WeaponSocket/Hitbox")
 
 [node name="CameraRig" type="Node3D" parent="."]
 script = ExtResource("2_camera")

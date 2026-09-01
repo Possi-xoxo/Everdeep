@@ -1,6 +1,7 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="PackedScene" path="res://player/player.tscn" id="1_player"]
+[ext_resource type="PackedScene" path="res://combat/testing/target_dummy.tscn" id="2_dummy"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_floor"]
 size = Vector3(30, 0.5, 30)
@@ -187,3 +188,11 @@ shape = SubResource("ConvexShape_shallow_ramp")
 
 [node name="Player" parent="." instance=ExtResource("1_player")]
 position = Vector3(0, 0.3, 4)
+
+[node name="CombatDummies" type="Node3D" parent="."]
+
+[node name="TargetDummyA" parent="CombatDummies" instance=ExtResource("2_dummy")]
+position = Vector3(0, 0.25, 0.5)
+
+[node name="TargetDummyB" parent="CombatDummies" instance=ExtResource("2_dummy")]
+position = Vector3(1.2, 0.25, 0.35)
