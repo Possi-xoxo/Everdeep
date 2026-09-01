@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://Characters/Player/Models/Player_base.fbx" id="1_player_base"]
+
+[node name="PlayerModel" type="Node3D"]
+position = Vector3(0, -0.9, 0)
+rotation = Vector3(0, 3.141593, 0)
+
+[node name="RiggedHumanoid" parent="." instance=ExtResource("1_player_base")]

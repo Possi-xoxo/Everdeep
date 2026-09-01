@@ -4,17 +4,12 @@
 [ext_resource type="Script" path="res://player/player_camera.gd" id="2_camera"]
 [ext_resource type="Script" path="res://combat/player_combat_controller.gd" id="3_combat"]
 [ext_resource type="Script" path="res://combat/melee_hitbox.gd" id="4_hitbox"]
+[ext_resource type="PackedScene" path="res://Characters/Player/player_model.tscn" id="5_player_model"]
+[ext_resource type="Script" path="res://player/player_animation_controller.gd" id="6_animation_controller"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape_player"]
 radius = 0.45
 height = 1.8
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_player"]
-radius = 0.45
-height = 1.8
-
-[sub_resource type="BoxMesh" id="BoxMesh_facing"]
-size = Vector3(0.24, 0.18, 0.55)
 
 [sub_resource type="StandardMaterial3D" id="Material_weapon"]
 albedo_color = Color(0.18, 0.22, 0.28, 1)
@@ -42,12 +37,7 @@ shape = SubResource("CapsuleShape_player")
 [node name="VisualRoot" type="Node3D" parent="."]
 position = Vector3(0, 0.9, 0)
 
-[node name="PlaceholderMesh" type="MeshInstance3D" parent="VisualRoot"]
-mesh = SubResource("CapsuleMesh_player")
-
-[node name="FacingMarker" type="MeshInstance3D" parent="VisualRoot"]
-position = Vector3(0, 0.18, -0.48)
-mesh = SubResource("BoxMesh_facing")
+[node name="PlayerModel" parent="VisualRoot" instance=ExtResource("5_player_model")]
 
 [node name="WeaponSocket" type="Node3D" parent="VisualRoot"]
 position = Vector3(0.55, 0.25, 0)
@@ -71,6 +61,15 @@ script = ExtResource("3_combat")
 actor = NodePath("..")
 weapon_socket = NodePath("../VisualRoot/WeaponSocket")
 hitbox = NodePath("../VisualRoot/WeaponSocket/Hitbox")
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+anim_player = NodePath("../VisualRoot/PlayerModel/RiggedHumanoid/AnimationPlayer")
+
+[node name="AnimationController" type="Node" parent="." node_paths=PackedStringArray("actor", "animation_player", "animation_tree")]
+script = ExtResource("6_animation_controller")
+actor = NodePath("..")
+animation_player = NodePath("../VisualRoot/PlayerModel/RiggedHumanoid/AnimationPlayer")
+animation_tree = NodePath("../AnimationTree")
 
 [node name="CameraRig" type="Node3D" parent="."]
 script = ExtResource("2_camera")

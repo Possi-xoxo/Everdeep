@@ -1,4 +1,4 @@
-# Everdeep 0.0.2 — Combat Prototype 0.02A
+# Everdeep 0.0.3 — Animation Foundation
 
 ## Implemented
 
@@ -13,11 +13,15 @@
 - A lit graybox test arena with floor, walls, camera-collision obstacles, and an elevated block.
 - A committed light attack with reusable hitbox, hurtbox, damage-packet, and health components.
 - Two stationary target dummies for single-target and multi-target hit testing.
+- The rigged humanoid from `res://Characters/Player/Models/Player_base.fbx` replaces the capsule placeholder while preserving the existing gameplay body and controller.
+- Idle, Walk, and Run now blend from the player's actual horizontal physics velocity.
 
 ## Files
 
 - `res://player/player.tscn` — reusable player scene.
 - `res://player/player.gd` — movement, facing, gravity, sprint, and dodge.
+- `res://player/player_animation_controller.gd` — animation-source loading, in-place cleanup, and locomotion blend updates.
+- `res://Characters/Player/player_model.tscn` — presentation-only wrapper for the imported rigged player model.
 - `res://player/player_camera.gd` — camera orbit and mouse capture.
 - `res://test/test_arena.tscn` — main development scene.
 - `res://combat/damage_packet.gd` — structured hit data.
@@ -73,4 +77,10 @@ Weapon hitboxes mask only hurtboxes and do not collide with world geometry. Enab
 
 ## Known limitations
 
-This is intentionally animation-free. The weapon-socket arc is temporary prototype visualization, not the future animation system. Combat has one light attack only: no combos, buffering, stamina, lock-on, player health, enemy attacks, armor, poise, or final VFX/audio. Jump has no buffering, coyote time, variable height, or extra jumps. There is no automatic step-up, mantle, or ledge-climb behavior; traversable architectural stairs should use ramp or sufficiently shallow collision. Mouse/keyboard is the only configured input scheme. Camera collision uses the spring arm's default shape.
+The imported presentation model keeps its original 65-bone Mixamo skeleton, two skinned meshes, and materials. `PlayerModel` uses scale 1, a local Y offset of `-0.9` to place its feet at the CharacterBody origin, and a 180-degree Y rotation to convert the asset's +Z presentation facing to Everdeep's -Z gameplay facing. The existing camera pivot remains unchanged because the approximately 1.81 m model matches the 1.8 m collision capsule.
+
+The base skeleton is `VisualRoot/PlayerModel/RiggedHumanoid/Skeleton3D`. Locomotion uses the imported `mixamo_com` clips from `Idle (6).fbx` (8.3333 s), `Walking (9).fbx` (0.9667 s), and `Running (3).fbx` (0.7 s). All sources have the same 65 Mixamo bone names and `Skeleton3D` track paths, so direct animation reuse is reliable and no BoneMap, SkeletonProfileHumanoid, or retargeting layer is required. `Running (3)` was selected over the shorter, faster-cadence `Fast Run` for the current 8.0 m/s sprint.
+
+`AnimationTree` contains a runtime-built `BlendSpace1D` named `Locomotion`, with Idle at speed 0.0, Walk at 5.0, and Run at 8.0. `PlayerAnimationController` drives it from `Vector2(velocity.x, velocity.z).length()`. Clips loop linearly. Their duplicated hip-position tracks retain vertical motion but pin X/Z to the first key, preventing animation translation from affecting presentation while `CharacterBody3D` remains authoritative. No playback-speed scaling is applied in this foundation pass; minor foot sliding, backward/strafe use of the forward cycle, and airborne reuse of locomotion are expected.
+
+Jump/fall/land animation is the next planned animation pass. Dodge and attack animation remain unwired. The existing prototype `WeaponSocket` remains under `VisualRoot`, not a hand bone, so the placeholder weapon is expected to float beside the rig until a later skeleton-socket pass. The weapon-socket arc is temporary prototype visualization, not the future animation system. Combat has one light attack only: no combos, buffering, stamina, lock-on, player health, enemy attacks, armor, poise, or final VFX/audio. Jump has no buffering, coyote time, variable height, or extra jumps. There is no automatic step-up, mantle, or ledge-climb behavior; traversable architectural stairs should use ramp or sufficiently shallow collision. Mouse/keyboard is the only configured input scheme. Camera collision uses the spring arm's default shape.
