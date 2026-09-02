@@ -172,7 +172,9 @@ func _update_inherited_momentum(input_direction: Vector3, delta: float) -> void:
 	if not input_direction.is_zero_approx():
 		var desired_speed := speed
 		if desired_speed < 0.1 and actor != null:
-			desired_speed = float(actor.get("walk_speed")) * 0.25
+			# The pre-0.04A walk_speed represented ordinary 4 m/s locomotion.
+			# run_speed now owns that same value, preserving attack steering feel.
+			desired_speed = float(actor.get("run_speed")) * 0.25
 		var desired_velocity := input_direction * desired_speed
 		var base_acceleration := float(actor.get("acceleration")) if actor != null else 20.0
 		_attack_motion_velocity = _attack_motion_velocity.move_toward(

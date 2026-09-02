@@ -1,9 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://c3x6d77lodhaj"]
 
-[ext_resource type="PackedScene" path="res://Characters/Player/Models/Player_base.fbx" id="1_player_base"]
+[ext_resource type="PackedScene" uid="uid://bncam4adoktao" path="res://Characters/Player/Models/Player_base.fbx" id="1_player_base"]
 
-[node name="PlayerModel" type="Node3D"]
-position = Vector3(0, -0.9, 0)
-rotation = Vector3(0, 3.141593, 0)
+[node name="PlayerModel" type="Node3D" unique_id=783488592]
+transform = Transform3D(-1, 0, -3.2584137e-07, 0, 1, 0, 3.2584137e-07, 0, -1, 0, -0.9, 0)
 
-[node name="RiggedHumanoid" parent="." instance=ExtResource("1_player_base")]
+[node name="RiggedHumanoid" parent="." unique_id=2002498054 instance=ExtResource("1_player_base")]

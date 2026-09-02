@@ -7,9 +7,43 @@ enum LocomotionState {
 	DODGING,
 }
 
-@export_category("Ground Movement")
-@export_range(0.1, 20.0, 0.1) var walk_speed: float = 5.0
+enum GroundMovementPhase {
+	IDLE,
+	STARTING,
+	MOVING,
+	STOPPING,
+}
+
+enum Gait {
+	WALK,
+	RUN,
+	SPRINT,
+}
+
+signal movement_started
+signal movement_stopping
+signal movement_stopped
+signal sprint_started
+signal sprint_ended
+
+@export_category("Gait")
+@export_range(0.1, 20.0, 0.1) var walk_speed: float = 2.5
+@export_range(0.1, 20.0, 0.1) var run_speed: float = 4.0
 @export_range(0.1, 30.0, 0.1) var sprint_speed: float = 8.0
+@export_range(3.0, 5.0, 0.1) var sprint_activation_delay: float = 4.0
+
+@export_category("Movement Start")
+@export_range(0.0, 1.0, 0.05) var walk_start_initial_movement_scale: float = 0.30
+@export_range(0.0, 1.0, 0.05) var walk_start_full_movement_progress: float = 0.75
+@export_range(0.0, 1.0, 0.05) var run_start_initial_movement_scale: float = 0.40
+@export_range(0.0, 1.0, 0.05) var run_start_full_movement_progress: float = 0.65
+
+@export_category("Movement Stop")
+@export_range(0.0, 0.20, 0.01) var movement_stop_commitment: float = 0.12
+@export_range(0.0, 0.5, 0.01) var true_idle_speed_threshold: float = 0.10
+@export_range(0.0, 0.10, 0.01) var walk_stop_motion_carry_time: float = 0.06
+
+@export_category("Ground Motor")
 @export_range(0.1, 100.0, 0.1) var ground_acceleration: float = 28.0
 @export_range(0.1, 100.0, 0.1) var ground_deceleration: float = 42.0
 @export_range(0.1, 150.0, 0.1) var turn_acceleration: float = 70.0
@@ -20,11 +54,15 @@ enum LocomotionState {
 @export_category("Air Movement")
 @export_range(0.1, 100.0, 0.1) var acceleration: float = 22.0
 @export_range(0.1, 30.0, 0.1) var rotation_speed: float = 12.0
-@export_range(0.1, 5.0, 0.05) var gravity_multiplier: float = 1.5
 
 @export_category("Jump")
-@export_range(0.1, 20.0, 0.1) var jump_velocity: float = 7.0
+@export_range(0.1, 20.0, 0.1) var jump_velocity: float = 8.0
 @export_range(0.0, 1.0, 0.05) var air_control: float = 0.4
+
+@export_category("Gravity")
+@export_range(0.1, 5.0, 0.05) var rise_gravity_multiplier: float = 2.0
+@export_range(0.1, 6.0, 0.05) var fall_gravity_multiplier: float = 3.0
+@export_range(1.0, 100.0, 0.5) var max_fall_speed: float = 35.0
 
 @export_category("Dodge")
 @export_range(0.1, 30.0, 0.1) var dodge_speed: float = 11.0
@@ -39,12 +77,21 @@ enum LocomotionState {
 
 @export_category("Debug")
 @export var debug_locomotion_transitions: bool = false
+@export var debug_gait_phase_changes: bool = false
 
 var _gravity: float = float(ProjectSettings.get_setting("physics/3d/default_gravity", 9.8))
 var _dodge_time_remaining: float = 0.0
 var _dodge_cooldown_remaining: float = 0.0
 var _dodge_direction: Vector3 = Vector3.ZERO
 var locomotion_state: LocomotionState = LocomotionState.AIRBORNE
+var ground_movement_phase: GroundMovementPhase = GroundMovementPhase.IDLE
+var current_gait: Gait = Gait.WALK
+var _movement_phase_elapsed := 0.0
+var _sprint_hold_time := 0.0
+var _start_direction := Vector3.ZERO
+var _start_animation_ready := false
+var _stop_animation_ready := false
+var _start_transition_progress := 0.0
 
 
 func _ready() -> void:
@@ -67,7 +114,11 @@ func _physics_process(delta: float) -> void:
 		_start_dodge(input_direction)
 	elif Input.is_action_just_pressed("jump") and _can_jump():
 		velocity.y = jump_velocity
+		_interrupt_ground_movement(false)
 		_set_locomotion_state(LocomotionState.AIRBORNE)
+
+	if locomotion_state != LocomotionState.DODGING and not _is_attacking():
+		_update_gait_intent(input_direction, delta)
 
 	match locomotion_state:
 		LocomotionState.GROUNDED:
@@ -106,6 +157,7 @@ func _get_camera_relative_input() -> Vector3:
 func _update_grounded_movement(input_direction: Vector3, delta: float) -> void:
 	var is_attacking := _is_attacking()
 	if is_attacking and combat_controller != null:
+		_interrupt_ground_movement(true)
 		var attack_velocity := combat_controller.calculate_attack_velocity(input_direction, delta)
 		velocity.x = attack_velocity.x
 		velocity.z = attack_velocity.z
@@ -115,12 +167,70 @@ func _update_grounded_movement(input_direction: Vector3, delta: float) -> void:
 		return
 
 	var movement_direction := input_direction
-	var is_sprinting := (
-		Input.is_action_pressed("sprint")
-		and not movement_direction.is_zero_approx()
-	)
-	var target_speed := sprint_speed if is_sprinting else walk_speed
 	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
+	var horizontal_speed := horizontal_velocity.length()
+
+	if movement_direction.is_zero_approx():
+		if ground_movement_phase == GroundMovementPhase.STARTING:
+			_set_ground_movement_phase(GroundMovementPhase.IDLE)
+		elif ground_movement_phase == GroundMovementPhase.MOVING:
+			_set_ground_movement_phase(GroundMovementPhase.STOPPING)
+		_movement_phase_elapsed += delta
+		var preserve_walk_momentum := (
+			ground_movement_phase == GroundMovementPhase.STOPPING
+			and current_gait == Gait.WALK
+			and _movement_phase_elapsed <= walk_stop_motion_carry_time
+		)
+		if not preserve_walk_momentum:
+			horizontal_velocity = _resolve_grounded_velocity(
+				horizontal_velocity,
+				Vector3.ZERO,
+				run_speed,
+				delta
+			)
+		velocity.x = horizontal_velocity.x
+		velocity.z = horizontal_velocity.z
+		if (
+			ground_movement_phase == GroundMovementPhase.STOPPING
+			and _movement_phase_elapsed >= movement_stop_commitment
+			and horizontal_velocity.length() <= true_idle_speed_threshold
+			and _stop_animation_ready
+		):
+			_set_ground_movement_phase(GroundMovementPhase.IDLE)
+			_reset_sprint_to_walk()
+		return
+
+	if ground_movement_phase == GroundMovementPhase.STOPPING:
+		_set_ground_movement_phase(GroundMovementPhase.MOVING)
+	elif (
+		ground_movement_phase == GroundMovementPhase.IDLE
+		and horizontal_speed <= true_idle_speed_threshold
+	):
+		_start_direction = movement_direction
+		_set_ground_movement_phase(GroundMovementPhase.STARTING)
+
+	if ground_movement_phase == GroundMovementPhase.STARTING:
+		# Keep the latest intent so a quick direction correction never launches
+		# the character along a stale captured direction.
+		_start_direction = movement_direction
+		_rotate_toward(_start_direction, delta, 1.0, ground_rotation_speed)
+		var start_target_speed := _get_current_gait_speed() * _get_start_movement_scale()
+		horizontal_velocity = _resolve_grounded_velocity(
+			horizontal_velocity,
+			movement_direction,
+			start_target_speed,
+			delta
+		)
+		velocity.x = horizontal_velocity.x
+		velocity.z = horizontal_velocity.z
+		if not _start_animation_ready:
+			return
+		_set_ground_movement_phase(GroundMovementPhase.MOVING)
+	elif ground_movement_phase == GroundMovementPhase.IDLE:
+		# Meaningful retained velocity (for example after landing) bypasses STARTING.
+		_set_ground_movement_phase(GroundMovementPhase.MOVING)
+
+	var target_speed := _get_current_gait_speed()
 	horizontal_velocity = _resolve_grounded_velocity(
 		horizontal_velocity,
 		movement_direction,
@@ -180,13 +290,17 @@ func _update_airborne_movement(input_direction: Vector3, delta: float) -> void:
 	# Preserve the pre-refactor takeoff frame: floor contact is still valid until
 	# move_and_slide() processes the newly applied upward velocity.
 	if is_on_floor():
+		# An intentional upward impulse already owns this frame. Do not let the
+		# grounded braking motor shave horizontal momentum before floor contact
+		# clears in move_and_slide().
+		if velocity.y > 0.0:
+			return
 		_update_grounded_movement(input_direction, delta)
 		return
 
 	# No-input air movement keeps takeoff momentum; input provides reduced steering.
 	if not input_direction.is_zero_approx():
-		var is_sprinting := Input.is_action_pressed("sprint")
-		var target_speed := sprint_speed if is_sprinting else walk_speed
+		var target_speed := _get_current_gait_speed()
 		var target_velocity := input_direction * target_speed
 		var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
 		horizontal_velocity = horizontal_velocity.move_toward(
@@ -226,6 +340,7 @@ func _is_attacking() -> bool:
 
 
 func _start_dodge(input_direction: Vector3) -> void:
+	_interrupt_ground_movement(true)
 	_dodge_direction = input_direction
 	if _dodge_direction.is_zero_approx():
 		_dodge_direction = -visual_root.global_basis.z if visual_root != null else -global_basis.z
@@ -274,7 +389,15 @@ func get_facing_direction() -> Vector3:
 
 func _apply_gravity(delta: float) -> void:
 	if not is_on_floor():
-		velocity.y -= _gravity * gravity_multiplier * delta
+		var gravity_multiplier := (
+			rise_gravity_multiplier
+			if velocity.y > 0.0
+			else fall_gravity_multiplier
+		)
+		velocity.y = maxf(
+			velocity.y - _gravity * gravity_multiplier * delta,
+			-max_fall_speed
+		)
 	elif velocity.y <= 0.0:
 		velocity.y = -0.5
 
@@ -290,12 +413,123 @@ func _resolve_post_move_state() -> void:
 	if locomotion_state == LocomotionState.DODGING and _dodge_time_remaining > 0.0:
 		return
 	var resolved_state := LocomotionState.GROUNDED if is_on_floor() else LocomotionState.AIRBORNE
+	if resolved_state == LocomotionState.AIRBORNE:
+		_interrupt_ground_movement(false)
 	_set_locomotion_state(resolved_state)
+
+
+func _update_gait_intent(movement_direction: Vector3, delta: float) -> void:
+	if not Input.is_action_pressed("sprint"):
+		_reset_sprint_to_walk()
+		return
+	if movement_direction.is_zero_approx():
+		# A brief stop or airborne no-input interval preserves eligibility. The
+		# grounded STOPPING path resets only after the character genuinely idles.
+		return
+	if current_gait == Gait.WALK:
+		_set_gait(Gait.RUN)
+	if current_gait == Gait.RUN:
+		_sprint_hold_time += delta
+		if _sprint_hold_time >= sprint_activation_delay:
+			if debug_gait_phase_changes:
+				print("Sprint timer: eligible")
+			_set_gait(Gait.SPRINT)
+
+
+func _get_current_gait_speed() -> float:
+	match current_gait:
+		Gait.WALK:
+			return walk_speed
+		Gait.SPRINT:
+			return sprint_speed
+		_:
+			return run_speed
+
+
+func _interrupt_ground_movement(reset_gait: bool) -> void:
+	if reset_gait:
+		_reset_sprint_to_walk()
+	_set_ground_movement_phase(GroundMovementPhase.IDLE)
+
+
+func _reset_sprint_to_walk() -> void:
+	_sprint_hold_time = 0.0
+	_set_gait(Gait.WALK)
+
+
+func _set_gait(next_gait: Gait) -> void:
+	if current_gait == next_gait:
+		return
+	var previous_gait := current_gait
+	current_gait = next_gait
+	if debug_gait_phase_changes:
+		print("Gait: %s -> %s" % [Gait.keys()[previous_gait], Gait.keys()[next_gait]])
+	if next_gait == Gait.SPRINT:
+		sprint_started.emit()
+	elif previous_gait == Gait.SPRINT:
+		sprint_ended.emit()
+
+
+func _set_ground_movement_phase(next_phase: GroundMovementPhase) -> void:
+	if ground_movement_phase == next_phase:
+		return
+	var previous_phase := ground_movement_phase
+	ground_movement_phase = next_phase
+	_movement_phase_elapsed = 0.0
+	if next_phase == GroundMovementPhase.STARTING:
+		_start_animation_ready = false
+		_start_transition_progress = 0.0
+	elif next_phase == GroundMovementPhase.STOPPING:
+		_stop_animation_ready = false
+	if debug_gait_phase_changes:
+		print("Phase: %s -> %s" % [GroundMovementPhase.keys()[previous_phase], GroundMovementPhase.keys()[next_phase]])
+	match next_phase:
+		GroundMovementPhase.MOVING:
+			movement_started.emit()
+		GroundMovementPhase.STOPPING:
+			movement_stopping.emit()
+		GroundMovementPhase.IDLE:
+			movement_stopped.emit()
+
+
+func complete_movement_start() -> void:
+	if ground_movement_phase == GroundMovementPhase.STARTING:
+		_start_animation_ready = true
+
+
+func update_start_transition_progress(progress: float) -> void:
+	if ground_movement_phase == GroundMovementPhase.STARTING:
+		_start_transition_progress = clampf(progress, 0.0, 1.0)
+
+
+func _get_start_movement_scale() -> float:
+	var initial_scale := (
+		walk_start_initial_movement_scale
+		if current_gait == Gait.WALK
+		else run_start_initial_movement_scale
+	)
+	var full_progress := (
+		walk_start_full_movement_progress
+		if current_gait == Gait.WALK
+		else run_start_full_movement_progress
+	)
+	var ramp_weight := clampf(
+		_start_transition_progress / maxf(full_progress, 0.001),
+		0.0,
+		1.0
+	)
+	return lerpf(initial_scale, 1.0, ramp_weight)
+
+
+func complete_movement_stop() -> void:
+	if ground_movement_phase == GroundMovementPhase.STOPPING:
+		_stop_animation_ready = true
 
 
 func _set_locomotion_state(next_state: LocomotionState) -> void:
 	if locomotion_state == next_state:
 		return
+	var previous_state := locomotion_state
 	if debug_locomotion_transitions:
 		print(
 			"Locomotion: ",
@@ -304,3 +538,8 @@ func _set_locomotion_state(next_state: LocomotionState) -> void:
 			LocomotionState.keys()[next_state]
 		)
 	locomotion_state = next_state
+	if debug_gait_phase_changes:
+		print(
+			"Physical: %s -> %s; gait remains %s"
+			% [LocomotionState.keys()[previous_state], LocomotionState.keys()[next_state], Gait.keys()[current_gait]]
+		)

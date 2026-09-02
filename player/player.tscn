@@ -1,11 +1,11 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene format=3 uid="uid://bwhxp7ljcfqb7"]
 
-[ext_resource type="Script" path="res://player/player.gd" id="1_player"]
-[ext_resource type="Script" path="res://player/player_camera.gd" id="2_camera"]
-[ext_resource type="Script" path="res://combat/player_combat_controller.gd" id="3_combat"]
-[ext_resource type="Script" path="res://combat/melee_hitbox.gd" id="4_hitbox"]
+[ext_resource type="Script" uid="uid://bdgjj1jm67ft2" path="res://player/player.gd" id="1_player"]
+[ext_resource type="Script" uid="uid://3px20k3f1tbv" path="res://player/player_camera.gd" id="2_camera"]
+[ext_resource type="Script" uid="uid://rheevf00q0xl" path="res://combat/player_combat_controller.gd" id="3_combat"]
+[ext_resource type="Script" uid="uid://b8m751l5hc3qt" path="res://combat/melee_hitbox.gd" id="4_hitbox"]
 [ext_resource type="PackedScene" path="res://Characters/Player/player_model.tscn" id="5_player_model"]
-[ext_resource type="Script" path="res://player/player_animation_controller.gd" id="6_animation_controller"]
+[ext_resource type="Script" uid="uid://vujrbfiai3eb" path="res://player/player_animation_controller.gd" id="6_animation_controller"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape_player"]
 radius = 0.45
@@ -23,67 +23,69 @@ size = Vector3(0.14, 0.14, 1.6)
 [sub_resource type="BoxShape3D" id="BoxShape_hitbox"]
 size = Vector3(1.6, 1.2, 2)
 
-[node name="Player" type="CharacterBody3D" node_paths=PackedStringArray("camera_rig", "movement_camera", "visual_root", "combat_controller")]
+[node name="Player" type="CharacterBody3D" unique_id=674229653 node_paths=PackedStringArray("camera_rig", "movement_camera", "visual_root", "combat_controller")]
+floor_snap_length = 0.3
 script = ExtResource("1_player")
 camera_rig = NodePath("CameraRig")
 movement_camera = NodePath("CameraRig/YawPivot/PitchPivot/SpringArm3D/Camera3D")
 visual_root = NodePath("VisualRoot")
 combat_controller = NodePath("CombatController")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-position = Vector3(0, 0.9, 0)
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=863387153]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("CapsuleShape_player")
 
-[node name="VisualRoot" type="Node3D" parent="."]
-position = Vector3(0, 0.9, 0)
+[node name="VisualRoot" type="Node3D" parent="." unique_id=1004974763]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 
-[node name="PlayerModel" parent="VisualRoot" instance=ExtResource("5_player_model")]
+[node name="PlayerModel" parent="VisualRoot" unique_id=1073587122 instance=ExtResource("5_player_model")]
+transform = Transform3D(-1, 0, -3.2584137e-07, 0, 1, 0, 3.2584137e-07, 0, -1, 0, -0.9, 0)
 
-[node name="WeaponSocket" type="Node3D" parent="VisualRoot"]
-position = Vector3(0.55, 0.25, 0)
+[node name="WeaponSocket" type="Node3D" parent="VisualRoot" unique_id=951518332]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.55, 0.25, 0)
 
-[node name="PlaceholderWeapon" type="MeshInstance3D" parent="VisualRoot/WeaponSocket"]
-position = Vector3(0, 0, -0.8)
+[node name="PlaceholderWeapon" type="MeshInstance3D" parent="VisualRoot/WeaponSocket" unique_id=623630361]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.8)
 mesh = SubResource("BoxMesh_weapon")
 
-[node name="Hitbox" type="Area3D" parent="VisualRoot/WeaponSocket"]
-position = Vector3(0, 0, -1.1)
+[node name="Hitbox" type="Area3D" parent="VisualRoot/WeaponSocket" unique_id=779313496]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.1)
 collision_layer = 4
 collision_mask = 8
 monitorable = false
 script = ExtResource("4_hitbox")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="VisualRoot/WeaponSocket/Hitbox"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="VisualRoot/WeaponSocket/Hitbox" unique_id=885697449]
 shape = SubResource("BoxShape_hitbox")
 
-[node name="CombatController" type="Node" parent="." node_paths=PackedStringArray("actor", "weapon_socket", "hitbox")]
+[node name="CombatController" type="Node" parent="." unique_id=1935895836 node_paths=PackedStringArray("actor", "weapon_socket", "hitbox")]
 script = ExtResource("3_combat")
 actor = NodePath("..")
 weapon_socket = NodePath("../VisualRoot/WeaponSocket")
 hitbox = NodePath("../VisualRoot/WeaponSocket/Hitbox")
 
-[node name="AnimationTree" type="AnimationTree" parent="."]
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=2108979849]
+root_node = NodePath("../VisualRoot/PlayerModel/RiggedHumanoid")
 anim_player = NodePath("../VisualRoot/PlayerModel/RiggedHumanoid/AnimationPlayer")
 
-[node name="AnimationController" type="Node" parent="." node_paths=PackedStringArray("actor", "animation_player", "animation_tree")]
+[node name="AnimationController" type="Node" parent="." unique_id=2116749004 node_paths=PackedStringArray("actor", "animation_player", "animation_tree")]
 script = ExtResource("6_animation_controller")
 actor = NodePath("..")
 animation_player = NodePath("../VisualRoot/PlayerModel/RiggedHumanoid/AnimationPlayer")
 animation_tree = NodePath("../AnimationTree")
 
-[node name="CameraRig" type="Node3D" parent="."]
+[node name="CameraRig" type="Node3D" parent="." unique_id=1894732182]
 script = ExtResource("2_camera")
 
-[node name="YawPivot" type="Node3D" parent="CameraRig"]
+[node name="YawPivot" type="Node3D" parent="CameraRig" unique_id=532848384]
 
-[node name="PitchPivot" type="Node3D" parent="CameraRig/YawPivot"]
-rotation = Vector3(-0.20944, 0, 0)
+[node name="PitchPivot" type="Node3D" parent="CameraRig/YawPivot" unique_id=1363046156]
+transform = Transform3D(1, 0, 0, 0, 0.9781475, 0.20791216, 0, -0.20791216, 0.9781475, 0, 0, 0)
 
-[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig/YawPivot/PitchPivot"]
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig/YawPivot/PitchPivot" unique_id=1265114927]
 spring_length = 4.5
 margin = 0.12
-collision_mask = 1
 
-[node name="Camera3D" type="Camera3D" parent="CameraRig/YawPivot/PitchPivot/SpringArm3D"]
+[node name="Camera3D" type="Camera3D" parent="CameraRig/YawPivot/PitchPivot/SpringArm3D" unique_id=1087378424]
 current = true
 near = 0.08
