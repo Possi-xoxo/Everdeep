@@ -11,6 +11,9 @@
 radius = 0.45
 height = 1.8
 
+[sub_resource type="SphereShape3D" id="SphereShape_landing_probe"]
+radius = 0.2
+
 [sub_resource type="StandardMaterial3D" id="Material_weapon"]
 albedo_color = Color(0.18, 0.22, 0.28, 1)
 metallic = 0.65
@@ -34,6 +37,11 @@ combat_controller = NodePath("CombatController")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=863387153]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.86738205, 0)
 shape = SubResource("CapsuleShape_player")
+
+[node name="LandingProbe" type="ShapeCast3D" parent="." unique_id=1541270182]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
+shape = SubResource("SphereShape_landing_probe")
+target_position = Vector3(0, -0.4, 0)
 
 [node name="VisualRoot" type="Node3D" parent="." unique_id=1004974763]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
@@ -68,12 +76,13 @@ hitbox = NodePath("../VisualRoot/WeaponSocket/Hitbox")
 root_node = NodePath("../VisualRoot/MasterRig")
 anim_player = NodePath("../VisualRoot/MasterRig/AnimationPlayer")
 
-[node name="AnimationController" type="Node" parent="." unique_id=2116749004 node_paths=PackedStringArray("actor", "canonical_model", "animation_player", "animation_tree")]
+[node name="AnimationController" type="Node" parent="." unique_id=2116749004 node_paths=PackedStringArray("actor", "canonical_model", "animation_player", "animation_tree", "landing_probe")]
 script = ExtResource("6_animation_controller")
 actor = NodePath("..")
 canonical_model = NodePath("../VisualRoot/MasterRig")
 animation_player = NodePath("../VisualRoot/MasterRig/AnimationPlayer")
 animation_tree = NodePath("../AnimationTree")
+landing_probe = NodePath("../LandingProbe")
 
 [node name="CameraRig" type="Node3D" parent="." unique_id=1894732182]
 script = ExtResource("2_camera")

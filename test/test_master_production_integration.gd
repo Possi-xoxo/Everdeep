@@ -35,6 +35,7 @@ func run() -> void:
 		&"LOC_RUNNING_FOWARD_A": Animation.LOOP_LINEAR,
 		&"LOC_SPRINT_FORWARD": Animation.LOOP_LINEAR,
 		&"AIR_STANDING_JUMP_(2)": Animation.LOOP_NONE,
+		&"AIR_RUNNING_JUMP": Animation.LOOP_NONE,
 		&"AIR_FALLING_IDLE": Animation.LOOP_LINEAR,
 		&"AIR_FALLING_TO_LANDING": Animation.LOOP_NONE,
 	}
@@ -45,7 +46,7 @@ func run() -> void:
 			if anim_player.has_animation(action):
 				check(anim_player.get_animation(action).loop_mode == required[action], "loop mode is correct: " + action)
 	var machine := tree.tree_root as AnimationNodeStateMachine
-	for state_name in [&"Locomotion", &"Jump", &"Fall", &"Land"]:
+	for state_name in [&"Locomotion", &"StandingJump", &"MovingJump", &"Fall", &"LandPrep", &"Land"]:
 		check(machine != null and machine.has_node(state_name), "state exists: " + state_name)
 	for omitted in [&"WalkStart", &"RunStart", &"WalkStop", &"RunStop", &"Pivot"]:
 		check(machine == null or not machine.has_node(omitted), "experimental state omitted: " + omitted)

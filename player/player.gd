@@ -86,6 +86,9 @@ var _dodge_direction: Vector3 = Vector3.ZERO
 var locomotion_state: LocomotionState = LocomotionState.AIRBORNE
 var ground_movement_phase: GroundMovementPhase = GroundMovementPhase.IDLE
 var current_gait: Gait = Gait.WALK
+## Monotonic presentation event marker. Animation code can distinguish an
+## intentional jump from passive floor loss without owning gameplay physics.
+var jump_sequence: int = 0
 var _movement_phase_elapsed := 0.0
 var _sprint_hold_time := 0.0
 var _start_direction := Vector3.ZERO
@@ -113,6 +116,7 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("dodge") and _can_dodge():
 		_start_dodge(input_direction)
 	elif Input.is_action_just_pressed("jump") and _can_jump():
+		jump_sequence += 1
 		velocity.y = jump_velocity
 		_interrupt_ground_movement(false)
 		_set_locomotion_state(LocomotionState.AIRBORNE)

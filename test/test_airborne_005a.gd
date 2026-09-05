@@ -20,28 +20,29 @@ func run() -> void:
 	var machine := (player.get_node("AnimationTree") as AnimationTree).tree_root as AnimationNodeStateMachine
 	player.set_physics_process(false)
 	controller.set_physics_process(false)
-	check(machine.has_node(&"Jump") and machine.has_node(&"Fall") and machine.has_node(&"Land"), "airborne states are installed")
-	check(is_equal_approx(float(controller.get("jump_clip_start")), 0.12), "jump clip starts at 0.12")
+	check(machine.has_node(&"StandingJump") and machine.has_node(&"MovingJump") and machine.has_node(&"Fall") and machine.has_node(&"Land"), "airborne states are installed")
+	check(is_equal_approx(float(controller.get("jump_clip_start")), 0.50), "standing jump uses tuned clip start")
 	check(is_equal_approx(float(controller.get("jump_min_animation_time")), 0.28), "jump visual commitment is 0.28 s")
 	check(is_equal_approx(float(controller.get("fall_transition_velocity")), -0.5), "fall threshold is -0.5 m/s")
-	check(is_equal_approx(float(controller.get("land_clip_start")), 0.90), "land uses the tuned source lead-in skip")
-	check(is_equal_approx(float(controller.get("land_exit_progress")), 1.0), "land uses the tuned source exit")
+	check(is_equal_approx(float(controller.get("land_clip_start")), 0.50), "land uses the tuned source lead-in skip")
+	check(is_equal_approx(float(controller.get("land_clip_exit")), 0.90), "land uses the tuned source exit")
 
 	# Establish a real grounded history so a later airborne->grounded edge can land.
 	player.set("locomotion_state", EverdeepPlayer.LocomotionState.GROUNDED)
 	controller.call("_update_airborne_animation_state", 0.016)
 	player.set("current_gait", EverdeepPlayer.Gait.RUN)
 	player.velocity = Vector3(4.0, 8.0, 0.0)
+	controller.set("current_horizontal_speed", 4.0)
 	player.set("locomotion_state", EverdeepPlayer.LocomotionState.AIRBORNE)
 	controller.call("_update_airborne_animation_state", 0.016)
-	check(controller.get("current_animation_state") == &"Jump", "positive launch enters Jump once")
+	check(controller.get("current_animation_state") == &"MovingJump", "positive moving launch enters MovingJump once")
 	check(int(controller.get("landing_trigger_count")) == 0, "jump does not trigger landing")
 	controller.call("_update_airborne_animation_state", 0.10)
-	check(controller.get("current_animation_state") == &"Jump", "Jump does not restart while ascending")
+	check(controller.get("current_animation_state") == &"MovingJump", "MovingJump does not restart while ascending")
 	player.velocity.y = -0.6
 	controller.call("_update_airborne_animation_state", 0.10)
-	check(controller.get("current_animation_state") == &"Jump", "descent cannot cut off minimum Jump window")
-	controller.call("_update_airborne_animation_state", 0.10)
+	check(controller.get("current_animation_state") == &"MovingJump", "descent cannot cut off minimum Jump window")
+	controller.call("_update_airborne_animation_state", 0.15)
 	check(controller.get("current_animation_state") == &"Fall", "Jump enters Fall after time and descent thresholds")
 	check(int(player.get("current_gait")) == EverdeepPlayer.Gait.RUN, "Run gait persists through Jump/Fall")
 	check(is_equal_approx(Vector2(player.velocity.x, player.velocity.z).length(), 4.0), "airborne presentation does not change horizontal momentum")
@@ -61,16 +62,17 @@ func run() -> void:
 	# Losing the floor with downward velocity bypasses Jump.
 	player.velocity = Vector3(4.0, -1.0, 0.0)
 	player.set("locomotion_state", EverdeepPlayer.LocomotionState.AIRBORNE)
-	controller.call("_update_airborne_animation_state", 0.016)
+	controller.call("_update_airborne_animation_state", 0.10)
 	check(controller.get("current_animation_state") == &"Fall", "edge fall bypasses Jump")
 	player.set("locomotion_state", EverdeepPlayer.LocomotionState.GROUNDED)
 	controller.call("_update_airborne_animation_state", 0.016)
 	check(int(controller.get("landing_trigger_count")) == 2, "second airborne cycle permits one new Land")
 	# Re-jump from Land must cancel stale landing immediately.
 	player.velocity.y = 8.0
+	controller.set("current_horizontal_speed", Vector2(player.velocity.x, player.velocity.z).length())
 	player.set("locomotion_state", EverdeepPlayer.LocomotionState.AIRBORNE)
 	controller.call("_update_airborne_animation_state", 0.016)
-	check(controller.get("current_animation_state") == &"Jump", "rapid re-jump replaces Land with a fresh Jump")
+	check(controller.get("current_animation_state") == &"MovingJump", "rapid re-jump replaces Land with a fresh MovingJump")
 	check(int(controller.get("landing_trigger_count")) == 2, "re-jump does not create a false landing")
 
 	if failures.is_empty():
