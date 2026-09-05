@@ -4,7 +4,7 @@
 [ext_resource type="Script" uid="uid://3px20k3f1tbv" path="res://player/player_camera.gd" id="2_camera"]
 [ext_resource type="Script" uid="uid://rheevf00q0xl" path="res://combat/player_combat_controller.gd" id="3_combat"]
 [ext_resource type="Script" uid="uid://b8m751l5hc3qt" path="res://combat/melee_hitbox.gd" id="4_hitbox"]
-[ext_resource type="PackedScene" path="res://Characters/Player/player_model.tscn" id="5_player_model"]
+[ext_resource type="PackedScene" uid="uid://2hr251gto04b" path="res://Characters/Player/Models/Blender Master Rig.glb" id="5_master_rig"]
 [ext_resource type="Script" uid="uid://vujrbfiai3eb" path="res://player/player_animation_controller.gd" id="6_animation_controller"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape_player"]
@@ -32,13 +32,13 @@ visual_root = NodePath("VisualRoot")
 combat_controller = NodePath("CombatController")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=863387153]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.86738205, 0)
 shape = SubResource("CapsuleShape_player")
 
 [node name="VisualRoot" type="Node3D" parent="." unique_id=1004974763]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 
-[node name="PlayerModel" parent="VisualRoot" unique_id=1073587122 instance=ExtResource("5_player_model")]
+[node name="MasterRig" parent="VisualRoot" unique_id=1073587122 instance=ExtResource("5_master_rig")]
 transform = Transform3D(-1, 0, -3.2584137e-07, 0, 1, 0, 3.2584137e-07, 0, -1, 0, -0.9, 0)
 
 [node name="WeaponSocket" type="Node3D" parent="VisualRoot" unique_id=951518332]
@@ -65,13 +65,14 @@ weapon_socket = NodePath("../VisualRoot/WeaponSocket")
 hitbox = NodePath("../VisualRoot/WeaponSocket/Hitbox")
 
 [node name="AnimationTree" type="AnimationTree" parent="." unique_id=2108979849]
-root_node = NodePath("../VisualRoot/PlayerModel/RiggedHumanoid")
-anim_player = NodePath("../VisualRoot/PlayerModel/RiggedHumanoid/AnimationPlayer")
+root_node = NodePath("../VisualRoot/MasterRig")
+anim_player = NodePath("../VisualRoot/MasterRig/AnimationPlayer")
 
-[node name="AnimationController" type="Node" parent="." unique_id=2116749004 node_paths=PackedStringArray("actor", "animation_player", "animation_tree")]
+[node name="AnimationController" type="Node" parent="." unique_id=2116749004 node_paths=PackedStringArray("actor", "canonical_model", "animation_player", "animation_tree")]
 script = ExtResource("6_animation_controller")
 actor = NodePath("..")
-animation_player = NodePath("../VisualRoot/PlayerModel/RiggedHumanoid/AnimationPlayer")
+canonical_model = NodePath("../VisualRoot/MasterRig")
+animation_player = NodePath("../VisualRoot/MasterRig/AnimationPlayer")
 animation_tree = NodePath("../AnimationTree")
 
 [node name="CameraRig" type="Node3D" parent="." unique_id=1894732182]

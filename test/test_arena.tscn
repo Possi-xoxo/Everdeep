@@ -194,11 +194,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -11, 0.6, 4)
 use_collision = true
 size = Vector3(2.5, 0.7, 2.5)
 
-[node name="VeryThinLip" type="CSGBox3D" parent="StepTraversalTests" unique_id=693394409]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.325, 11)
-use_collision = true
-size = Vector3(5, 0.15, 0.08)
-
 [node name="ShallowWideStairs" type="Node3D" parent="StepTraversalTests" unique_id=1136110353]
 
 [node name="WideStep1" type="CSGBox3D" parent="StepTraversalTests/ShallowWideStairs" unique_id=1926775674]

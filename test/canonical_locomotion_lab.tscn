@@ -1,0 +1,183 @@
+[gd_scene load_steps=16 format=3]
+
+[ext_resource type="Script" path="res://test/canonical_locomotion_lab.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://Characters/Player/Models/Character Test.glb" id="2_character"]
+
+[sub_resource type="Environment" id="Environment_lab"]
+background_mode = 1
+background_color = Color(0.08, 0.105, 0.14, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.58, 0.68, 0.82, 1)
+ambient_light_energy = 0.7
+reflected_light_source = 2
+
+[sub_resource type="StandardMaterial3D" id="Material_floor"]
+albedo_color = Color(0.24, 0.28, 0.34, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Material_ramp"]
+albedo_color = Color(0.32, 0.42, 0.48, 1)
+roughness = 0.85
+
+[sub_resource type="StandardMaterial3D" id="Material_platform"]
+albedo_color = Color(0.36, 0.32, 0.43, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="FloorMesh"]
+material = SubResource("Material_floor")
+size = Vector3(28, 0.2, 24)
+
+[sub_resource type="BoxShape3D" id="FloorShape"]
+size = Vector3(28, 0.2, 24)
+
+[sub_resource type="BoxMesh" id="RampMesh"]
+material = SubResource("Material_ramp")
+size = Vector3(4.2, 0.2, 3)
+
+[sub_resource type="BoxShape3D" id="RampShape"]
+size = Vector3(4.2, 0.2, 3)
+
+[sub_resource type="BoxMesh" id="PlatformMesh"]
+material = SubResource("Material_platform")
+size = Vector3(4.5, 0.3, 4.5)
+
+[sub_resource type="BoxShape3D" id="PlatformShape"]
+size = Vector3(4.5, 0.3, 4.5)
+
+[sub_resource type="CapsuleShape3D" id="PlayerCapsule"]
+radius = 0.34
+height = 1.8
+
+[sub_resource type="StyleBoxFlat" id="DebugPanelStyle"]
+bg_color = Color(0.025, 0.035, 0.05, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.32, 0.48, 0.68, 0.85)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="LabelSettings" id="DebugLabelSettings"]
+font_size = 17
+font_color = Color(0.92, 0.96, 1, 1)
+
+[node name="CanonicalLocomotionLab" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_lab")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-52, -34, 0)
+light_color = Color(1, 0.92, 0.82, 1)
+light_energy = 1.35
+shadow_enabled = true
+
+[node name="FillLight" type="OmniLight3D" parent="."]
+position = Vector3(-4, 4, 5)
+light_color = Color(0.5, 0.67, 1, 1)
+light_energy = 2.2
+omni_range = 12.0
+
+[node name="Floor" type="StaticBody3D" parent="."]
+position = Vector3(0, -0.1, 0)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("FloorMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("FloorShape")
+
+[node name="RampWest" type="StaticBody3D" parent="."]
+position = Vector3(-6, 0.32, -3)
+rotation_degrees = Vector3(0, 0, -10)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="RampWest"]
+mesh = SubResource("RampMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RampWest"]
+shape = SubResource("RampShape")
+
+[node name="RampEast" type="StaticBody3D" parent="."]
+position = Vector3(5.5, 0.38, 2.5)
+rotation_degrees = Vector3(0, 0, 11)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="RampEast"]
+mesh = SubResource("RampMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RampEast"]
+shape = SubResource("RampShape")
+
+[node name="LowPlatform" type="StaticBody3D" parent="."]
+position = Vector3(8.5, 0.78, 2.5)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="LowPlatform"]
+mesh = SubResource("PlatformMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="LowPlatform"]
+shape = SubResource("PlatformShape")
+
+[node name="DropPlatform" type="StaticBody3D" parent="."]
+position = Vector3(-8.5, 1.05, 5.5)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="DropPlatform"]
+mesh = SubResource("PlatformMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="DropPlatform"]
+shape = SubResource("PlatformShape")
+
+[node name="PlayerTest" type="CharacterBody3D" parent="."]
+position = Vector3(0, 0.05, 5)
+script = ExtResource("1_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PlayerTest"]
+position = Vector3(0, 0.9, 0)
+shape = SubResource("PlayerCapsule")
+
+[node name="VisualRoot" type="Node3D" parent="PlayerTest"]
+
+[node name="CanonicalCharacter" parent="PlayerTest/VisualRoot" instance=ExtResource("2_character")]
+
+[node name="CameraRig" type="Node3D" parent="PlayerTest"]
+position = Vector3(0, 1.35, 0)
+
+[node name="YawPivot" type="Node3D" parent="PlayerTest/CameraRig"]
+
+[node name="PitchPivot" type="Node3D" parent="PlayerTest/CameraRig/YawPivot"]
+rotation_degrees = Vector3(-10, 0, 0)
+
+[node name="SpringArm3D" type="SpringArm3D" parent="PlayerTest/CameraRig/YawPivot/PitchPivot"]
+spring_length = 4.5
+margin = 0.1
+collision_mask = 1
+
+[node name="Camera3D" type="Camera3D" parent="PlayerTest/CameraRig/YawPivot/PitchPivot/SpringArm3D"]
+current = true
+fov = 52.0
+
+[node name="AnimationTree" type="AnimationTree" parent="PlayerTest"]
+
+[node name="CanvasLayer" type="CanvasLayer" parent="PlayerTest"]
+
+[node name="DebugPanel" type="PanelContainer" parent="PlayerTest/CanvasLayer"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -410.0
+offset_top = 18.0
+offset_right = -18.0
+offset_bottom = 292.0
+grow_horizontal = 0
+theme_override_styles/panel = SubResource("DebugPanelStyle")
+
+[node name="MarginContainer" type="MarginContainer" parent="PlayerTest/CanvasLayer/DebugPanel"]
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="DebugLabel" type="Label" parent="PlayerTest/CanvasLayer/DebugPanel/MarginContainer"]
+label_settings = SubResource("DebugLabelSettings")
+text = "Canonical Locomotion Lab\n\nLoading..."
