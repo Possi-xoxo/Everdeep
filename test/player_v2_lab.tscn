@@ -1,0 +1,22 @@
+[gd_scene load_steps=5 format=3]
+[ext_resource type="PackedScene" path="res://Characters/Player/V2/player_v2.tscn" id="1"]
+[ext_resource type="Script" path="res://test/player_v2_lab.gd" id="2"]
+[sub_resource type="ProceduralSkyMaterial" id="SkyMaterial"]
+sky_top_color = Color(0.17, 0.27, 0.40, 1)
+sky_horizon_color = Color(0.55, 0.64, 0.71, 1)
+[sub_resource type="Environment" id="Environment"]
+background_mode = 1
+background_color = Color(0.12, 0.18, 0.24, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.70, 0.80, 0.95, 1)
+ambient_light_energy = 0.65
+[node name="PlayerV2Lab" type="Node3D"]
+script = ExtResource("2")
+[node name="Environment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment")
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-55, -25, 0)
+light_energy = 1.5
+shadow_enabled = true
+[node name="PlayerV2" parent="." instance=ExtResource("1")]
+position = Vector3(0, 0.1, 18)

@@ -1,0 +1,51 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://combat/testing/target_dummy.gd" id="1_dummy"]
+[ext_resource type="Script" path="res://combat/health.gd" id="2_health"]
+[ext_resource type="Script" path="res://combat/hurtbox.gd" id="3_hurtbox"]
+
+[sub_resource type="StandardMaterial3D" id="Material_dummy"]
+resource_local_to_scene = true
+albedo_color = Color(0.72, 0.42, 0.12, 1)
+roughness = 0.8
+
+[sub_resource type="BoxMesh" id="BoxMesh_dummy"]
+size = Vector3(0.9, 2, 0.9)
+
+[sub_resource type="BoxShape3D" id="BoxShape_body"]
+size = Vector3(0.9, 2, 0.9)
+
+[sub_resource type="BoxShape3D" id="BoxShape_hurtbox"]
+size = Vector3(1.05, 2.1, 1.05)
+
+[node name="TargetDummy" type="Node3D"]
+script = ExtResource("1_dummy")
+
+[node name="VisualRoot" type="Node3D" parent="."]
+
+[node name="BodyMesh" type="MeshInstance3D" parent="VisualRoot"]
+position = Vector3(0, 1, 0)
+material_override = SubResource("Material_dummy")
+mesh = SubResource("BoxMesh_dummy")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+position = Vector3(0, 1, 0)
+shape = SubResource("BoxShape_body")
+
+[node name="Health" type="Node" parent="."]
+script = ExtResource("2_health")
+maximum_health = 100.0
+
+[node name="Hurtbox" type="Area3D" parent="." node_paths=PackedStringArray("health")]
+position = Vector3(0, 1, 0)
+collision_layer = 8
+collision_mask = 4
+script = ExtResource("3_hurtbox")
+health = NodePath("../Health")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Hurtbox"]
+shape = SubResource("BoxShape_hurtbox")

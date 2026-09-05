@@ -1,0 +1,56 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://Characters/Player/V2/player_v2.gd" id="1"]
+[ext_resource type="PackedScene" path="res://Characters/Player/Models/Blender Master Rig.glb" id="2"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_camera_v2.gd" id="3"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_animation_v2.gd" id="4"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_debug_v2.gd" id="5"]
+[sub_resource type="CapsuleShape3D" id="Body"]
+radius = 0.45
+height = 1.8
+[sub_resource type="StyleBoxFlat" id="Panel"]
+bg_color = Color(0.025, 0.04, 0.06, 0.88)
+content_margin_left = 16.0
+content_margin_top = 12.0
+content_margin_right = 16.0
+content_margin_bottom = 12.0
+
+[node name="PlayerV2" type="CharacterBody3D"]
+floor_snap_length = 0.3
+script = ExtResource("1")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+position = Vector3(0, 0.9, 0)
+shape = SubResource("Body")
+[node name="VisualRoot" type="Node3D" parent="."]
+[node name="MasterRig" parent="VisualRoot" instance=ExtResource("2")]
+rotation = Vector3(0, 3.14159265, 0)
+[node name="CameraRig" type="Node3D" parent="."]
+position = Vector3(0, 1.55, 0)
+script = ExtResource("3")
+[node name="YawPivot" type="Node3D" parent="CameraRig"]
+[node name="PitchPivot" type="Node3D" parent="CameraRig/YawPivot"]
+rotation = Vector3(-0.20944, 0, 0)
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig/YawPivot/PitchPivot"]
+spring_length = 4.5
+margin = 0.15
+collision_mask = 1
+[node name="Camera3D" type="Camera3D" parent="CameraRig/YawPivot/PitchPivot/SpringArm3D"]
+current = true
+near = 0.08
+[node name="AnimationTree" type="AnimationTree" parent="."]
+process_physics_priority = 20
+[node name="AnimationController" type="Node" parent="."]
+process_physics_priority = 10
+script = ExtResource("4")
+[node name="DebugCanvas" type="CanvasLayer" parent="."]
+script = ExtResource("5")
+[node name="Panel" type="PanelContainer" parent="DebugCanvas"]
+offset_left = 16.0
+offset_top = 16.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("Panel")
+[node name="Label" type="Label" parent="DebugCanvas/Panel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Player V2"
+
