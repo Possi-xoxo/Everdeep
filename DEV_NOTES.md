@@ -1,3 +1,50 @@
+# V2 Phase 3B.1 — Foot Ground Detection (2026-09-05)
+
+Observation only: new `Characters/Player/V2/player_foot_grounding_v2.gd` owns `PlayerV2/FootGrounding`, two child RayCast3D nodes `LeftFootProbe`/`RightFootProbe`, Marker3D helpers `LeftFootTarget`/`RightFootTarget`, and debug line geometry. Only the reusable player scene and debug HUD are connected to it. No movement, StepSolver, animation-controller, camera, collision, skeleton, pelvis, or bone-pose code is modified. No IK consumer, foot locking, pole/knee target, stride warp, or root motion exists.
+
+## Rig access and timing
+
+Exact skeleton path: `PlayerV2/VisualRoot/MasterRig/Base Armature and Mesh/Skeleton3D`. Runtime name lookup verifies `mixamorig_LeftFoot` index **62**, `mixamorig_RightFoot` index **57**. ToeBase indices are Left **63**, Right **58**; Toe_End indices Left **64**, Right **59**. Indices are looked up by name, not hardcoded in the component. A missing skeleton/bone reports a clear error and leaves validity false rather than using an unrelated bone.
+
+World foot position = `skeleton.global_transform * skeleton.get_bone_global_pose(index).origin`. Imported scale/orientation, VisualRoot facing and landing offsets are thus included. A deferred bind registers the observer on AnimationTree.mixer_applied AFTER the existing AnimationController handler, so it reads the evaluated pose after existing presentation offsets. No independent render-loop bone polling, no bone setters, and no skeleton override calls are used. Automatic RayCast processing is disabled; each allowed evaluated pose forces exactly two fresh ray updates.
+
+Rest-pose foot/ankle origin is approximately **0.0873 m** above the model's toe-level plane (toe origins near zero); idle sampling on the flat lab floor measured left ankle Y **0.08844 m**. Default sole offset 0.08 leaves an estimated idle sole gap around 0.00844 m. This is a bone/toe-plane measurement, NOT a skin-vertex sole calibration. Future IK must calibrate the actual sole and animated foot rotation before treating the offset as final.
+
+## Defaults and data contract
+
+| Setting | Value |
+| --- | --- |
+| enabled | true |
+| foot_grounding_debug | false; F7 toggles (F3 HUD, F4 step diagnostics remain intact) |
+| foot_probe_origin_height | 0.20 m above CURRENT animated ankle, world up |
+| foot_probe_distance | 0.60 m TOTAL cast length from that elevated origin |
+| ground_collision_mask | layer 1, intersected with the motor collision mask |
+| foot_sole_offset | 0.08 m |
+| foot_target_smoothing_speed | 20 /s |
+| foot_normal_smoothing_speed | 15 /s |
+
+Self is explicitly excluded. Areas are disabled. Only StaticBody3D (including AnimatableBody3D) hits are accepted; CharacterBody3D/enemy and RigidBody3D hits invalidate instead of becoming targets. World geometry must remain on the intended ground layer; future static weapon props on that same layer would need filtering/layer segregation. A disallowed body can occlude a ray and produce invalid data; the sensor does not cast repeatedly through actors. Existing capsule remains 0.45 m radius / 1.80 m height with 0.001 m safe margin, 0.30 m floor snap and 45-degree floor limit.
+
+Consumers read `FootGrounding.left` / `.right` FootSample objects: `valid`, `hit`, `reason`, `bone_index`, `bone_position`, `raw_ground_position`, `smoothed_ground_position`, `raw_ground_normal`, normalized `ground_normal`, signed `distance`, `target_transform`, and `ankle_target_transform`. `distance` means animated ankle Y minus sole offset minus raw ground Y; positive means the estimated animated sole is above terrain. `target_transform` and Marker3D position are the SMOOTHED GROUND contact, with identity world basis. `ankle_target_transform` adds normal*sole_offset as a separate future ankle suggestion, avoiding an ambiguous offset in the ground hit itself. No helper is connected to SkeletonIK.
+
+`foot_height_delta` is raw left terrain height minus right terrain height when both valid, otherwise NAN. `lowest_required_pelvis_offset` is min(0,-left.distance,-right.distance) only when both valid, otherwise NAN. It is an unweighted diagnostic hint, NOT a usable pelvis solver: swing feet/contact phase must be considered in Phase 3B.3.
+
+## Validity and smoothing
+
+Valid requires enabled sensing, the motor's supported-ground state (including validated step-up), no airborne/jump flag, an in-range hit on eligible terrain, and normal dot UP >=cos(existing floor_max_angle). Even a visually suppressed passive airborne stair frame invalidates foot targets; visual locomotion alone is not physical foot support. Grounded Land can reacquire immediately in the first evaluated contact pose. No-hit, non-terrain, steep, disabled, or airborne invalidates immediately. Last helper transform can remain stored but must not be consumed unless `valid` is true; no smoothed stale contact is promoted to validity.
+
+Position filtering uses exponential height interpolation `1-exp(-20*dt)` and exact current hit X/Z, so Sprint does not drag a horizontally lagging target behind the animated foot. Normals use normalized interpolation with `1-exp(-15*dt)`. Reacquisition, collider change, or >0.08 m height discontinuity seeds directly from raw data, avoiding blending between separate stair treads. Setting a smoothing speed to zero bypasses that filter. Filtering small vertical changes can temporarily put the smoothed target off the exact surface; raw data remains available for later IK choices. Normal filtering never changes the RAW walkability decision.
+
+F7 enables the existing HUD and debug geometry: left cyan / right magenta origins and cast columns, yellow raw crosses/normals, green smoothed targets, red invalid columns. The HUD shows validity/reason, signed distance, target Y, normal, and independent terrain height delta. Rendered split-curb verification is saved outside the project in the working task's `work/foot_grounding_debug.png`; it visibly reports 0.150/0.000 m targets and 0.150 m delta without moving either foot.
+
+## Verification and Phase 3B.2 handoff
+
+New `test/test_foot_grounding_v2.gd` passes flat idle stability/up normals, current-pose foot tracking, zero horizontal target lag, isolated 15 cm split-height case, ramp normals, one valid/one invalid platform edge, rejection of 55-degree tops, 10/15/20/30 cm curbs, all three stair sets, rotated diagonal curb, immediate jump invalidation and post-landing reacquisition. An explicit before/after snapshot confirms sensing/debug generation changes neither body transform/velocity nor ANY skeleton bone pose. Edge/slope fixtures reposition only the whole player in the test; the sensor never does so. Original eight V2 suites also pass with the observer enabled.
+
+At default range, flat locomotion produced valid samples for Walk 120/120, Run 100/120, Sprint 93/120 across a 60-tick two-foot sample. Higher swing poses legitimately exceed the cast range and invalidate; validity is TERRAIN AVAILABILITY, not proof the foot is planted. Stair targets reacquire upper treads; discontinuities at true edges are expected and should not be hidden with stale contact. Thin geometry, moving-platform local-space anchoring, render interpolation, and more complex collision-layer setups still need future coverage. Keep 0.20 origin / 0.60 distance / 0.08 sole / 20 position / 15 normal initially; test 0.70–0.80 range only if additional swing reach is useful, without relaxing airborne invalidation. Do not use longer rays as a substitute for contact-phase weighting.
+
+Phase 3B.2 may read the two valid target transforms/normals and add a separately blended IK consumer. Targets are not foot locks, and their identity basis is deliberate: no ankle orientation solving yet. No gameplay feel change is expected or observed in regressions; extended subjective play review remains useful. StepSolver SHA256 remains `34B96532FECE9BBE2E8F362CFD03262DDA7E4B6F875E15CEE30D776FA6C9B746`.
+
 # V2 — Idle Facing Lock + Passive Fall Suppression (2026-09-05)
 
 Idle orbit previously rotated the character because `player_v2.gd` substituted camera-forward for desired facing when movement was absent. That nonzero `facing_delta` triggered the grounded animation resource's stationary turn nodes. The motor now publishes zero facing delta without meaningful movement and only performs ordinary velocity-facing rotation with input magnitude >0.01. This threshold is applied after the existing Input.get_vector action deadzone; input configuration is unchanged. Camera code, idle playback, explicit pivot ownership, Walk180/Run180, and movement-relative arc logic are unchanged. On new input, the current camera basis still determines movement normally. Stationary turn clips remain available but camera orbit no longer requests them.

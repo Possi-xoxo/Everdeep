@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://Characters/Player/V2/player_v2.gd" id="1"]
 [ext_resource type="PackedScene" path="res://Characters/Player/Models/Blender Master Rig.glb" id="2"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://Characters/Player/V2/player_animation_v2.gd" id="4"]
 [ext_resource type="Script" path="res://Characters/Player/V2/player_debug_v2.gd" id="5"]
 [ext_resource type="Script" path="res://Characters/Player/V2/player_step_solver_v2.gd" id="6"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_foot_grounding_v2.gd" id="7"]
 [sub_resource type="CapsuleShape3D" id="Body"]
 radius = 0.45
 height = 1.8
@@ -27,6 +28,16 @@ shape = SubResource("Body")
 script = ExtResource("6")
 [node name="MasterRig" parent="VisualRoot" instance=ExtResource("2")]
 rotation = Vector3(0, 3.14159265, 0)
+[node name="FootGrounding" type="Node3D" parent="."]
+script = ExtResource("7")
+[node name="LeftFootProbe" type="RayCast3D" parent="FootGrounding"]
+enabled = false
+[node name="RightFootProbe" type="RayCast3D" parent="FootGrounding"]
+enabled = false
+[node name="LeftFootTarget" type="Marker3D" parent="FootGrounding"]
+[node name="RightFootTarget" type="Marker3D" parent="FootGrounding"]
+[node name="DebugGeometry" type="MeshInstance3D" parent="FootGrounding"]
+visible = false
 [node name="CameraRig" type="Node3D" parent="."]
 position = Vector3(0, 1.55, 0)
 script = ExtResource("3")
