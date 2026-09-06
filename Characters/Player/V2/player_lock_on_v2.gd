@@ -5,6 +5,15 @@ enum MovementMode { FREE, LOCKED_ON }
 @export_range(1,80,0.5) var lock_on_break_distance: float = 30.0
 @export_range(10,120,1) var lock_on_max_acquisition_angle: float = 80.0
 @export_range(1,25,0.5) var lock_on_rotation_speed: float = 12.0
+@export_group("Dodge Facing Recovery")
+@export_range(5,15,0.5) var lock_roll_realign_start_angle: float = 8.0
+@export_range(2,8,0.5) var lock_roll_realign_finish_angle: float = 4.0
+@export_range(90,720,10) var lock_roll_realign_speed: float = 450.0
+@export_range(0,0.08,0.01) var lock_roll_realign_delay: float = 0.0
+@export_range(0.2,0.4,0.01) var lock_roll_realign_max_duration: float = 0.30
+var lock_roll_realign_active: bool = false
+var lock_roll_realign_elapsed: float = 0.0
+var lock_roll_realign_start_facing := Vector3.FORWARD
 var target: Node3D
 var movement_mode: MovementMode = MovementMode.FREE
 var combat_input := Vector2.ZERO
@@ -82,6 +91,7 @@ func toggle() -> void:
 	update_target()
 
 func clear() -> void:
+	cancel_roll_realign()
 	if is_instance_valid(target) and target.tree_exiting.is_connected(clear): target.tree_exiting.disconnect(clear)
 	target=null
 	movement_mode=MovementMode.FREE
@@ -104,9 +114,45 @@ func update_target() -> void:
 
 func face_target(delta: float) -> void:
 	if not is_locked(): return
+	if lock_roll_realign_active:
+		update_roll_realign(delta)
+		return
 	var forward:=direction()
 	var yaw:=atan2(-forward.x,-forward.z)
 	motor.visual.global_rotation.y=lerp_angle(motor.visual.global_rotation.y,yaw,1-exp(-lock_on_rotation_speed*delta))
+
+func facing_error() -> float:
+	if not is_locked(): return 0.0
+	var forward:=direction()
+	return wrapf(atan2(-forward.x,-forward.z)-motor.visual.global_rotation.y,-PI,PI)
+
+func begin_roll_realign() -> void:
+	cancel_roll_realign()
+	if not is_locked() or absf(rad_to_deg(facing_error()))<=lock_roll_realign_start_angle: return
+	lock_roll_realign_start_facing=-motor.visual.global_basis.z
+	lock_roll_realign_elapsed=0.0
+	lock_roll_realign_active=true
+
+func cancel_roll_realign() -> void:
+	lock_roll_realign_active=false
+
+func update_roll_realign(delta: float) -> void:
+	if not is_locked():
+		cancel_roll_realign()
+		return
+	var previous_elapsed:=lock_roll_realign_elapsed
+	lock_roll_realign_elapsed+=delta
+	var rotating_delta:=maxf(0.0,lock_roll_realign_elapsed-maxf(previous_elapsed,lock_roll_realign_delay))
+	var error:=facing_error()
+	var max_turn:=deg_to_rad(lock_roll_realign_speed)*rotating_delta
+	motor.visual.global_rotation.y+=clampf(error,-max_turn,max_turn)
+	# Timeout relinquishes ownership without a terminal yaw assignment.
+	if absf(rad_to_deg(facing_error()))<=lock_roll_realign_finish_angle or lock_roll_realign_elapsed>=lock_roll_realign_max_duration:
+		cancel_roll_realign()
+
+func realign_debug_text() -> String:
+	var owner: String="DODGE" if motor.dodge.is_dodging else ("POST_ROLL_REALIGN" if lock_roll_realign_active else ("NORMAL_LOCK" if is_locked() else "FREE"))
+	return "LOCK ROLL REALIGN\nActive: %s / Yaw Owner: %s\nFacing Error: %.1f deg / Start: %.1f / Finish: %.1f\nRotation Speed: %.1f deg/s / Elapsed: %.3f\nDelay: %.2f / Max Duration: %.2f / Target: %s" % [lock_roll_realign_active,owner,rad_to_deg(facing_error()),lock_roll_realign_start_angle,lock_roll_realign_finish_angle,lock_roll_realign_speed,lock_roll_realign_elapsed,lock_roll_realign_delay,lock_roll_realign_max_duration,target.name if is_locked() else "None"]
 
 func debug_text() -> String:
 	var locked:=is_locked()

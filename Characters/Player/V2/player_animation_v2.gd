@@ -18,6 +18,7 @@ const CLIPS := {
 	"JumpStanding": &"AIR_STANDING_JUMP_(2)", "JumpMoving": &"AIR_RUNNING_JUMP",
 	"Fall": &"AIR_FALLING_IDLE", "Land": &"AIR_FALLING_TO_LANDING",
 	"DodgeStand": &"DOD_STAND_TO_ROLL", "DodgeRun": &"DOD_RUN_TO_ROLL",
+	"DodgeSprint": &"DOD_SPRINT_TO_ROLL",
 	"DodgeBack": &"DPD_DODING_BACK",
 }
 @export_category("Gait Crossfades (seconds)")
@@ -126,7 +127,7 @@ func _prepare_library() -> bool:
 	for state: String in CLIPS:
 		var clip := player.get_animation(CLIPS[state])
 		var airborne := state in ["JumpStanding", "JumpMoving", "Fall", "Land"]
-		clip.loop_mode = Animation.LOOP_NONE if state in ["JumpStanding", "JumpMoving", "Land", "DodgeStand", "DodgeRun", "DodgeBack"] else Animation.LOOP_LINEAR
+		clip.loop_mode = Animation.LOOP_NONE if state in ["JumpStanding", "JumpMoving", "Land", "DodgeStand", "DodgeRun", "DodgeSprint", "DodgeBack"] else Animation.LOOP_LINEAR
 		# This Blender rig uses local Z for vertical; local X/Y are horizontal.
 		for track in clip.get_track_count():
 			if clip.track_get_type(track) != Animation.TYPE_POSITION_3D or not String(clip.track_get_path(track)).ends_with(":mixamorig_Hips"):
@@ -196,6 +197,10 @@ func _physics_process(delta: float) -> void:
 	if _playback == null:
 		return
 	var s = motor.animation_state
+	# Recovery pose continues independently of movement authority. Air/jump
+	# still interrupts it, while grounded current-input motion can steer it.
+	if s.is_airborne or s.jump_started:
+		motor.dodge.run_roll_recovery_visible=false
 	# Check evaluated playback before issuing this tick's normal transitions.
 	# Never repair over Jump/Fall/Land or resend a pending travel request.
 	if current_state == &"Locomotion" and not s.jump_started:
@@ -203,8 +208,8 @@ func _physics_process(delta: float) -> void:
 	_update_gait(s, delta)
 	ground_within_grace = false
 	passive_ground_distance = INF
-	if motor.dodge.is_dodging and s.is_grounded:
-		_enter(&"DodgeBack" if motor.dodge.clip==motor.dodge.BACK else (&"DodgeRun" if motor.dodge.clip==motor.dodge.RUN else &"DodgeStand"))
+	if motor.dodge.run_roll_recovery_visible or (motor.dodge.is_dodging and (s.is_grounded or motor.dodge.is_rolling())):
+		_enter(&"DodgeBack" if motor.dodge.clip==motor.dodge.BACK else (&"DodgeRun" if motor.dodge.clip in [motor.dodge.RUN,motor.dodge.SPRINT] else &"DodgeStand"))
 	elif current_state in [&"DodgeStand", &"DodgeRun", &"DodgeBack"]:
 		if s.is_airborne:
 			_episode_visible=true
@@ -212,7 +217,14 @@ func _physics_process(delta: float) -> void:
 			_enter(&"Fall")
 		else:
 			_enter(&"Locomotion")
-	if s.jump_started:
+	if motor.dodge.is_rolling() or motor.dodge.run_roll_recovery_visible:
+		# A grounded-start roll owns presentation across drops and recontact.
+		# Do not start an ordinary landing/sink episode inside the action.
+		_episode_visible=false
+		fall_visual_committed=false
+		_intentional_jump_episode=false
+		_standing_jump_episode=false
+	elif s.jump_started:
 		_intentional_jump_episode = true
 		fall_visual_committed = false
 		_episode_visible = true
@@ -361,6 +373,11 @@ func _exit_tree() -> void:
 func _update_gait(s, delta: float) -> void:
 	if s.locked_on: gait_blend=minf(gait_blend,2.0)
 	var target: float = float(s.gait + 1) if s.horizontal_speed > 0.10 or s.move_input_magnitude > 0.01 else 0.0
+	# The outgoing roll supplies the handoff blend, so its destination should
+	# already represent current intent, not a second old-gait recovery blend.
+	if motor.dodge.handoff_this_tick:
+		gait_blend=target
+		return
 	var duration: float
 	if target > gait_blend:
 		duration = idle_to_walk_blend if gait_blend < 1.0 else (walk_to_run_blend if gait_blend < 2.0 else run_to_sprint_blend)
@@ -373,6 +390,8 @@ func _enter(next: StringName) -> void:
 		return
 	if next in [&"DodgeStand", &"DodgeRun", &"DodgeBack"]:
 		var roll_node := tree.tree_root.get_node(next) as AnimationNodeAnimation
+		# Run and Sprint share action plumbing, but select distinct source clips.
+		roll_node.animation=motor.dodge.clip
 		roll_node.use_custom_timeline=true
 		roll_node.stretch_time_scale=true
 		roll_node.timeline_length=motor.dodge.timeline_length
@@ -385,7 +404,8 @@ func _enter(next: StringName) -> void:
 		var machine := tree.tree_root as AnimationNodeStateMachine
 		for index in machine.get_transition_count():
 			if machine.get_transition_from(index)==current_state and machine.get_transition_to(index)==next:
-				machine.get_transition(index).xfade_time=motor.dodge.run_roll_exit_blend if current_state==&"DodgeRun" and next==&"Locomotion" else motor.dodge.dodge_recovery_time
+				var roll_blend: float=motor.dodge.sprint_roll_exit_blend if motor.dodge.clip==motor.dodge.SPRINT else motor.dodge.run_roll_exit_blend
+				machine.get_transition(index).xfade_time=roll_blend if current_state==&"DodgeRun" and next==&"Locomotion" else motor.dodge.dodge_recovery_time
 	if next == &"Land":
 		var s = motor.animation_state
 		# Select once at contact. A standing takeoff that moves in the air uses

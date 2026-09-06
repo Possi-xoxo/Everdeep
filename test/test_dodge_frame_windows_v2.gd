@@ -10,6 +10,8 @@ func run() -> void:
 	dummy=lab.get_node("LockOnTargetDummy")
 	cam=body.get_node("CameraRig")
 	dodge=body.dodge
+	# Exercise the retained full curve/fallback; normal frame-59 exit has its own suite.
+	dodge.run_roll_input_handoff_frame=300
 	body.set_physics_process(false)
 	animation.set_physics_process(false)
 	cam.set_process(false)
@@ -45,14 +47,15 @@ func run() -> void:
 		while dodge.is_dodging:
 			var source_frame: float=dodge.dodge_progress*animation.player.get_animation(dodge.RUN).length*30
 			await roll_tick(Vector2(0,-1),true)
-			if dodge.is_dodging and source_frame>=43.001 and source_frame<=65:
+			if dodge.is_dodging and source_frame>=43.001 and source_frame<=59:
 				checked+=1
-				check(body.animation_state.horizontal_speed<.0001,"run momentum paused between frames 43 and 65")
-			elif dodge.is_dodging and source_frame>65.1:
+				check(body.animation_state.horizontal_speed<.0001,"run momentum paused between frames 43 and 59")
+			elif dodge.is_dodging and source_frame>59.001:
 				resumed+=1
-				check(body.animation_state.horizontal_speed>0.01,"forward dodge momentum resumes after frame 65")
+				var expected: float=dodge.base_speed*smoothstep(0,1,clampf((source_frame-59)/6,0,1))
+				check(absf(body.animation_state.horizontal_speed-expected)<.001,"momentum scales from frame 59 to full at 65")
 				check(Vector3(body.velocity.x,0,body.velocity.z).normalized().dot(dodge.dodge_direction)>.999,"resumed movement retains captured direction")
-		check(checked>30 and resumed>3,"pause and resumed travel both evaluated")
+		check(checked>=30 and resumed>3,"pause and resumed travel both evaluated")
 		await finish_roll()
 	print("DODGE_FRAME_WINDOWS_V2: ","PASS" if failures.is_empty() else failures)
 	quit(0 if failures.is_empty() else 1)

@@ -25,9 +25,15 @@ func run() -> void:
 		if locked: lock.toggle()
 		await roll_tick(Vector2(0,-1),true,false,true)
 		await finish_roll(Vector2(0,-1),true)
-		check(is_equal_approx(blend(&"DodgeRun",&"Locomotion"),.2),"run roll uses 0.2 second exit blend")
+		check(is_equal_approx(blend(&"DodgeRun",&"Locomotion"),.2),"run recovery uses original 0.2 second exit blend")
 		check(animation.current_state==&"Locomotion","clean return to locomotion")
 		check(lock.is_locked()==locked,"mode preserved")
+	await reset_player()
+	dodge.run_roll_input_handoff_frame=300
+	await roll_tick(Vector2(0,-1),true,false,true)
+	await finish_roll(Vector2(0,-1),true)
+	check(not dodge.run_roll_control_returned and is_equal_approx(blend(&"DodgeRun",&"Locomotion"),.2),"safety exit preserves 0.2 second fallback blend")
+	dodge.run_roll_input_handoff_frame=59
 	await reset_player()
 	await roll_tick(Vector2.ZERO,false,false,true)
 	await finish_roll()
@@ -38,8 +44,10 @@ func run() -> void:
 	check(is_equal_approx(blend(&"DodgeStand",&"Locomotion"),.1),"walk roll blend unchanged")
 	await reset_player()
 	await roll_tick(Vector2(0,-1),true,false,true)
-	body.position.y+=3
+	body.position.y+=100
 	await roll_tick()
-	check(animation.current_state==&"Fall" and is_equal_approx(blend(&"DodgeRun",&"Fall"),.1),"airborne handoff unchanged")
+	check(dodge.is_rolling() and animation.current_state==&"DodgeRun","airborne roll retains presentation")
+	while dodge.is_rolling(): await roll_tick()
+	check(animation.current_state==&"Fall" and is_equal_approx(blend(&"DodgeRun",&"Fall"),.1),"post-roll airborne handoff retains blend")
 	print("RUN_ROLL_EXIT_BLEND_V2: ","PASS" if failures.is_empty() else failures)
 	quit(0 if failures.is_empty() else 1)

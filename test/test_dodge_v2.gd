@@ -12,7 +12,7 @@ func roll_tick(stick:=Vector2.ZERO,shift:=false,jump:=false,pressed:=false) -> v
 func finish_roll(stick:=Vector2.ZERO,shift:=false) -> void:
 	for frame in 240:
 		await roll_tick(stick,shift)
-		if not dodge.is_dodging: break
+		if not dodge.is_dodging and not dodge.run_roll_recovery_visible: break
 	check(not dodge.is_dodging,"roll completes from evaluated animation progress")
 	for frame in 12: await roll_tick(stick,shift)
 
@@ -33,7 +33,7 @@ func run() -> void:
 	tree.callback_mode_process=AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	check(InputMap.has_action("dodge"),"existing dodge action")
 	check(InputMap.action_get_events("dodge")[0].physical_keycode==KEY_ALT,"ALT binding")
-	for name in [dodge.STAND,dodge.RUN,dodge.BACK]:
+	for name in [dodge.STAND,dodge.RUN,dodge.SPRINT,dodge.BACK]:
 		check(animation.player.has_animation(name),"canonical roll exists")
 		check(animation.player.get_animation(name).loop_mode==Animation.LOOP_NONE,"roll does not loop")
 	await reset_player()
@@ -84,7 +84,7 @@ func run() -> void:
 		body._run_time=body.sprint_buildup_duration if gait==2 else 0
 		for frame in 15: await roll_tick(Vector2(0,-1),gait>0)
 		await roll_tick(Vector2(0,1),gait>0,false,true)
-		check(dodge.clip==(dodge.STAND if gait==0 else dodge.RUN),"gait chooses correct fixed clip")
+		check(dodge.clip==(dodge.STAND if gait==0 else (dodge.SPRINT if gait==2 else dodge.RUN)),"gait chooses correct fixed clip")
 		check(not body.turn_180.active,"dodge priority over reversal")
 		check(dodge.dodge_direction.dot(Vector3.BACK)>0.99,"Free requested back dodge")
 		await finish_roll(Vector2(0,1),gait>0)
@@ -99,6 +99,9 @@ func run() -> void:
 		check(dodge.dodge_direction.dot(expected)>0.99,"Locked target-relative direction")
 		await finish_roll(stick,true)
 		check(lock.is_locked() and body.animation_state.gait<2,"lock persists without Sprint")
+		# Recovery now permits extra target-relative travel. Stop near the target
+		# and let the existing smooth facing catch up before testing alignment.
+		for frame in 24: await roll_tick(Vector2.ZERO,true)
 		check((-body.visual.global_basis.z).dot(lock.direction())>0.95,"target facing preserved")
 		check(tree.get("parameters/Locomotion/playback").get_current_node()==&"Locked","Locked branch restored")
 	# Changes in mode/input during a committed action affect the destination,

@@ -11,6 +11,8 @@ func run() -> void:
 	ik=body.get_node("FootIKController")
 	cam=body.get_node("CameraRig")
 	dodge=body.dodge
+	# Profile tests include the preserved tail using the safety exit.
+	dodge.run_roll_input_handoff_frame=300
 	body.set_physics_process(false)
 	animation.set_physics_process(false)
 	cam.set_process(false)
@@ -19,7 +21,7 @@ func run() -> void:
 	var points: Array=[
 		[Vector2(0,0),Vector2(.1,.2),Vector2(.2,.75),Vector2(.3,1),Vector2(.42,.65),Vector2(.52,.2),Vector2(.6,0),Vector2(1,0)],
 		[Vector2(0,0),Vector2(.08,.45),Vector2(.18,.9),Vector2(.3,1),Vector2(.6,1),Vector2(.75,.55),Vector2(.85,.1),Vector2(.9,0),Vector2(1,0)],
-		[Vector2(0,.25),Vector2(4.0/74,.75),Vector2(9.0/74,1),Vector2(30.0/74,1),Vector2(36.0/74,.7),Vector2(40.0/74,.25),Vector2(43.0/74,0),Vector2(65.0/74,0),Vector2(70.0/74,1),Vector2(1,1)]]
+		[Vector2(0,.25),Vector2(4.0/74,.75),Vector2(9.0/74,1),Vector2(30.0/74,1),Vector2(36.0/74,.7),Vector2(40.0/74,.25),Vector2(43.0/74,0),Vector2(59.0/74,0),Vector2(65.0/74,1),Vector2(1,1)]]
 	var defaults: Array[Curve]=[dodge.backstep_movement_curve,dodge.stand_roll_movement_curve,dodge.run_roll_movement_curve]
 	for i in 3:
 		var saved: Curve=load("res://Characters/Player/V2/Curves/"+paths[i]+".tres")
@@ -33,7 +35,8 @@ func run() -> void:
 	dodge.initialize()
 	check(dodge.backstep_movement_curve!=null and dodge.stand_roll_movement_curve!=null and dodge.run_roll_movement_curve!=null,"null-safe curve defaults")
 	for rate in [1.0,0.9]:
-		for kind in ["BACKSTEP","STAND_ROLL","RUN_ROLL","SPRINT"]:
+		# Sprint bypasses curves; its constant profile is tested separately.
+		for kind in ["BACKSTEP","STAND_ROLL","RUN_ROLL"]:
 			await reset_player()
 			dodge.backstep_playback_speed=rate
 			dodge.stand_roll_playback_speed=rate
@@ -60,8 +63,8 @@ func run() -> void:
 				frames+=1
 				if not dodge.is_dodging: break
 				final_position=body.position
-				check(absf(dodge.speed_multiplier-expected_curve.sample(progress))<0.0001,"samples full clip progress without exit remapping")
-				if progress>=stop_progress and (not running or progress<=65.0/74.0):
+				check(absf(dodge.speed_multiplier-(1.0 if kind=="SPRINT" else expected_curve.sample(progress)))<0.0001,"Sprint stays constant; other rolls sample full clip progress")
+				if progress>=stop_progress and (not running or progress<=59.0/74.0):
 					if stop_time<0: stop_time=frames*DT
 					recovery_frames+=1
 					check(body.animation_state.horizontal_speed<0.0001,"zero curve explicitly clears horizontal velocity")
@@ -109,7 +112,7 @@ func run() -> void:
 	check(dodge.is_dodging and body.position.z>13.4,"wall blocks roll while animation progresses")
 	wall.free()
 	var stopped:=body.position
-	while dodge.dodge_progress<.87:
+	while dodge.dodge_progress<.79:
 		await roll_tick()
 		check(Vector2(body.position.x-stopped.x,body.position.z-stopped.z).length()<.001,"no stored wall velocity during pause")
 	await finish_roll()

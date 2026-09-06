@@ -9,6 +9,7 @@
 [ext_resource type="Script" uid="uid://bwqxydplq2v7" path="res://Characters/Player/V2/player_foot_grounding_v2.gd" id="7"]
 [ext_resource type="Script" uid="uid://c5v4dyulaopy5" path="res://Characters/Player/V2/player_foot_ik_v2.gd" id="8"]
 [ext_resource type="Script" path="res://Characters/Player/V2/player_lock_on_v2.gd" id="9"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_roll_traversal_v2.gd" id="10"]
 
 [sub_resource type="CapsuleShape3D" id="Body"]
 radius = 0.45
@@ -39,6 +40,9 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="StepSolver" type="Node3D" parent="." unique_id=645130797]
 script = ExtResource("6")
+
+[node name="RollTraversal" type="Node3D" parent="."]
+script = ExtResource("10")
 
 [node name="FootGrounding" type="Node3D" parent="." unique_id=1280241277]
 script = ExtResource("7")

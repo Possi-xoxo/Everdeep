@@ -53,6 +53,7 @@ var turn_180: Resource
 @onready var camera: Camera3D = $CameraRig/YawPivot/PitchPivot/SpringArm3D/Camera3D
 @onready var visual: Node3D = $VisualRoot
 @onready var step_solver = $StepSolver
+@onready var roll_traversal = $RollTraversal
 @onready var lock_on = $LockOnController
 
 func _ready() -> void:
@@ -65,7 +66,14 @@ func _physics_process(delta: float) -> void:
 
 ## Input boundary also supports deterministic play tests without emulating OS keys.
 func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pressed: bool = false) -> void:
-	dodge.advance_timers(delta)
+	var dodge_was_active: bool=dodge.is_dodging
+	dodge.advance_timers(delta,roll_traversal.active)
+	dodge.handoff_input=stick
+	if dodge.handoff_waiting_for_input:
+		if stick.length()<dodge.dodge_movement_input_threshold:
+			stick=Vector2.ZERO
+		else:
+			dodge.handoff_waiting_for_input=false
 	lock_on.update_target()
 	var locked: bool=lock_on.is_locked()
 	var s = animation_state
@@ -89,6 +97,10 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		right=forward.cross(Vector3.UP)
 		direction=(right*stick.x-forward*stick.y).normalized()
 	s.move_direction_world = direction
+	if dodge.handoff_reorienting:
+		var facing: Vector3=-visual.global_basis.z
+		if not dodge.handoff_this_tick and (locked or direction.is_zero_approx() or rad_to_deg(facing.angle_to(direction))<=turn_arc_release_angle):
+			dodge.handoff_reorienting=false
 	var anim=get_node("AnimationController")
 	if dodge_pressed and grounded_before and not s.is_airborne and not s.jump_started and anim.current_state not in [&"JumpStanding", &"JumpMoving", &"Fall"]:
 		var roll_direction: Vector3=direction
@@ -99,9 +111,15 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		if s.move_input_magnitude>=dodge.dodge_movement_input_threshold:
 			roll_gait=(maxi(roll_gait,1) if shift else 0)
 		if dodge.begin(roll_direction,roll_gait,locked,anim.player,s.move_input_magnitude,s.horizontal_speed,s.combat_input,forward):
+			# A running roll starts a fresh Sprint buildup at control return.
+			if dodge.clip==dodge.RUN: _run_time=0.0
 			turn_arc_active=false
 			if turn_180!=null: turn_180.cancel()
 	if dodge.is_dodging: s.jump_started=false
+	if not locked or s.jump_started or dodge.is_dodging:
+		lock_on.cancel_roll_realign()
+	elif dodge_was_active:
+		lock_on.begin_roll_realign()
 	if dodge.is_dodging:
 		# Freeze existing Free buildup while eligible; releasing input resets it.
 		if locked or not shift or stick.is_zero_approx(): _run_time=0
@@ -128,12 +146,17 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		target_speed = sprint_speed
 	if locked: target_speed=locked_speed(s.combat_input,shift)
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
+	if dodge.handoff_this_tick:
+		if grounded_before and direction.is_zero_approx(): horizontal=Vector3.ZERO
+		dodge.handoff_target_mode="LOCKED" if locked else "FREE"
+		dodge.handoff_target_gait="FALL" if not grounded_before else ("IDLE" if direction.is_zero_approx() else ["WALK","RUN","SPRINT"][s.gait])
+		dodge.handoff_target_direction=direction
 	if s.jump_started and turn_180 != null and turn_180.active and turn_180.running:
 		# A planted runner still has moving-jump intent and stored momentum.
 		horizontal = Vector3.FORWARD.rotated(Vector3.UP, visual.global_rotation.y) * turn_180.entry_speed
 		s.takeoff_speed = turn_180.entry_speed
 	if turn_180 != null:
-		turn_180.begin_motor_tick(direction, horizontal, grounded_before and not s.jump_started and not turn_arc_suppressed and not turn_arc_active and not locked and not dodge.is_dodging, source_gait, s.gait, visual)
+		turn_180.begin_motor_tick(direction, horizontal, grounded_before and not s.jump_started and not turn_arc_suppressed and not turn_arc_active and not locked and not dodge.is_dodging and not dodge.handoff_reorienting, source_gait, s.gait, visual)
 		if turn_180.started:
 			turn_180.entry_buildup = _run_time
 	var turning: bool = turn_180 != null and turn_180.active
@@ -141,7 +164,7 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 	if dodge.is_dodging:
 		turn_arc_active=false
 		allowed_direction=dodge.dodge_direction
-	elif locked:
+	elif locked or dodge.handoff_reorienting:
 		turn_arc_active=false
 		_movement_input_was_active=s.move_input_magnitude>0.01
 		s.desired_turn_angle=0.0
@@ -197,23 +220,32 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		velocity.y = maxf(velocity.y - (rise_gravity if velocity.y > 0.0 else fall_gravity) * delta, -max_fall_speed)
 	else:
 		velocity.y = -0.5
-	var step_allowed: bool = grounded_before and not s.jump_started and not turn_arc_suppressed and not turning and not dodge.is_dodging
+	var step_allowed: bool = grounded_before and not s.jump_started and not turn_arc_suppressed and not turning and not dodge.is_dodging and not roll_traversal.active
 	var stepping: bool = step_solver.prepare(delta,horizontal,direction,step_allowed)
+	var roll_stepping: bool=roll_traversal.prepare_roll(delta,horizontal)
 	var saved_snap := floor_snap_length
 	if stepping:
 		step_solver.lift(delta)
 		floor_snap_length = 0.0
 		velocity.y = 0.0
+	elif roll_stepping:
+		roll_traversal.lift(delta)
+		floor_snap_length=0.0
+		# Bounded collision-swept correction owns vertical movement only while
+		# traversing verified support. Free airborne rolls retain normal gravity.
+		if roll_traversal.active: velocity.y=0.0
 	move_and_slide()
 	floor_snap_length = saved_snap
 	step_solver.finish()
+	roll_traversal.finish()
 	s.is_stepping_up = step_solver.active
 	s.step_height = step_solver.step_height
 	s.step_target_y = step_solver.step_target_y
 	s.is_grounded = is_on_floor() or step_solver.active
 	s.is_airborne = not s.is_grounded
+	dodge.dodge_airborne=dodge.is_rolling() and s.is_airborne
 	if s.is_airborne:
-		dodge.finish()
+		if not dodge.is_rolling(): dodge.finish()
 		turn_arc_active = false
 		if turn_180 != null:
 			turn_180.cancel()

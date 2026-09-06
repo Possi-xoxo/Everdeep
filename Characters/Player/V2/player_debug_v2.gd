@@ -46,7 +46,9 @@ func _process(_delta: float) -> void:
 		var weights: Vector4=combat.direction_weights()
 		label.text+="\nDirectional Weights (F/B/L/R): %.2f / %.2f / %.2f / %.2f" % [weights.x,weights.y,weights.z,weights.w]
 	var ik = motor.get_node("FootIKController")
-	if motor.dodge.debug_dodge: label.text+="\n\n"+motor.dodge.debug_text(motor.velocity)
+	if lock_tuning_debug or motor.dodge.debug_dodge: label.text+="\n\n"+motor.lock_on.realign_debug_text()
+	if motor.dodge.debug_dodge: label.text+="\n\n"+motor.dodge.handoff_debug_text()+motor.dodge.debug_text(motor.velocity)
+	if motor.dodge.debug_dodge or motor.roll_traversal.debug_steps: label.text+="\n\n"+motor.roll_traversal.debug_text()
 	if ik.knee_ik_debug: label.text += "\n\n"+ik.knee_debug_text()
 	if ik.foot_ik_debug: label.text += "\n\n"+ik.debug_text()
 	var feet = motor.get_node("FootGrounding")

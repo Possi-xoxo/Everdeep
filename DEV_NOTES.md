@@ -1,3 +1,159 @@
+# V2 — Locked Dodge Facing Reacquisition (2026-09-06)
+
+Yaw audit: `player_v2.gd` writes VisualRoot yaw toward captured direction while a moving dodge is active, then immediately selects `lock_on.face_target(delta)` after dodge completion. Normal facing was already exponential `lerp_angle` at rate 12, **not a literal hard target-yaw assignment**. At 60 Hz its first update consumes about 18.13% of the remaining error (~32.6 degrees from a 180-degree roll). That abrupt change of owner/large first angular step is the identified procedural source of snap-like recovery. Animation/grounded Locked code does not independently set VisualRoot yaw; the CharacterBody's target-relative input basis is separate from visual facing. No imported bone/clip edits were made.
+
+`LockOnController` now owns a lightweight `lock_roll_realign_active`, elapsed time and start-facing vector. Motor captures dodge activity before evaluated-timeline completion, then requests recovery in the same control-return tick if locked and not jumping/starting another dodge. A facing error above the threshold starts recovery; Backstep follows the same actual-error check and ordinarily skips it. `face_target()` dispatches exclusively to bounded shortest-angle recovery OR existing normal facing, never both in one tick. Each recovery update queries the live LockOnPoint direction, not a captured target position.
+
+Inspector: **LockOnController → Dodge Facing Recovery**:
+
+| Setting | Default |
+| --- | --- |
+| `lock_roll_realign_start_angle` | 8 degrees |
+| `lock_roll_realign_finish_angle` | 4 degrees |
+| `lock_roll_realign_speed` | 450 degrees/second |
+| `lock_roll_realign_delay` | 0.00 seconds |
+| `lock_roll_realign_max_duration` | 0.30 seconds |
+
+Default rotation is bounded to 7.5 degrees per 60 Hz motor tick. Completion/timeout only releases ownership, with no terminal yaw snap; the existing smooth normal facing takes over on the next tick. At 450 degrees/s a 180-degree recovery may hit the .30-second timeout first; normal exponential facing smoothly finishes the residual. Recommended initial tuning is the defaults, with speed 360–540 and delay 0–.08 available for playtesting. Delay consumes the same maximum-duration budget.
+
+Movement never waits for facing: current target-relative combat input still drives movement, independent of VisualRoot yaw. Run control return and realignment begin at frame 59 (or after an already active safe lift completes). **The user's corrected visible Run recovery through frames 59–65 is preserved**, rather than reintroducing the obsolete animation cut at 59 mentioned in the task template. Walk roll starts recovery at its existing exit. Existing animation blends, Sprint constant velocity, movement tuning, IK, traversal and camera code are unchanged. Locked camera still targets LockOnPoint, not roll-facing yaw. Locked mode already excludes 180 turns/turn arcs, and regression tests assert that remains true.
+
+Unlock, target invalidation/removal and distance break call `clear()`, which immediately cancels recovery. Jump or a new accepted dodge cancels it in the motor before yaw application. Normal action/facing rules resume; Free rolls never activate this state. Existing dodge-chaining restrictions remain intact.
+
+F10 lock tuning or dodge debug now shows LOCK ROLL REALIGN active flag, facing error, thresholds, speed, elapsed/delay/maximum, target and yaw owner. New `test_lock_roll_realign_v2.gd` verifies bounded yaw across Walk/Run left/right/forward/backward/diagonal exits, continued strafe and changed input, frame-59 timing, live moving-target direction, aligned Backstep, small-error skip, delay, timeout without snap, invalid target/manual unlock, Jump and new-dodge cancellation. These are deterministic headless checks; visual feel still needs manual playtesting.
+
+Files changed: `player_lock_on_v2.gd`, `player_v2.gd`, `player_debug_v2.gd`, new `test_lock_roll_realign_v2.gd`, and this document. No new animation state, camera architecture, root motion, turn animation or Git commit/push.
+
+# V2 — Run Roll Buildup Reset / Sprint Exit Blend (2026-09-06)
+
+A successfully started `DOD_RUN_TO_ROLL` now clears `_run_time`. It stays frozen during committed rolling and begins advancing again when current-input control returns at frame 59, using the unchanged four-second buildup duration. Sprint rolls retain eligible Sprint; Walk/Backstep and rejected dodge requests do not receive this reset.
+
+Sprint has its own Inspector setting, Dodge resource → Sprint Roll → `sprint_roll_exit_blend`, initially **0.30 seconds** (previously shared Run's .20). This is a presentation-only longer crossfade into locomotion; full-clip constant Sprint-roll velocity, 100% source playback, traversal frames 9–24 and normal motor control remain unchanged. Run retains .20; Walk/Backstep and airborne Fall transitions retain their existing blends. Recommend playtesting .25–.35 seconds for visual feel; no claim of visual verification from headless tests.
+
+Extended Sprint tests seed Run close to Sprint, verify timer reset and fresh Run recovery, verify Sprint eligibility preservation, and verify independent .30/.20 transition values including Run after Sprint. Targeted tests pass. No Git commit/push.
+
+# V2 — Constant Sprint Roll Momentum (2026-09-06)
+
+Sprint roll now commands its full existing roll speed (8 m/s by default) in the captured direction throughout the entire native clip, with no Run Curve slowdown/pause. Sprint exits at 100% instead of the shared .95 maximum, then retains the existing .20-second locomotion blend. Collision response and gravity still apply normally; this does not force the body through obstacles.
+
+Sprint traversal initiation is restricted to source frames **9–24 inclusive** (0.30–0.80 seconds at 30 FPS). Debug uses the same centralized window selector. A previously validated lift may finish safely after the window closes, as before; no new lift can start outside it. Run remains 15–30; Walk remains 20–40. Run/Walk curves, animation timing and other tuning are unchanged. Sprint selection/full-duration constant motion and exact window-boundary tests pass, alongside Run handoff and traversal-window regressions. No Git commit/push.
+
+# V2 — Sprint-only roll clip (2026-09-06)
+
+Actual Free Sprint gait now selects `DOD_SPRINT_TO_ROLL` (verified imported duration **1.20000004768372 s**, 30 FPS). Shift-held Run during buildup still selects `DOD_RUN_TO_ROLL`; Walk remains `DOD_STAND_TO_ROLL`. Locked movement cannot select Sprint, and no-input Backstep is unchanged.
+
+Sprint reuses existing Run/Sprint action plumbing, speed, normalized movement Curve, playback multiplier, .95 exit maximum, .20 exit blend and traversal frames 15–30. The runtime DodgeRun node receives the captured clip at each new action, including restoring the running clip after a Sprint roll. Sprint is prepared as a non-looping instance-local animation with the same horizontal root normalization as other rolls; imported GLB is untouched. Run-specific frame-59 control return/frame-65 visible recovery applies only to the running clip, not the shorter Sprint clip. Running and walking timing/behavior/tuning are unchanged.
+
+Added `test_sprint_roll_v2.gd` covering Sprint/Run/Walk selection, native duration, non-looping playback, return to locomotion, Run-after-Sprint reset, Locked exclusion and no-input Backstep. Updated existing clip-selection expectations and kept the frame-59 suite scoped to Run. No Git commit/push.
+
+# V2 — Run Roll Recovery Presentation Correction (2026-09-06)
+
+Supersedes the early visual cut described below: frame **59 returns movement authority only**, while the unchanged Run roll continues playing its **59–65** recovery poses. Current input steers the CharacterBody and facing through the normal motor during this visible recovery; no input holds position. At evaluated source frame **65**, presentation begins the existing **0.20-second Run Roll Exit Blend** into current Idle/Walk/Run/Sprint or Locked locomotion. The source clip, playback rate and movement curves are untouched.
+
+`run_roll_animation_exit_frame = 65` is a separate Inspector marker converted from actual clip length using the same 30 FPS source timing. `run_roll_recovery_visible` owns only presentation; `is_dodging` remains false after control returns. Evaluated playback continues advancing during recovery. New dodges cannot chain into this short presentation tail. Jump/airborne interrupts it normally; active ledge-lift deferral remains intact. The former `.08` `run_roll_handoff_blend_time` is retained as a non-exported compatibility field, no longer an active tuning setting. Tune the existing `.20` `run_roll_exit_blend` for the outgoing blend instead. The `.95` safety maximum still applies.
+
+Updated deterministic handoff tests verify the actual DodgeRun state remains through source frames 59–65 while movement changes immediately at 59, followed by locomotion. Includes no input, 90/180 turns, Sprint, Locked, camera changes and .9/1/1.15 playback. No Git commit/push.
+
+# V2 — Run Roll Input Handoff (2026-09-06)
+
+Only `DOD_RUN_TO_ROLL` now returns control early. Its imported duration is **2.46666669845581 seconds** at the GLB import's **30 FPS**: approximately 74 frame intervals (timestamps 0 through 74, not an assumed 74-key count). No GLB, source clip, Curve asset, Stand/Walk roll, Backstep, movement speed, acceleration, gravity, camera, or IK tuning was changed.
+
+Inspector: PlayerV2 → Dodge resource → Run/Sprint Roll:
+
+- `run_roll_input_handoff_frame = 59`
+- `run_roll_handoff_blend_time = 0.08` seconds; suggested manual range 0.05–0.15.
+- Existing speed, playback multiplier and Curve remain editable.
+- `run_roll_exit_progress = 0.95` remains the safety maximum when the marker is configured later. Its `.20`-second `run_roll_exit_blend` remains the fallback; ordinary frame-59 exits use `.08` instead.
+
+At action start, normalized marker = `(handoff_frame / SOURCE_FPS) / actual Animation.length`. Default: **1.9666666667 source seconds / 2.46666669845581 = 0.797297287**, approximately **79.7297%**. Custom timeline length is source length / captured playback multiplier, so using evaluated AnimationTree progress aligns handoff to the same source frame at .9, 1.0 and 1.15 playback. The first motor tick after a pose reaches the marker returns control exactly once; no independent wall-clock timer and no extra idle motor tick.
+
+Before 59, direction remains captured and the existing Curve controls translation. The frame-43 stop/43–59 settling section and saved 59–65 ramp are unchanged; the ramp is normally bypassed by handoff but remains available to the safety-exit path. No optional second frame-43 gameplay state was introduced.
+
+On handoff, the same motor tick reads current camera-relative Free input or target-relative Locked input and executes ordinary acceleration/air control. Below the existing .15 meaningful-input threshold, grounded handoff enters Idle with no residual roll drift. Small-input suppression lasts only until meaningful input returns, not indefinitely through subsequent locomotion. Free uses its existing Idle; Locked remains locked and uses its existing `IDL_IDLE_D` destination. The Free locomotion blend target is set to current intent so the outgoing roll's .08 blend does not lead into a second stale-gait recovery blend.
+
+Current Shift and existing Free buildup determine gait: eligible Sprint survives a direction change, releasing Shift restores Walk, and Locked remains Walk/Run only. A brief direction-based reorientation guard suppresses old-facing Run180/Walk180/turn-arc chaining while normal motor rotation catches up; it releases at the existing 35-degree arc-release angle (or no input/Locked). No turn rate or movement tuning changes. New current direction is authoritative throughout reorientation.
+
+Rolls still persist across ledges and shallow recontact before handoff, without Land interrupting. If airborne at handoff, the existing Fall state and normal air control take over instead of Idle. Existing IK suppression ends with dodge and existing reacquisition blending resumes; no foot snapping or IK architecture changes.
+
+If a validated RollTraversal correction is active at the marker, handoff waits for that existing collision-swept vertical correction to finish (or cancel through its existing safety checks). Horizontal roll recovery is held at zero while waiting, preventing a renewed captured-direction tail. The next motor tick returns current-input control; it enters Fall if still unsupported. No new lift starts outside the existing Run 15–30 / Walk 20–40 windows. The helper and its height/speed limits were not changed.
+
+Debug adds evaluated source frame, configured marker/progress, control-return flag, pending-lift flag, current input and recorded handoff mode/gait/direction alongside existing Curve/captured-direction diagnostics. `handoff_this_tick` is a one-tick event; `run_roll_control_returned` persists for inspection until the next dodge begins.
+
+Validation: new `test_run_roll_handoff_v2.gd` passes no input/subthreshold input, same direction, 90/180-degree changes, Sprint 90/180 changes, Shift release, Locked left/Idle, camera rotation during roll, .9/1/1.15 playback, 1 m recontact, 60 m airborne exit, and a real validated .7 m lift whose evaluated pose is advanced to frame 59 to deliberately force overlap. Both direction-change tests accelerate in the requested direction in the first handoff tick and show no pivot/arc chaining afterward. Existing Curve/frame-window suites deliberately configure a later marker to continue testing the preserved fallback tail; exit-blend suite verifies .08 normal, .20 fallback, unchanged .10 Stand/Backstep/Fall exits.
+
+Full headless regression: **23/27 suites pass**. The same four previously documented failures remain: `test_idle_contact_v2` (reachable Idle sole contact), `test_foot_planting_v2` (Idle locks), `test_contact_refinement_v2` (terrain-error ratio), and `test_lock_on_v2` (old uniform-speed assertions conflicting with current directional speed tuning). No new failing suite; these unrelated issues were not modified. Godot's environment certificate-store warning is also unchanged.
+
+Files changed: `player_dodge_v2.gd`, `player_v2.gd`, `player_animation_v2.gd`, `player_debug_v2.gd`, `test_run_roll_handoff_v2.gd`, `test_run_roll_exit_blend_v2.gd`, `test_dodge_curves_v2.gd`, `test_dodge_frame_windows_v2.gd`, and this document. No Git commit/push requested or performed. Visual feel still requires manual play testing; start with frame 59 / .08 seconds and adjust only the handoff blend within .05–.15 as needed.
+
+# V2 — Roll traversal source-frame windows (2026-09-06)
+
+New assist initiation is restricted to **Run/Sprint roll frames 15–30** and **Stand/Walk roll frames 20–40**, inclusive endpoints at the imported 30 fps. Source frame is evaluated dodge play position × captured playback multiplier × 30, so changing playback speed preserves source-frame alignment. Existing curve threshold, ground requirement and geometry validation still apply. A previously accepted bounded correction may finish after the window closes; it cannot initiate another lift outside the window. This prevents renewed traversal during the late Run momentum ramp.
+
+Debug now shows evaluated source frame, selected window and open/closed state. Added test_roll_traversal_windows_v2 covering exact boundaries, out-of-window and late-recovery rejection, .9/1/1.15 playback, real playback acquisition and active-lift completion. Window, traversal, dodge frame-timing and run exit-blend suites pass. Traversal diagnostics now separate assist-only rise from subsequent CharacterBody collision response: pressed-against-ledge Run cases produced total rises .1399/.1374 m, of which .1197/.1242 m were assist. The assist stayed below its 8 m/s cap, with no positive launch velocity; no motor/physics tuning was changed to mask contact correction.
+
+No changes to ordinary locomotion, dodge Curves, airborne persistence, Backstep or exit blending. No Git commit/push performed.
+
+# V2 Phase 4B.3 — Roll Traversal (2026-09-06)
+
+## Persistent grounded-start rolls
+
+Moving rolls (`DodgeStand` / `DodgeRun`) now remain active through floor loss and recontact until their existing evaluated animation exit. `dodge.is_rolling()` centralizes that distinction; `dodge_airborne` reports current physical floor loss while rolling. Grounded start checks remain unchanged: no aerial dodge. Backstep retains its old floor-loss cancellation and receives no 70 cm assist.
+
+Normal gravity/fall-speed limits continue during unassisted airborne rolls. Horizontal velocity still comes exclusively from captured direction × existing speed × existing Curve. Active Roll has full-body priority over Fall and Land; recontact does not count as ordinary landing or trigger sink inside the action. At roll completion, grounded returns to current locomotion mode; airborne enters existing AIR_FALLING_IDLE directly, then ordinary landing logic handles subsequent contact. No hard-land/fall damage or new landing clip.
+
+Existing Foot IK/pelvis suppression and knee/plant gating already cover active dodge, so no IK architecture/configuration changes were needed. All movement Curves, including run frame 43 stop and 59–65 ramp, remain unchanged, as do base speeds, Backstep trim, and .20-second run-roll exit blend.
+
+## Dedicated RollTraversal component
+
+New `PlayerV2/RollTraversal` uses `player_roll_traversal_v2.gd`, a separate instance inheriting the existing StepSolver's support checks, capsule sweeps, bounded smoothstep lift, and debug renderer. The ordinary StepSolver script and its **0.35 m** setting are untouched; no temporary mutation of the normal instance occurs.
+
+Inspector **RollTraversal → Roll Traversal**:
+
+| Setting | Default |
+| --- | --- |
+| roll_max_step_height | 0.70 m |
+| roll_step_up_speed | 8.0 m/s maximum vertical correction |
+| roll_step_forward_check_distance | 0.45 m beyond capsule radius |
+| roll_step_min_curve_value | 0.20 (must exceed this to start) |
+
+New lift validity:
+
+1. Moving roll active (not Backstep), nonzero horizontal movement, curve > .20, and actual floor contact with a walkable floor-reference probe. New assists are not acquired in free flight.
+2. Requested horizontal motion agrees with captured dodge direction (dot > .99). Forward low probe reaches radius + .45 m; it must hit an opposing, non-walkable face ahead (normal dot direction <= -.25), not a nearby side/slope.
+3. A downward top probe finds a walkable surface. Height relative to actual floor is at least .025 m and no more than .70 m plus 2 mm numerical tolerance.
+4. Reused support validation requires center support plus at least 6/8 samples of the inner capsule footprint (radius × .6), testing two centerline insets. Thin rails/unsafe narrow tops are rejected.
+5. Actual capsule overlap queries must clear both raised starting position and destination. CharacterBody test_move sweeps must clear the vertical lift and raised horizontal path. This rejects ceilings/overhangs and blocked destination bodies.
+
+Accepted lift uses the existing smoothstep correction through `move_and_collide`, bounded per tick to configured lift speed; never assigns body position or bypasses collision. During this short, validated assist only, its swept correction owns vertical motion and snap is disabled; positive launch velocity is not stored. Free airborne rolls outside an assist keep normal gravity. Horizontal Curve motion is never replaced or steered.
+
+Support and clearance are rechecked while active. A started correction may finish if the curve drops below threshold or action exits, but cannot start anew during zero-motion recovery. It terminates at verified height, on support/clearance loss, disable, or a .4 s safety timeout. It does not hover indefinitely waiting for forward input to reach a cached point. A player who stops short of the top can fall back naturally after the bounded lift ends.
+
+## Debug / tests / limitations
+
+Enable the Dodge debug checkbox for numeric Roll Traversal status, or RollTraversal's Debug Steps for reused accepted/rejected probe lines, hits and a destination body-envelope wireframe. Actual clearance tests use the full capsule. Numeric fields include airborne state, vertical velocity, progress/curve, candidate height, top/support/clearance, direction match, active state and target Y. F3 still controls debug-panel visibility. Camera architecture unchanged.
+
+`test_roll_traversal_v2.gd` results for BOTH Stand and Run rolls:
+
+- 30 / 50 / 70 cm: accepted and reached top with bounded per-frame rise.
+- 75 / 80 cm and full 4 m wall: rejected with no lift.
+- 70 cm with low ceiling or .25 m-wide top: rejected.
+- 20 cm / 1 m drops: roll retained; 1 m drops recontacted during roll without Land interruption. Existing floor snap can keep a slow 20 cm descent grounded, which is intentionally unchanged.
+- 60 m platform: gravity continued during roll; exit while airborne selected Fall. Further ALT in flight rejected.
+- Existing six-step lane: six bounded assists, reaching 1.2 m top for both roll types without launch; IK remained finite.
+- Locked left-tangent 70 cm curb: climbed using captured strafe, target/heading relationship and camera framing retained, no large per-frame camera position jump. Rendered locked ascent/top views inspected.
+- Backstep/ordinary locomotion against 70 cm obstacle: no special lift; ordinary max remains .35 m. Side-only elevated surface gives no upward vacuum.
+- Zero curve blocks new acquisition; an accepted lift can finish with zero curve; deleting support mid-lift cancels to gravity.
+
+Full V2 regression: **21/25 pass**. Remaining failures are the previously known idle_contact, foot_planting, contact_refinement, and lock_on hardcoded uniform-speed expectations. The old run-roll exit-blend test now expects roll persistence before eventual Fall and still verifies the .10-second airborne handoff blend. No script errors.
+
+Recommended initial tuning: retain .70 / 8.0 / .45 / .20. If lift feels too abrupt in manual play, try 6 m/s before changing detection distance; lower the max if level geometry should constrain rolls more. This is a grounded-contact low-obstacle assist, not a mantle, aerial wall climb, moving-platform prediction, or guaranteed corner capture. The single forward face probe is conservative on glancing corners. Existing full-size upright capsule clearance is retained throughout roll. Snapshot/automated checks do not replace subjective camera/animation feel playtesting.
+
+Files: added `Characters/Player/V2/player_roll_traversal_v2.gd` and `test/test_roll_traversal_v2.gd` (+ generated UIDs); updated player_v2.tscn, player_v2.gd, player_dodge_v2.gd, player_animation_v2.gd, player_debug_v2.gd, test_run_roll_exit_blend_v2.gd, and these notes. No ordinary StepSolver, IK, camera or Curve asset modifications. No Git commit/push performed.
+
+# V2 — Run momentum ramp frames 59–65 (2026-09-06)
+
+Updated only the run movement curve's recovery ramp: translation remains zero from frame 43 through frame 59, then smoothly scales from zero at 59 to full configured momentum at 65, remaining full through the existing exit. This replaces the earlier 65–70 ramp. Curve coordinates are 59/74 = .7972973 and 65/74 = .8783784; existing zero tangents ease the acceleration. Backstep, walking roll, base speeds and the .20-second exit blend are unchanged. Curve, frame-window and exit-blend tests cover the new timing at 1.0/.9 playback. No commit/push performed.
+
 # V2 — Run-roll exit blend (2026-09-06)
 
 Added Inspector `Dodge → Run/Sprint Roll → Run Roll Exit Blend`, default **0.20 seconds**. Only DodgeRun → Locomotion uses this presentation crossfade in Free/Locked mode. Backstep, walking roll and airborne handoff retain their existing .10-second blends. Movement curve frames 43/65, exit progress, base speeds and recovery/retrigger timers are unchanged. New test_run_roll_exit_blend_v2 and existing test_dodge_frame_windows_v2 both pass. No commit/push performed.
