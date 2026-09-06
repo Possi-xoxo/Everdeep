@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://Characters/Player/V2/player_v2.gd" id="1"]
 [ext_resource type="PackedScene" path="res://Characters/Player/Models/Blender Master Rig.glb" id="2"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://Characters/Player/V2/player_debug_v2.gd" id="5"]
 [ext_resource type="Script" path="res://Characters/Player/V2/player_step_solver_v2.gd" id="6"]
 [ext_resource type="Script" path="res://Characters/Player/V2/player_foot_grounding_v2.gd" id="7"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_foot_ik_v2.gd" id="8"]
 [sub_resource type="CapsuleShape3D" id="Body"]
 radius = 0.45
 height = 1.8
@@ -38,6 +39,8 @@ enabled = false
 [node name="RightFootTarget" type="Marker3D" parent="FootGrounding"]
 [node name="DebugGeometry" type="MeshInstance3D" parent="FootGrounding"]
 visible = false
+[node name="FootIKController" type="Node3D" parent="."]
+script = ExtResource("8")
 [node name="CameraRig" type="Node3D" parent="."]
 position = Vector3(0, 1.55, 0)
 script = ExtResource("3")

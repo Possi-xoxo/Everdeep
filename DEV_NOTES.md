@@ -1,3 +1,98 @@
+# V2 Phase 3B.3 — Pelvis Compensation (2026-09-05)
+
+Adds `player_pelvis_ik_v2.gd`, a SkeletonModifier3D instantiated by FootIKController. Runtime verification: **mixamorig_Hips, index 0, parent -1 (skeleton root)**. Both UpLeg chains descend directly from this bone. Lookup uses the name, not a hard-coded index. Only world-vertical translation is converted through the inverse skeleton basis into bone-global pose space; no Hips/spine rotation, scale, CharacterBody, capsule, or VisualRoot writes.
+
+## Ordering and targets
+
+AnimationTree -> existing landing/pivot presentation -> existing animated-foot probes -> capture original ankle poses, capped world destinations and independent foot weights -> manual skeleton advance -> **PelvisCompensation** -> recalculate leg reach/poles from lowered chain origins -> LeftFootIK -> RightFootIK -> PreserveAnimatedAnkles -> final skeleton_updated diagnostics. Native transient modifiers start from restored animation output each frame. Frozen-pose tests check the final Hips transform equals the animation transform plus exactly one vertical offset, without drift. Ground targets and original ankle orientation remain fixed; no additional probes.
+
+The only FootIK refactor separates per-frame sampling/weight updates from target placement. Reach remains limited to 99.5% of actual chain length and is now evaluated after Hips lowering. Existing ankle correction limits and native leg solvers are retained. Target caps/partial IK still permit residual floor gaps or penetration; this is not foot planting.
+
+## Settings and support
+
+Inspector: PlayerV2 / FootIKController / Pelvis Compensation. Defaults: `pelvis_enabled=true`, `max_pelvis_drop=0.20 m`, `pelvis_adjust_speed=10 /s`, `pelvis_ik_weight=0.80`. No positive raise (0 m); no separate recovery speed or gait settings.
+
+Per-foot required offset = smoothed terrain ankle target Y minus ORIGINAL animated ankle Y. Valid grounded support = min(existing swing influence, effective leg weight / global foot weight); invalid, airborne, disabled, or jump-start support is zero. Desired pelvis offset = clamp(min(0, left_required*left_support, right_required*right_support), -max_drop, 0) * pelvis_weight. Thus the default maximum weighted lowering is 0.16 m. Exponential interpolation uses `1-exp(-10*delta)`; tiny residuals below 0.1 mm become zero.
+
+Idle/Walk/Run/Sprint share the 0.8 global pelvis weight; moving feet use the existing 4–18 cm animated sole-lift swing attenuation, plus their smoothed IK influence. There is no unconditional Run/Sprint multiplier: dynamic tests did not justify extra gait tuning. Jump/Fall have zero target and smooth release; supported Land reacquires gradually. Unsupported ledge feet contribute nothing. This deliberately remains a support heuristic, not contact-phase detection or foot locking.
+
+## Landing sink budget
+
+Existing VisualRoot landing compression is untouched. It already contributes to measured world ankle positions. Applied Hips offset = min(0, smoothed_pelvis_offset - min(landing_sink, 0)). Consequently VisualRoot sink + applied Hips lowering equals the deeper of those two offsets, not their sum. A -0.25 m sink suppresses an additional -0.16 m pelvis drop instead of producing -0.41 m. This never positively raises Hips or weakens the existing landing profile. Both synthetic and actual jump/landing checks confirm the shared budget and neutral recovery.
+
+## Verification
+
+All eleven V2 suites pass: motor, grounded animation, landing compression, pivots, turn arc, animation recovery, StepSolver, idle/passive fall, foot grounding, foot IK, and new `test_pelvis_ik_v2.gd`. The existing foot IK test now verifies expected vertical Hips translation rather than the obsolete no-pelvis-change assertion; pelvis remains enabled throughout regression testing.
+
+Frozen split-curb comparison uses identical authored pose and body position with pelvis disabled/enabled, both at normal 0.8 foot weight:
+
+| Fixture | Pelvis drop | Lower-foot terrain error before -> after |
+| --- | --- | --- |
+| 15 cm curb, body Y 0.15 | 12.59 cm | 13.85 -> 1.35 cm |
+| 20 cm curb, body Y 0.20 | 16.00 cm | 18.82 -> 2.93 cm |
+| Flat floor | 0.68 cm | 0.15 -> 0.03 cm |
+| Both feet on 20 cm curb | 0.68 cm | 0.15 -> 0.03 cm |
+| Ramp standing | 4.31 cm | 3.45 -> 0.17 cm |
+
+Split 15 cm curb rendered before/after was inspected: lower sole visibly approaches the floor, upper knee bends, torso settles. Frozen fixtures remain stable for an additional 180 frames. Ramp walking passes limb-length/knee checks. All 18 stair cases (10/15/20 cm, Walk/Run/Sprint, up/down) traverse with stable knee pole side and segment error <2 mm. Largest procedural offset frame change was approximately 2.2 cm at 60 Hz; no extra gait multipliers added. Physical/body camera transforms are untouched, but subjective real-time bobble/camera comfort still merits user playtesting. No claim of full manual playtesting of all scenarios.
+
+Ledge fixture has left support 1 and right support 0; only the valid leg governs lowering. Airborne release is monotonic to neutral, with real jump/landing recovery also checked. Motor, landing controller and foot sensor hashes match the previous checkpoint. StepSolver SHA256 remains `34B96532FECE9BBE2E8F362CFD03262DDA7E4B6F875E15CEE30D776FA6C9B746`. No collision, geometry or scene changes.
+
+F8 now includes PELVIS IK weight, max drop, required/support values, target/current/applied offset, and a magenta original-to-corrected pelvis line. Settings remain on FootIKController; no separate scene node needs configuring.
+
+Before Phase 3B.4: playtest 0.8 weight / 0.20 m limit / speed 10 first. Tune only if a particular gait feels too low or bouncy. Partial foot influence and correction/reach limits intentionally leave residual error; raised feet may still penetrate slightly, and source idle sway is unchanged. Terrain-normal foot tilt remains OFF as in 3B.2 (authored ankle orientation preserved). Phase 3B.4 should address support-phase foot planting/locking and sliding, not increase pelvis drop to disguise those issues. No foot locking, gait markers, toe IK, torso tilt, spine compensation or root motion introduced.
+
+# V2 Phase 3B.2 — Foot IK (2026-09-05)
+
+Implemented with the installed engine's native **TwoBoneIK3D** modifiers, not custom CCD/FABRIK. Runtime ClassDB confirmed the available native classes/properties and rig chain indices; native method semantics were cross-checked against https://docs.godotengine.org/en/latest/classes/class_twoboneik3d.html and https://docs.godotengine.org/en/latest/classes/class_skeleton3d.html (latest docs are advisory; installed 4.7.1 API/runtime tests were authoritative).
+
+## Ownership, chains and ordering
+
+New `Characters/Player/V2/player_foot_ik_v2.gd` is attached at `PlayerV2/FootIKController`. It creates two native solvers directly beneath `VisualRoot/MasterRig/Base Armature and Mesh/Skeleton3D`: `LeftFootIK` and `RightFootIK`. Left chain: **mixamorig_LeftUpLeg (60) -> mixamorig_LeftLeg (61) -> mixamorig_LeftFoot (62)**. Right: **mixamorig_RightUpLeg (55) -> mixamorig_RightLeg (56) -> mixamorig_RightFoot (57)**. Runtime lookup and direct-parent validation avoid relying on fixed indices. Pelvis (index 0) is not part of either chain. ToeBase/Toe_End bones exist but are not IK endpoints or separately modified.
+
+Data source remains `PlayerV2/FootGrounding.left/right`, equivalent to the existing `FootGrounding/LeftFootTarget` and `RightFootTarget` surface markers plus the existing 0.08 m sole offset. The ground sensor is UNCHANGED. Native solvers target controller-owned `FootIKController/LeftIKTarget` and `RightIKTarget` markers, which hold the LIMITED ankle destinations. This keeps clamping/airborne release from overwriting the 3B.1 terrain markers. No duplicate casts are performed.
+
+`LeftKneePole` / `RightKneePole` are controller child Marker3Ds. Each pole is 0.6 m beyond the current animated knee along its projected bend direction. Nearly straight (<0.015 m bend) poses use character-forward projected perpendicular to the hip/ankle axis. This follows the authored knee plane instead of introducing an unrelated fixed world-space pole.
+
+Pipeline: AnimationTree evaluates -> existing AnimationController applies pivot/landing presentation -> existing FootGrounding samples ANIMATED feet -> FootIKController updates destinations/influences -> calls Skeleton3D.advance in MANUAL modifier mode -> native left/right leg IK -> ankle-orientation preservation -> final skin pose. Connections are made deferred in that order. The engine's transient modifier processing leaves the base animation available for subsequent sensing, avoiding an IK/probe feedback loop. The controller restores prior modifier callback mode when removed. Final result diagnostics are captured from skeleton_updated, not from the restored base pose afterward.
+
+`player_foot_ik_orientation_v2.gd` is a small final SkeletonModifier3D that preserves each ankle's authored world basis after parent leg rotations change. It does not solve leg positions. **Terrain-normal ankle tilt is OFF in this phase**, including on ramps. This deliberate position-first choice prevents incidental parent rotation from rolling the feet. The modifier touches only the two foot transforms (retaining their solved origins); no pelvis/spine, toe IK, CharacterBody transform, or collision writes occur.
+
+## Inspector defaults and state behavior
+
+| FootIKController setting | Default |
+| --- | --- |
+| enabled | true |
+| foot_ik_weight | 0.80 |
+| foot_ik_blend_in_speed | 10 /s |
+| foot_ik_blend_out_speed | 12 /s |
+| max_foot_ik_vertical_correction | 0.20 m |
+| max_foot_ik_horizontal_correction | 0.15 m |
+| foot_ik_debug | false; F8 toggles |
+
+Each foot independently exponentially approaches global weight times supported validity and swing influence. No gait-specific Inspector weights were needed: downward correction fades with animated sole lift relative to body base from 0.04 to 0.18 m while movement is requested, keeping lifted swing feet from being pinned merely because the terrain ray still hits. This is not phase locking and does not preserve a world-space planted foot. Fading invalid/airborne feet releases BOTH influence and prior correction exponentially, expressed relative to the current animated pose, not a stale terrain point. Targets reacquire after supported contact; Land sink is included exactly once through world transforms, never added again or removed. Jump/Fall fade to zero; no step-down or gameplay control exists in IK.
+
+Destination begins at the existing smoothed ankle suggestion, clamps vertical and horizontal delta, then limits reach to 99.5% of the current upper+lower segment lengths. If reach projection would exceed the correction bounds, it falls back to the animated position instead of stretching. Native IK rotates the two segments without extending their lengths. Partial weight plus capped reach intentionally leaves some residual error. Poles and reach caps do not reposition the pelvis.
+
+F7 remains probe diagnostics. F8 adds global/per-foot weights, validity, vertical correction, clamp flag and swing influence. Optional geometry uses yellow animated-to-target lines, cyan target-to-solved lines, and green solved crosses. Runtime `legs` diagnostic dictionaries also report pole-side stability and limb-length error.
+
+## Verification, observations and limitations
+
+New `test/test_foot_ik_v2.gd` passes native solver binding, independent target improvement, correction caps, unchanged body and pelvis, edge-specific release, smooth jump fade, landing reacquisition, swing-foot release, and all nine gait/stair combinations. Solved knees remain on their intended pole side and limb lengths stay within 2 mm test tolerance. The original nine V2 suites also pass, including foot sensing, standing/moving Land compression, reversals, 20-drop recovery, passive suppression and full StepSolver matrix.
+
+Measured frozen-pose results at weight 0.8:
+
+* Flat floor: ankle target error reduces from ~8.5 mm to ~1.6 mm; both legs remain stable.
+* 15 cm split-curb fixture: raised leg error to limited target reduces from 9.25 cm to 2.28 cm. The lower leg is reach-limited, as expected without pelvis adjustment.
+* 20 cm split-curb fixture: independently adapts with the same ~2.28 cm raised-leg residual in the tested relative pose; no hyperextension.
+* Ramp: limited target errors ~3.12/2.15 cm reduce to ~0.39/0.31 cm. Foot world orientation remains authored, not terrain-aligned.
+* Walk/Run/Sprint: base animation is retained; tests observe swing-release samples in every gait (18/30/24 during the sampled runs). These are automatic bounds/pose checks, not a claim of completed subjective skating calibration.
+* Jump/Fall: influences decay to zero without chasing fixed terrain; Land blends back while the original sink/profile tests remain passing. One unsupported edge foot fades independently while the supported foot stays near 0.8.
+
+Rendered and inspected paired before/after 15 cm curb images in the task workspace (`work/foot_ik_before.png`, `work/foot_ik_after.png`): upper foot visibly rises out of the curb and knee bends while torso remains fixed. Some sole penetration/residual gap remains at partial influence, and the low leg may remain above ground because the pelvis is fixed. No claim of perfect contact or completed in-motion visual review. Manual review should focus on knee behavior during animated pivots, foot skating, and the Land-to-IK handoff. Keep 0.8 / 10 / 12 / 0.20 / 0.15 initially; lower global weight toward 0.6 if correction feels too assertive. Do not raise limits to compensate for missing pelvis motion. Phase 3B.3 should address shared pelvis reach while preserving the existing motor and landing presentation.
+
+Byte comparisons confirm `player_v2.gd`, `player_animation_v2.gd`, `player_foot_grounding_v2.gd`, and `player_turn_180_v2.gd` unchanged from checkpoint b47d655. StepSolver remains SHA256 `34B96532FECE9BBE2E8F362CFD03262DDA7E4B6F875E15CEE30D776FA6C9B746`. Capsule/body settings and lab geometry unchanged. Changed files: reusable player scene, debug HUD, this document; new IK controller, ankle-preservation modifier, IK test and associated UIDs. No pelvis compensation, procedural locking, stride warping, root motion, hand/weapon IK, or source-GLB changes.
+
 # V2 Phase 3B.1 — Foot Ground Detection (2026-09-05)
 
 Observation only: new `Characters/Player/V2/player_foot_grounding_v2.gd` owns `PlayerV2/FootGrounding`, two child RayCast3D nodes `LeftFootProbe`/`RightFootProbe`, Marker3D helpers `LeftFootTarget`/`RightFootTarget`, and debug line geometry. Only the reusable player scene and debug HUD are connected to it. No movement, StepSolver, animation-controller, camera, collision, skeleton, pelvis, or bone-pose code is modified. No IK consumer, foot locking, pole/knee target, stride warp, or root motion exists.
