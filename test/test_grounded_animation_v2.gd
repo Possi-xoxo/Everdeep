@@ -48,23 +48,23 @@ func run() -> void:
 	body.get_node("CameraRig/YawPivot").rotation.y = body.visual.rotation.y
 	for i in 180:
 		await tick()
-	# Align visual with camera so tests can independently exercise thresholds.
+	# Orbit alone no longer constitutes an explicit facing request.
 	body.visual.rotation.y = 0
 	body.get_node("CameraRig/YawPivot").rotation.y = deg_to_rad(45)
 	for i in 5:
 		await tick()
-	check(g.transition == &"Loops", "45 degrees below 60-degree threshold")
+	check(g.transition == &"Loops", "45-degree camera orbit leaves idle untouched")
 	body.get_node("CameraRig/YawPivot").rotation.y = PI/2
 	await tick()
-	check(g.transition == &"TurnLeft", "90-degree left camera orbit enters stationary turn")
+	check(g.transition == &"Loops", "90-degree left camera orbit preserves idle")
 	var pos := body.position
 	for i in 90:
 		await tick()
-	check(absf(wrapf(body.visual.rotation.y - PI/2,-PI,PI)) < 0.03, "stationary turn finishes with matching visual facing")
+	check(absf(wrapf(body.visual.rotation.y,-PI,PI)) < 0.0001, "idle facing remains at original yaw")
 	check(body.position.distance_to(pos) < 0.005, "turn does not translate physical body")
 	body.get_node("CameraRig/YawPivot").rotation.y = 0
 	await tick()
-	check(g.transition == &"TurnRight", "right orbit selects right turn")
+	check(g.transition == &"Loops", "right camera orbit also preserves idle")
 	await tick(Vector2(0,-1))
 	check(g.transition == &"Loops", "movement cancels stationary turn")
 	for i in 20:
@@ -97,7 +97,7 @@ func run() -> void:
 		await tick()
 	body.get_node("CameraRig/YawPivot").rotation.y = body.visual.rotation.y + PI
 	await tick()
-	check(g.transition in [&"TurnLeft", &"TurnRight"], "180-degree stationary change uses bounded turns")
+	check(g.transition == &"Loops", "camera orbit alone does not request a stationary turn")
 	await tick(Vector2.ZERO,false,true)
 	check(animation.current_state == &"JumpStanding" and g.transition == &"Loops", "Jump immediately cancels Turn")
 	check(is_equal_approx(animation.standing_land_clip_start,0.4), "standing Land source start preserved")

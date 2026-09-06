@@ -22,7 +22,18 @@ const CLIPS := {
 @export var jump_blend_in: float = 0.08
 @export var jump_to_fall_blend: float = 0.12
 @export var apex_velocity_threshold: float = -0.5
-@export var fall_min_air_time: float = 0.12
+@export_category("Passive Fall Presentation")
+@export_range(0.0, 0.6, 0.01) var passive_fall_ground_grace_distance: float = 0.30
+@export_range(0.0, 0.3, 0.01) var passive_fall_min_air_time: float = 0.12
+@export var debug_facing_and_passive_fall: bool = false
+## Compatibility for earlier tests/tools; a single authoritative timer setting.
+var fall_min_air_time: float:
+	get: return passive_fall_min_air_time
+	set(value): passive_fall_min_air_time = value
+var ground_within_grace: bool = false
+var passive_ground_distance: float = INF
+var fall_visual_committed: bool = false
+var _intentional_jump_episode: bool = false
 @export_category("Contact Land")
 @export_range(0.0, 1.0, 0.01) var land_clip_start: float = 0.50
 @export_range(0.0, 1.0, 0.01) var land_exit_progress: float = 1
@@ -160,13 +171,23 @@ func _physics_process(delta: float) -> void:
 	if current_state == &"Locomotion" and not s.jump_started:
 		_recover_locomotion_playback()
 	_update_gait(s, delta)
+	ground_within_grace = false
+	passive_ground_distance = INF
 	if s.jump_started:
+		_intentional_jump_episode = true
+		fall_visual_committed = false
 		_episode_visible = true
 		_standing_jump_episode = s.takeoff_speed < standing_jump_speed_threshold
 		_enter(&"JumpStanding" if s.takeoff_speed < standing_jump_speed_threshold else &"JumpMoving")
 	elif s.is_airborne:
-		if s.vertical_velocity <= apex_velocity_threshold and (current_state in [&"JumpStanding", &"JumpMoving"] or s.air_time >= fall_min_air_time):
+		var intentional: bool = current_state in [&"JumpStanding", &"JumpMoving"]
+		if not intentional and not fall_visual_committed:
+			_sample_passive_ground()
+		var clearly_far: bool = passive_ground_distance > maxf(0.6,passive_fall_ground_grace_distance*2.0)
+		var passive_commit: bool = not ground_within_grace and (s.air_time >= passive_fall_min_air_time or clearly_far or s.vertical_velocity <= -3.0)
+		if s.vertical_velocity <= apex_velocity_threshold and (intentional or fall_visual_committed or passive_commit):
 			_episode_visible = true
+			fall_visual_committed = true
 			_enter(&"Fall")
 	elif s.is_grounded and not s.was_grounded:
 		if _has_ground_contact and _episode_visible:
@@ -176,6 +197,8 @@ func _physics_process(delta: float) -> void:
 		else:
 			_enter(&"Locomotion")
 		_episode_visible = false
+		_intentional_jump_episode = false
+		fall_visual_committed = false
 		_standing_jump_episode = false
 	if s.is_grounded:
 		_has_ground_contact = true
@@ -186,6 +209,28 @@ func _physics_process(delta: float) -> void:
 			_enter(&"Locomotion")
 	grounded.update(tree, s, gait_blend, current_state == &"Locomotion", visual_root)
 	motor.turn_arc_suppressed = current_state != &"Locomotion"
+
+func _sample_passive_ground() -> void:
+	# Presentation sensor only: never snaps, alters velocity, or claims ground.
+	# A small five-ray footprint covers tread edges without the capsule's wide
+	# sidewall footprint treating a nearby vertical face as support.
+	var origin: Vector3 = motor.global_position
+	var extent := maxf(0.65,passive_fall_ground_grace_distance*2.0+0.05)
+	for offset in [Vector3.ZERO,Vector3(0.20,0,0),Vector3(-0.20,0,0),Vector3(0,0,0.20),Vector3(0,0,-0.20)]:
+		var q := PhysicsRayQueryParameters3D.create(origin+offset+Vector3.UP*0.02,origin+offset-Vector3.UP*extent,motor.collision_mask,[motor.get_rid()])
+		var hit: Dictionary = motor.get_world_3d().direct_space_state.intersect_ray(q)
+		if hit.is_empty() or hit.normal.dot(Vector3.UP)<cos(motor.floor_max_angle):
+			continue
+		var distance: float = origin.y-hit.position.y
+		if distance >= -0.002:
+			passive_ground_distance = minf(passive_ground_distance,maxf(distance,0.0))
+	ground_within_grace = passive_ground_distance <= passive_fall_ground_grace_distance
+
+func facing_and_fall_debug_text() -> String:
+	var s = motor.animation_state
+	var moving: bool = s.move_input_magnitude>0.01
+	var explicit_turn: bool = motor.turn_180 != null and motor.turn_180.active
+	return "Move Input: %.2f\nIdle Facing Locked: %s\nDesired Facing Updated: %s\nPhysical Grounded: %s\nPassive Air Time: %.3f\nGround Within Grace: %s\nGround Distance: %.3f m\nFall Visual Committed: %s\nAnimation State: %s" % [s.move_input_magnitude,not moving and not explicit_turn,moving,motor.is_on_floor(),s.air_time if not _intentional_jump_episode else 0.0,ground_within_grace,passive_ground_distance,fall_visual_committed,presentation_label()]
 
 func _recover_locomotion_playback() -> void:
 	if not tree.active:

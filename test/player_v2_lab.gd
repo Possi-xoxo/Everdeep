@@ -11,6 +11,7 @@ func _ready() -> void:
 	_label("0.6 m platform", Vector3(-9, 0.7, -12))
 	_label("3 m platform", Vector3(9, 3.1, -20))
 	_label("15 cm curb", Vector3(-9, 0.25, 6))
+	_label("STEP LAB → east / X 38–120 / F4 probes",Vector3(16,0.2,15))
 	for z in range(-35, 36, 5):
 		var marker := MeshInstance3D.new()
 		var mesh := BoxMesh.new()
@@ -64,4 +65,3 @@ func _label(title: String, pos: Vector3) -> void:
 	label.pixel_size = 0.008
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	add_child(label)
-

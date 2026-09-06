@@ -38,6 +38,7 @@ var _movement_input_was_active: bool = false
 var turn_180: Resource
 @onready var camera: Camera3D = $CameraRig/YawPivot/PitchPivot/SpringArm3D/Camera3D
 @onready var visual: Node3D = $VisualRoot
+@onready var step_solver = $StepSolver
 
 func _physics_process(delta: float) -> void:
 	step_motor(delta, Input.get_vector("move_left", "move_right", "move_forward", "move_backward"), Input.is_action_pressed("sprint"), Input.is_action_just_pressed("jump"))
@@ -46,7 +47,7 @@ func _physics_process(delta: float) -> void:
 func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool) -> void:
 	var s = animation_state
 	var source_gait: int = s.gait
-	var grounded_before := is_on_floor()
+	var grounded_before: bool = is_on_floor() or step_solver.active
 	s.was_grounded = s.is_grounded
 	s.jump_started = jump and grounded_before
 	s.takeoff_speed = Vector2(velocity.x, velocity.z).length() if s.jump_started else s.takeoff_speed
@@ -121,14 +122,26 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool) -> void:
 		horizontal = horizontal.move_toward(direction * target_speed * s.move_input_magnitude, acceleration * air_control * delta)
 	velocity.x = horizontal.x
 	velocity.z = horizontal.z
-	if horizontal.length() > 0.1 and not turn_arc_active and not turning:
+	if s.move_input_magnitude > 0.01 and horizontal.length() > 0.1 and not turn_arc_active and not turning:
 		visual.rotation.y = lerp_angle(visual.rotation.y, atan2(-horizontal.x, -horizontal.z), 1.0 - exp(-turn_rate * delta))
 	if not grounded_before or s.jump_started:
 		velocity.y = maxf(velocity.y - (rise_gravity if velocity.y > 0.0 else fall_gravity) * delta, -max_fall_speed)
 	else:
 		velocity.y = -0.5
+	var step_allowed: bool = grounded_before and not s.jump_started and not turn_arc_suppressed and not turning
+	var stepping: bool = step_solver.prepare(delta,horizontal,direction,step_allowed)
+	var saved_snap := floor_snap_length
+	if stepping:
+		step_solver.lift(delta)
+		floor_snap_length = 0.0
+		velocity.y = 0.0
 	move_and_slide()
-	s.is_grounded = is_on_floor()
+	floor_snap_length = saved_snap
+	step_solver.finish()
+	s.is_stepping_up = step_solver.active
+	s.step_height = step_solver.step_height
+	s.step_target_y = step_solver.step_target_y
+	s.is_grounded = is_on_floor() or step_solver.active
 	s.is_airborne = not s.is_grounded
 	if s.is_airborne:
 		turn_arc_active = false
@@ -142,8 +155,9 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool) -> void:
 	s.air_time = s.air_time + delta if s.is_airborne else 0.0
 	var local_velocity := visual.global_basis.inverse() * Vector3(velocity.x, 0.0, velocity.z)
 	s.move_local = Vector2(local_velocity.x, -local_velocity.z).normalized() if s.horizontal_speed > 0.1 else Vector2.ZERO
-	var desired_facing := direction if s.move_input_magnitude > 0.01 else forward
-	s.facing_delta = wrapf(atan2(-desired_facing.x, -desired_facing.z) - visual.global_rotation.y, -PI, PI)
+	# Idle camera orbit is not a facing request. Explicit pivot ownership remains
+	# separate; returning input still uses the current camera-relative direction.
+	s.facing_delta = wrapf(atan2(-direction.x, -direction.z) - visual.global_rotation.y, -PI, PI) if s.move_input_magnitude > 0.01 else 0.0
 
 func _turn_arc_direction(desired: Vector3, speed: float, grounded: bool, delta: float) -> Vector3:
 	var s = animation_state

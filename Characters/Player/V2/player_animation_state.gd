@@ -4,6 +4,10 @@ enum Gait { WALK, RUN, SPRINT }
 var horizontal_speed: float = 0.0
 var vertical_velocity: float = 0.0
 var is_grounded: bool = false
+## Validated, bounded step support counts as motor ground without a floor contact.
+var is_stepping_up: bool = false
+var step_height: float = 0.0
+var step_target_y: float = 0.0
 var was_grounded: bool = false
 var is_airborne: bool = true
 var is_falling: bool = false
