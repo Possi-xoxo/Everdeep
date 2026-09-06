@@ -4,12 +4,12 @@ const Dodge = preload("res://Characters/Player/V2/player_dodge_v2.gd")
 @export_category("Dodge / Roll")
 @export var dodge: Resource = Dodge.new()
 @export_category("Gaits")
-@export var walk_speed: float = 4.0
+@export var walk_speed: float = 2.0
 @export var run_start_speed: float = 4.0
 @export var run_end_speed: float = 6.0
 @export var sprint_speed: float = 8.0
 @export_category("Lock-On Movement")
-@export_range(0,12,0.1) var lock_walk_forward_speed: float = 4.0
+@export_range(0,12,0.1) var lock_walk_forward_speed: float = 2.0
 @export_range(0,12,0.1) var lock_walk_backward_speed: float = 3.0
 @export_range(0,12,0.1) var lock_walk_strafe_speed: float = 3.5
 @export_range(0,12,0.1) var lock_run_forward_speed: float = 6.0

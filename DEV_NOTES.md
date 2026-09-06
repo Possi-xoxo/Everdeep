@@ -1,3 +1,309 @@
+# Environmental Hand IK — Walk-Only Isolation (2026-09-06)
+
+## Reproduced ownership leak
+
+The old state gate stopped *contact acquisition*, not skeletal authority. On the first evaluated Stand Roll frame after wall contact, `environment_hand_contact_active` was false but positional weight was .90, wrist correction .90 and native TwoBoneIK influence **1.0**. Following frames still had .885/.844/.782 positional/wrist weight with native influence 1.0. The generic .22-second RELEASING path kept preparing body-relative wall targets/poles and writing hand rotation over the Dodge pose. This was an actual ownership leak, not a need to lower contact weights globally.
+
+Foot IK owns the one production `skeleton.advance()` call following AnimationTree evaluation. Environmental preparation, the two arm solvers and hand correction remain appended after the foot modifiers. The mixer-applied boundary check previously only began a fade; it now removes authority immediately for actions. Preparation and final capture also check the same eligibility, covering deferred modifier execution without a second production skeleton advance.
+
+## Authoritative eligibility and Idle change
+
+`EnvironmentalHandInteraction.can_use_environment_hand_ik()` is the single authoritative boolean, backed by its diagnostic `eligibility()`. Sensing, candidate choice, contact updates, preparation, final hand writes and the evaluated-pose boundary all derive from it. Allowed: enabled, valid rig, ordinary grounded FREE WALK, meaningful movement input/speed, Locomotion/Loops presentation, no higher-priority state. Rejected reasons include DISABLED, MISSING_RIG, LOCKED, DODGE, JUMP, FALL, LAND, NOT_GROUNDED, RUN, SPRINT, TURN, TRAVERSAL, ACTION, IDLE and TOO_FAST. Presentation/action checks precede Idle, so a stationary action cannot accidentally receive the Idle fade exception.
+
+Idle Hold is disabled. The old optional held-side/allow-Idle arguments remain compatibility signatures only; they no longer grant Idle eligibility or probe updates. Walk -> Idle clears contact and uses the existing .22-second release. Once complete, Idle has zero native IK, pole/position and wrist weight and no hand write. This short exit fade is the **only deliberate non-Walk skeletal exception**, following the explicit requested smooth Idle release; there is no ongoing Idle contact or new Idle acquisition. Any action interrupting that fade immediately cancels its authority. Legacy IDLE_HOLD enum/settings are inert compatibility fields, not reachable contact states.
+
+## Forced handoff, cache reset and bone writes
+
+`protect_non_walk_pose()` routes Idle to the bounded release and every other rejection to `ensure_environment_hand_pose_released()`. Forced handoff sets both actual native solver influences, positional/pole weights and wrist weights to exactly 0. It clears selected side, collider, contact positions/normals/tangent, acquired/persistence flags, reach timers/transforms, desired rotation, release caches and marker targets. It also handles an already-RELEASING arm, rather than checking only the contact-active flag. Noneligible action preparation returns before target solving; capture does no wrist writes. Helpers still run control/read-only diagnostics, but the arm solvers have zero influence.
+
+The system uses `set_bone_global_pose()` inside a SkeletonModifier3D pass, **not persistent `set_bone_global_pose_override()`**. Godot restores modifier input poses after evaluation. Inactive operation skips all hand writes and clears their cached targets/write flags; no global override-clear call is made that could disturb Foot IK or another owner. Regression tests compare all upper-arm, forearm and hand input/output transforms inside the modifier pass to verify that no manual correction survives into an action.
+
+Forced release starts the existing global 1.75-second cooldown immediately. Ordinary walking-surface/Idle release starts it after the .22-second fade. Already-running cooldown is preserved and counted down, never restarted every ineligible frame. Both hands remain blocked on a quick return to Walk. Staged reach (.55 seconds), fingers-up/palm-to-wall orientation, positional/rotation settings and ordinary walking drag remain unchanged.
+
+## Regression results
+
+New `test_environment_hand_isolation_v2.gd` establishes real wall contact before each transition. It verifies zero actual native IK/wrist/pole influence at the action boundary, then waits for Godot's deferred modifier pass before comparing captured arm transforms. It also re-evaluates the same pose with the component disabled to compare against enabled-but-ineligible output; this test-only skeleton advance does not change production update ownership.
+
+Passing cases: Stand Roll (`DOD_STAND_TO_ROLL`), Run Roll (`DOD_RUN_TO_ROLL`), Sprint Roll (`DOD_SPRINT_TO_ROLL`), Backstep (`DPD_DODING_BACK`), Run, Sprint, Jump, passive Fall and Land, Lock-On, ordinary reverse-input turn, Idle release and immediate Walk-return cooldown. All three bones on both arms match the incoming evaluated animation transforms outside the Idle exit fade; disabled reference comparisons also match. Jump and passive-fall cases both reach Land. The run/sprint/lock cases each checked 150 subsequent ineligible frames; no stored wall pose reappeared.
+
+Eight targeted suites pass: environmental isolation, pose, contact, arm IK, sensing; running-roll handoff, sprint roll and locked-roll realignment. Existing tests expecting persistent Idle contact now expect release/cooldown instead. Walking reach/orientation, wall-end/pillar/corner behavior and one-hand selection remain covered. These are deterministic headless pose comparisons, not a claim of interactive visual playtesting or of passing every historical movement test. The unrelated Windows root-certificate warning persists.
+
+Changed only environmental sensing eligibility, hand controller/modifier documentation, hand tests and these notes. No Roll curves/timing, traversal, lock-on movement, camera, StepSolver, Foot IK/pelvis or animation assets changed. Not committed or pushed.
+
+# Environmental hands — palm reversal (2026-09-06)
+
+The user's close-up screenshot confirms the fingers-up pose still presented the wrong hand surface. Reverse its X/Z axes (180 degrees around finger-local +Y), preserving projected-up finger direction. The active convention is now palm +Z facing into the wall; this supersedes the earlier -Z interpretation. Palm-depth offset and debug/test palm-axis signs match the correction. No reach, release, cooldown, movement or sensing behavior changes.
+
+# Environmental hands — fingers-up contact (2026-09-06)
+
+User-requested orientation-only refinement: the contact frame now maps finger-local +Y to world up projected onto the wall plane, while palm-local -Z continues facing into the wall. Travel tangent still controls existing drag/pole behavior, but no longer determines finger direction. Both hands use the same geometric construction with their existing per-hand offsets. Reach staging, positional/rotation weights, palm clearance, release, cooldown, sensing and movement remain unchanged. The hand pose test now measures finger alignment against projected up instead of travel tangent. This supersedes the along-travel finger orientation documented below.
+
+# Environmental Hand Interaction Phase 4.1 (2026-09-06)
+
+## Corrected hand axes and geometric basis
+
+**This section supersedes the Phase 3/4 palm-sign assumption.** Reinspection of both hand rest transforms confirms +Y toward Middle1 (about 9.533 imported units), with Left Thumb1 X=-2.682 and Right Thumb1 X=+2.682. However, thumb Z displacement alone does not identify the palm-facing normal. Close-up rendered local-axis/mesh inspection exposed that the old +Z contact put the thumb edge underneath and the wrong side of the hand toward the wall. The corrected mapping is:
+
+| Hand | Palm normal | Finger forward | Thumb-side / secondary |
+| --- | --- | --- | --- |
+| Left | -Z | +Y | -X |
+| Right | -Z | +Y | +X |
+
+Local +Z is the dorsum/back-of-hand side. With N the outward wall normal and T the stable tangent, construct bone-local world axes Z=N, Y=T projected perpendicular to N, X=Y cross Z, then orthonormalize. Consequently actual palm -Z faces -N and fingers +Y follow T. This is a proper right-handed basis; the mirrored thumb sides naturally face upward on their respective walls. The modeled palm offset is now (0,.0477,-.012) meters so depth follows the corrected palm sign. Clearance remains .05 m. No GLB, finger poses or skeleton assets were modified.
+
+Per-hand rotation offsets are exposed in degrees and post-multiplied in local space after the geometric basis. Both defaults are **(0,0,0)**; no arbitrary 180-degree offset is needed to mask an incorrect mapping. Existing native arm IK and post-IK hand orientation order remains intact, including its approximate prepared-forearm bend guard. This is still not anatomical twist simulation.
+
+## Slower staged reach
+
+Inspector sections on EnvironmentalHandIK now group Environmental Hand Interaction / Reach and Contact Pose. Recommended defaults:
+
+| Setting | Value |
+| --- | --- |
+| `hand_reach_total_duration` | .55 seconds (range .40-.80) |
+| `hand_reach_prep_fraction` | .40 |
+| `hand_rotation_start_fraction` | .35 |
+| Contact position weight | .90 (preserved) |
+| Contact rotation weight | .90 |
+| Left / right rotation offsets | (0,0,0) degrees |
+| Release duration / global cooldown | .22 / 1.75 seconds (unchanged) |
+
+The existing REACHING state has lightweight internal/debug stages REACHING_PREP and REACHING_CONTACT; no new AnimationTree states. Position easing uses two smoothstep segments: 0 to .35/.90 over the prep fraction, then to 1 over the remaining approach. At default settings this gives positional authority about .35 at 40% progress, .76 at 80%, and .90 at completion before reach safety attenuation. The procedural target itself also eases; early Walk animation remains dominant. Rotation uses a separate smoothstep from the configured .35 start fraction to 1: no contact rotation before 35%, about .70 at 80%, and .90 at completion. This deliberately favors the requested delayed rotation over forcing .15 rotation at exactly 40% progress. No Curve resources were needed; duration, split, delay and final weights are Inspector controls.
+
+The actual animated hand transform is captured once at acquisition, with a fixed body-relative copy. This prevents the walking character from leaving a frozen world-space start behind during the .55-second gesture. The target interpolates from that captured start toward the continuously updated wall endpoint, while procedural authority blends it with live animation. Plane-normal correction now follows the same staged approach rather than taking over early. The captured start is not resampled from each Walk frame. First prepared target is verified equal to the animated wrist. The old `hand_reach_in_duration` is a compatibility alias to total duration.
+
+## Tangent continuity, Idle and release
+
+T starts from horizontal velocity projected onto the raw wall-normal plane. At Idle/low speed, fallback order is last tangent projected onto that plane, projected character forward, then world UP cross N. Near-horizontal surfaces are already excluded by existing sensing. If a new tangent opposes the old one, negate it to preserve sign. Remaining angular changes are bounded to 300 degrees/second and the frame is reconstructed orthonormally. This prioritizes continuity over instantly pointing the fingers backward on reversed travel.
+
+Walk -> Idle preserves the tangent and established wrist reference, preventing Walk/Idle wrist cycling from reasserting itself. Idle -> Walk resumes the same contact without restarting staging. Actual reverse input can invoke the existing locomotion turn action and release the contact normally; it does not force the hand to remain attached through a turn. Release/cooldown rules, eligibility, side selection, loss grace and their timings are unchanged.
+
+F11 shows prep/contact stage, normalized progress, prep fraction, separate weights, actual palm mapping and angular error. World-space local axes use X=red, Y=green, Z=blue on the solved hand and desired contact frame. Wall normal/tangent and desired palm/finger directions are also drawn. The orange palm direction is -Z, not the blue +Z axis.
+
+## Tests and remaining limitations
+
+Updated hand pose tests pass for both sides: 33 evaluated frames at 60 FPS (.55 seconds), both stages observed, prep authority <=.35, zero early rotation, fixed captured start, orthonormal basis, per-hand offset application, delayed rotation, stable long contact and Idle basis, no Idle-resume reacquisition, tangent reversal continuity, real reverse-input safe release, and unchanged smooth release/cooldown/action suppression. Measured established palm-normal errors: about **1.13 degrees left / 2.75 degrees right**; finger-tangent errors about **8.3 / 8.8 degrees** at .90 rotation authority. Left and right contact-pose renders were inspected in addition to headless tests; this is not a claim of interactive manual playtesting.
+
+All four environmental hand suites pass, plus running-roll handoff, sprint roll and locked-roll realignment. The contact test now compares drag travel against configured walk speed rather than a hardcoded distance based on the old 4 m/s. Current user tuning is 2 m/s Free Walk (and 2 m/s locked forward Walk), preserved. Narrow-pillar/rough-wall tests permit an aborted prep instead of requiring full contact before a short target disappears. Uneven-wall case retained 38/75 active frames and conservatively released at a sharp corner, with the existing global cooldown.
+
+Broader Player, Foot IK and StepSolver suites retain failures under current tuning. Running those same suites with EnvironmentalHandIK disabled produces the same failures (Player 4 assertions; Foot IK 3 traversal assertions; StepSolver 21 travel/threshold assertions). Several checks assume the former walking speed/fixed travel time. No movement or foot-system fixes were attempted in this scoped task. Existing root-certificate warning is unrelated.
+
+Remaining limitations: source finger curl is untouched and can keep fingertips from reading as a perfectly flat hand; the palm is an approximate center/depth model, not mesh collision. Fixed body-relative start avoids world pinning but still blends with live shoulder/arm motion. Very short walls can disappear before the slower gesture settles. Sign continuity may retain the former finger direction during reverse movement, or locomotion may release for its normal turn action. The wrist/forearm guard remains approximate, not a full anatomical joint-limit system. No sensing, movement, StepSolver, Foot IK, lock-on, dodge/roll, camera or cooldown changes were made. Not committed or pushed.
+
+# Environmental Hand Interaction Phase 4 (2026-09-06)
+
+## Contact pose, reach and cooldown
+
+`player_environment_hand_ik_v2.gd` now owns one explicit state machine:
+`INACTIVE -> REACHING -> CONTACT <-> IDLE_HOLD -> RELEASING -> COOLDOWN -> INACTIVE`.
+REACHING can also cancel directly to RELEASING; if walking stops during reach, it finishes into IDLE_HOLD. Only eligible Free Walk can acquire. The selected side remains locked through release completion. Existing Phase 3 persistence labels remain compatibility/debug labels; they are not a second state machine.
+
+Recommended initial Inspector settings:
+
+| Setting | Default |
+| --- | --- |
+| `environment_hand_contact_weight` / `environment_hand_position_weight` | .90; two names for the SAME positional value, not multiplied |
+| `environment_hand_contact_rotation_weight` | .85, independent of position |
+| `hand_reach_in_duration` | .30 seconds |
+| `hand_release_duration` | .22 seconds |
+| `hand_contact_reacquire_cooldown` | 1.75 seconds, GLOBAL to both arms |
+| `hand_palm_clearance` | .05 m, unchanged |
+| `hand_max_wrist_rotation` | 150 degrees; now the start of conservative prepared-forearm bend attenuation, not a global animation-to-wall rotation cap |
+| Wall / Idle target follow | 12 / 5 per second, unchanged |
+
+Legacy IK-weight API aliases the positional value. Old per-second reach/release-speed fields no longer drive transitions. Smoothstep `t*t*(3-2*t)` controls both duration-based fades. Reach stores the starting hand transform and updates the end transform against the moving wall each pose. Both the positional target and its authority ease in; native TwoBoneIK remains full influence on that blended target to avoid the old joint-angle wall-penetration arc. Palm normal separation approaches the clearance plane over the reach, rather than snapping to it at acquisition. Established contact maintains the plane independently of tangential animation contribution.
+
+Release captures the actual blended target, pole and hand orientation in body-relative space. These blend back to the live animated pose, without a stale world-space wall pin or a first-frame switch to a different rotation source. Completion starts the global cooldown. Sensors may still report candidates while walking during cooldown, but neither side can acquire. No randomness is used. Existing probe-loss grace remains .15 seconds and does not release/cool down on a tolerated miss. Genuine surface loss, wall end, unsafe reach, body angle, sharp normal change, walking away, Run/Sprint, Lock-On, Dodge, Jump/Fall, incompatible actions or disabling the component release first, then cool down. Idle itself does neither.
+
+## Verified rig axes and contact frame
+
+Re-inspected runtime rest transforms of both hands in the current GLB. Middle1 lies at approximately local (0,9.533,0) imported units from the wrist: **+Y is the finger/hand long axis**. Index/Pinky X offsets mirror between sides; Thumb1 sits approximately +1.576/+1.574 units along Z. The current rig's palm-facing convention is **+Z on both hands**, also consistent with its rest-world downward palm direction. Skeleton world scale remains .01. No rig assets or fingers were changed.
+
+Let N be the raw outward wall normal. T is horizontal motor velocity projected onto the wall plane, normalized. At low speed or Idle, preserve the previous tangent projected onto the current plane; if unavailable, use character forward projected onto the plane, then projected world up as a degeneracy fallback. Build an orthonormal frame with local Z = -N, Y = T, X = Y cross Z. Thus fingers follow drag direction and palm faces the wall, including when Idle stops movement.
+
+The previous correction aligned only the palm normal and inherited the Walk wrist every frame. Phase 4 applies the wall frame in the existing post-IK hand modifier. During reach, the residual wrist reference eases toward the acquisition pose held in body space; established contact no longer inherits cyclic Walk wrist swings. Rotation authority .85 leaves a small stable residual, rather than a time-varying Walk residual. Shoulder/body animation and native upper-arm/forearm solving continue normally. Idle retains the tangent/reference and resuming Walk does not restart reach or cooldown.
+
+Environmental elbow-pole longitudinal direction is now opposite the wall tangent, using the existing .10 m magnitude and .30 m outward / -.25 m vertical offsets. This avoids bending the forearm back against the desired finger direction. Shortest quaternion blending avoids unnecessary full rotations. A prepared target/pole forearm-direction estimate attenuates rotation when long-axis bend exceeds the configured threshold toward 180 degrees. This is an approximate inversion guard, **not anatomical forearm-twist limits**; no forearm torsion or finger overrides were added. Applying the old 90-degree cap to the global animated-hand/frame difference incorrectly preserved the wrong wrist pose, since that angle includes the pre-IK arm orientation.
+
+## Verification and limitations
+
+New `test_environment_hand_pose_v2.gd` covers mirrored .30-second acquisition, smoothstep progression/authority, established palm clearance, wall-frame orientation, Idle tangent preservation, same-contact resume, .22-second release, immediate-return cooldown with valid candidates, cooldown expiry, and Run/Lock/Dodge/Jump cancellation during REACHING. Updated Phase 2/3 tests isolate scenarios by allowing cooldown expiry and now expect a global cooldown before the opposite corridor hand can acquire. A deliberately shortened reach cap correctly releases instead of requiring a stale clamp flag. Rough-wall tests permit conservative release/cooldown instead of demanding rapid retouches.
+
+Measured left/right reach: **18 evaluated frames at 60 FPS**. Established maximum palm-normal error about **25.85 / 24.21 degrees**, finger-tangent error **16.97 / 16.70 degrees**, with .85 rotation authority. Established long-wall modeled palm clearance remains approximately .050 m; Phase 3 test minimum .049988 / .050003 m. Walk -> Idle -> Walk preserves the acquisition count. Wall end and narrow pillar release; sharp-normal rejection remains; corridor opposite-hand acquisition waits for global cooldown. Uneven alternating blocks produced 28/75 active frames before conservative unsafe-reach release, now intentionally followed by cooldown rather than repeated grabbing.
+
+Ten targeted suites pass: environmental hand pose/contact/IK/sensing; player; Foot IK; StepSolver; running-roll handoff; sprint roll; locked-roll realignment. Deterministic headless tests and an inspected rendered Idle-hold image were used, not manual interactive playtesting. The engine's unrelated root-certificate-store warning persists. This does not claim every historical test in the repository passes.
+
+F11 adds explicit state, reach progress, positional/rotation authority, cooldown time, acquisition eligibility, wall tangent, palm axis and normal-angle error. Existing debug geometry adds tangent, animated hand long axis, blended target, final target and palm direction.
+
+Limitations: .85 rotation deliberately leaves residual angular error; tune toward 1.0 for stricter palm alignment. The palm center/depth remains an approximation, not hand-mesh collision, so unusually curled source fingers still need visual review. A reach starting with an already penetrating animated hand eases out rather than teleporting to clearance. Small pillars can cancel before a .30-second reach completes. Sharp/rough edges intentionally release and can leave hands inactive for the full cooldown. Bend safety is approximate, not anatomical twist solving. No simultaneous hands, finger IK, torso lean, collision physics or random gesture scheduling was introduced.
+
+Movement, StepSolver, Foot IK/grounding, lock-on, dodge, roll traversal and camera scripts hash-match the prior committed versions. Surface sensing architecture/script and all tuned movement values remain untouched in this phase. Changes are not committed or pushed by this implementation task.
+
+# V2 — Environmental Hand Interaction Phase 3 (2026-09-06)
+
+## Palm contact model and penetration diagnosis
+
+Phase 2 targeted a **wrist bone**, not the visible palm, using Phase 1's .025 m offset and no surface orientation. Rest-pose inspection confirms both hands use local **+Y toward fingers**, with Middle1 about **9.533 cm** from the wrist and a mirrored X spread across Index/Pinky. Both share the same palm-facing +Z convention, so no asymmetric clearance was needed. A second reproduced problem was native **joint-angle influence blending**: the wrist followed an arc that could enter the wall even with a target outside it. The initial Phase 3 test measured modeled palm penetration of roughly 6 cm before correcting that blend path.
+
+New shared settings on EnvironmentalHandIK:
+
+| Setting | Default |
+| --- | --- |
+| `hand_palm_clearance` | .050 m; Inspector range .03–.10 |
+| `hand_palm_local_offset` | (0, .0477, .012) meters in hand-local axes |
+| `hand_surface_rotation_weight` | .80 |
+| `hand_max_wrist_rotation` | 90 degrees before rotation-weight scaling |
+| `hand_wall_drag_follow_speed` | 12 /second |
+| `hand_idle_hold_follow_speed` | 5 /second |
+| `hand_contact_release_speed` | 9 weight units/second |
+| `hand_contact_max_body_angle` | 75 degrees from the selected outward side |
+| `hand_max_surface_normal_change` | 45 degrees |
+| Phase 1 `hand_target_loss_grace_time` | .15 seconds |
+
+The .0477 m local offset is half the measured wrist-to-middle-knuckle distance; .012 m is an exposed initial palm-depth allowance, not a mesh collision model. Local meter offsets are transformed with an orthonormal hand basis, respecting the imported skeleton's .01 scale without multiplying the offsets twice. This is shared for both hands. Phase 1's `.025` probe offset remains useful for sensing; Phase 3 builds its own palm target from the raw hit and does **not** add the two clearances together.
+
+Palm center target = hit + normal × clearance. The wrist goal subtracts the oriented palm-local offset. Rotation turns local palm +Z approximately toward the negative surface normal using a shortest-axis correction capped to 90 degrees and scaled by .80; it fades with reach authority. No finger/forearm torsion writes or finger IK are added. Wrist orientation is applied by the final hand modifier after the native two-bone solve.
+
+To avoid the penetrating joint-blend arc, the existing .75 reach weight now blends the **target position and elbow-pole position**, while the native solver runs at full influence whenever that blended target is active. This retains animated tangential motion while preserving segment lengths. Normal separation eases from the animated hand toward the clearance plane as reach weight rises, never requesting a position behind that plane. At established weight the palm target's normal separation is exact; rotation uses the matching basis for wrist compensation. Release returns the blended target to the animated hand with the previous body-relative offset, not a stale wall pin. Effective arm reach and unsafe shoulder/vertical limits still release contact instead of stretching. Native solver influence is therefore no longer itself the user-facing reach-weight value.
+
+## Contact state and Idle hold
+
+`environment_hand_contact_active` records contact authority; `active_side`, `contact_surface`, `contact_world_position`, `contact_hit_position`, `contact_surface_normal`, `contact_initial_normal`, and `contact_acquired_while_walking` record its context. Debug persistence is WALL_DRAG / IDLE_HOLD / RELEASING / NONE.
+
+Acquisition is strictly grounded eligible **Free Walk**, using the existing Phase 1 best-side choice. **Idle never acquires contact.** An active contact retains the same hand until release, ignoring later score differences. Legacy Phase 2 switch-margin and blend-out fields remain non-exported compatibility fields; use contact release speed now.
+
+Phase 1 `sample(delta, held_side)` may validate only that existing side in Idle; it does not query/acquire the other hand. The normal no-argument Phase 1 API remains walking-only. All action/ground/lock/speed checks apply before the Idle-hold exception. Camera orbit is irrelevant because probe directions use VisualRoot/body orientation, not camera yaw. Returning Idle → Walk along the wall retains the contact and its acquisition count.
+
+Wall drag follows live hit positions rather than a fixed world point. It exponentially smooths position at 12/s during walking and 5/s during Idle, then reprojects onto the latest raw collision plane at the configured clearance. Raw normals keep plane separation exact; tangent speed is diagnostic only, not a movement/physics input. Coplanar collider seams can continue one contact. Cumulative normal change from acquisition and per-hit normal change are bounded, so a pillar cannot gradually twist the arm all the way around it.
+
+Release occurs for invalid/deleted surface, expired hit grace, reach/side/behind-body violation, body angle >75 degrees, normal change >45 degrees, Run/Sprint, Lock-On, Dodge, Jump/Fall/Land, traversal or other non-locomotion action, or disabled component. A mixer-applied boundary check revokes contact immediately when an incompatible action is evaluated, since Godot may defer the modifier pass; IK then fades at 9/s. It adds no query or second skeleton advance. Grace is only for missing surface samples while otherwise safe, never a delay before action suppression.
+
+## Results, debug and limitations
+
+`test_environment_hand_contact_v2.gd` passes: no Idle acquisition, long left/right drag without world locking, clearance-plane projection, modeled palm staying outside the wall, Inspector clearance changes during hold, Walk → Idle → Walk without reacquisition, camera orbit preservation, walk-away release, Run/Lock/Dodge/Jump release, wall-end release, pillar pass and synthetic sharp-normal rejection, plus uneven-wall contact. Flat-wall minimum modeled palm distance was **.0499878 m** for a .05 m setting on both sides. Walking and Idle-hold renders were inspected; the hand is outside the wall rather than buried in it.
+
+Uneven block test retained contact for **59/75 ticks**: sharp exposed block edges can trigger the deliberate corner-release policy, followed by walking reacquisition. This is safer than forcing the arm around every edge, but does not claim perfectly uninterrupted contact across rough geometry. The updated Phase 1/2 tests pass, as do six existing movement/Foot IK/StepSolver/roll suites. Older tests expecting Idle release were updated to the new explicitly requested behavior; Phase 1 grace test now derives its expiry from configuration.
+
+F11 or the IK debug toggle shows contact active/acquired state, selected side, persistence, clearance versus modeled actual palm distance, normal, target and tangent speed. The environmental overlay replaces the base movement text while enabled so contact data fits. Geometry adds raw hit/normal and clearance target alongside the wrist IK target, poles and solved chains. Debug remains OFF by default.
+
+Limitations: palm depth/center are calibrated approximations, not skinned-mesh collision. Arbitrary hand poses, finger curls and irregular surfaces still require visual testing; there is no finger placement, collision or fingertip tracing. Wrist rotation is bounded globally relative to the authored hand basis, not a full anatomical wrist/forearm joint-limit model. The .05 m setting is conservative and may look slightly separated from some surfaces. Rough corners may release briefly. Only static environment geometry is supported.
+
+Before contextual objects, manually test both hands at .03–.07 clearance, with .80 rotation weight and current 12/5 follow rates. Tune the local palm-depth allowance conservatively for this mesh; do not reduce clearance solely to force contact on one frame. Validate unusual finger curls and corner cases before adding contextual touch points. No two-hand contact, body lean, hand physics, weapon interaction or movement changes.
+
+Modified: `player_environment_hands_v2.gd`, `player_environment_hand_ik_v2.gd`, `player_environment_hand_modifier_v2.gd`, `player_debug_v2.gd`; updated `test_environment_hands_v2.gd`, `test_environment_hand_ik_v2.gd`; added `test_environment_hand_contact_v2.gd`; this document. Movement, StepSolver, FootGrounding, Foot IK/pelvis/planting and GLB/animation assets are unchanged. No Git commit/push.
+
+# V2 — Environmental Hand Interaction Phase 2 (2026-09-06)
+
+`PlayerV2/EnvironmentalHandIK` now consumes Phase 1 candidates and blends **one arm at a time** toward the selected smoothed target. No new physics probes, movement changes, fingers, palm-normal orientation, torso lean, combat reach or world-space wall lock.
+
+## Solver and update architecture
+
+Uses native `TwoBoneIK3D`, matching the existing leg IK architecture. Verified chains are `mixamorig_LeftArm → mixamorig_LeftForeArm → mixamorig_LeftHand` and `mixamorig_RightArm → mixamorig_RightForeArm → mixamorig_RightHand`; parent relationships are checked at binding. Shoulder/clavicle and torso are excluded. The existing .01 world skeleton scale is respected by world-space pose conversion.
+
+Two lightweight `SkeletonModifier3D` instances bracket the native arm solvers: preparation reads evaluated animation and Phase 1 targets, then a read-only capture records solved positions. These are appended after the existing pelvis/leg/ankle modifiers. **The existing Foot IK owner still advances the skeleton exactly once; no callback-mode change or second advance is added.** Foot IK scripts/parameters are untouched.
+
+When bound, Phase 1's automatic physics callback is disabled and its existing `sample(delta)` is called once inside arm preparation. This places shoulder-level sensing after the existing lower-body modifiers and before arm rotations, with two queries per eligible evaluated pose and no duplicate probes. If the IK component is removed, sensing's autonomous callback is restored. Disabling IK via its `enabled` property still permits Phase 1 sensing/debug and smoothly releases its influence.
+
+## Hand selection and safety
+
+If only one side is valid, choose it. If both are valid, higher proximity score wins (left wins a tie). Retain the active side until invalid or the alternative exceeds its score by **.20**. On a switch, completely fade the old arm to zero, then acquire the next on a following evaluated pose—never simultaneous influence. Corridor tests show no alternation with comparable scores. No persistent hand-contact lock or object wrapping exists.
+
+The target is Phase 1's smoothed/offset position, without another surface query. Upper-arm/forearm lengths are measured in world space; prepared reach is clamped to `min(max_environment_hand_reach, .95 × measured chain length)`. Default configured maximum is **.60 m**, while this rig's ~.562 m chain yields an effective ~.534 m safety cap. Weight tapers from 85% to 98% of measured chain length. Targets crossing inward through the torso or outside the conservative vertical shoulder range receive zero desired influence. Segment-length tests verify no stretching. Phase 1 still limits acquisition to .50 m and applies its height/side/normal rules.
+
+`LeftElbowPole` / `RightElbowPole` markers are body-facing-relative to the current upper-arm origin: **.10 m forward, .30 m outward, −.25 m vertical**. This favors a downward/outward elbow bend. Solvers affect only the three-bone arm chains, not clavicle or torso.
+
+## Inspector defaults and orientation
+
+| Setting | Default |
+| --- | --- |
+| Enabled | true |
+| `environment_hand_ik_weight` | .75 |
+| `hand_switch_score_margin` | .20 |
+| `hand_reach_blend_in_speed` | 6.0 weight units/second |
+| `hand_reach_blend_out_speed` | 9.0 weight units/second |
+| `max_environment_hand_reach` | .60 m, further limited by measured chain |
+| `elbow_pole_forward_offset` | .10 m |
+| `elbow_pole_outward_offset` | .30 m |
+| `elbow_pole_vertical_offset` | −.25 m |
+| `environment_hand_ik_debug` | false |
+
+Position solving only. No extra palm-normal rotation correction or `hand_surface_rotation_weight` control is added: there is no corresponding orientation solve to tune yet. The hand/fingers inherit the native arm result; finger bones are not individually solved or overridden. A partial weight retains animation contribution, so exact palm contact is not guaranteed or claimed.
+
+The weight ramp is bounded `move_toward`, not a snap; full .75 influence takes approximately .125 seconds to acquire and .083 seconds to release at defaults. Phase 1's existing target smoothing is retained. During release the previous reach offset becomes shoulder/body-relative and fades away instead of pinning the hand to a stale world point during an action.
+
+## State suppression / debug / validation
+
+All Phase 1 eligibility remains authoritative: Idle, Run, Sprint, Locked, Dodge, Jump/Fall/Land and traversal/action states have no new reach authority. Invalid states initiate immediate fade-out, without waiting for Phase 1's target-loss grace. Reaching does not slow, freeze or steer gameplay. Run-roll handoff and current visible recovery remain unchanged.
+
+F11 Phase 1 debug also displays arm diagnostics; alternatively enable EnvironmentalHandIK's own debug toggle. Overlay shows active side/switch state, validity/scores, per-arm weight/reach/clamped status and pole validity. Geometry: white animated hand, orange solved hand, magenta target, cyan elbow pole, green shoulder/elbow/hand segments. Debug is OFF by default. A rendered left-wall pose was inspected with .75 weight and ~.342 m target distance; the elbow remained bent and the other arm followed animation.
+
+New `test_environment_hand_ik_v2.gd` passes left/right long-wall reach (67 sampled ticks above .2 weight out of 70), hand approaching target, inactive-arm animation preservation, no simultaneous weights, finite/no-stretch chains, no inward elbow flip, one sensing sample per pose, stable both-sided corridor, fade-before-side-switch on wall loss, Idle/Run/Lock/Dodge/Jump release, pillar acquisition/release, uneven-wall continuity, and a deliberately reduced reach-cap test. The cap assertion checks the prepared offset; final blended shoulder pose can differ by a few millimeters during native modifier evaluation. Phase 1 sensing suite and six existing suites (player, Foot IK, StepSolver, Run handoff, Sprint roll, locked realignment) also pass. Existing certificate-store warning remains environmental.
+
+Known limits: this is a reach-following foundation, not polished wall dragging. Palm orientation/contact offsets still need authoring; unusual corners/rapid geometry changes can change targets; very short pillar passes may produce only a small reach. Position-only IK does not guarantee an anatomically ideal wrist angle from every camera view. The component currently relies on the V2 skeleton's existing modifier-update owner, not a standalone alternate rig. Future rigs must pass chain validation.
+
+Before Phase 3, manually test both sides at multiple camera angles, start/stop, uneven surfaces and pillar passes. Begin with .75 weight, .20 margin and 6/9 ramps; lower weight toward .6 if the reach feels too assertive. Adjust elbow offsets conservatively before introducing palm orientation. Phase 3 may add deliberate contact persistence/release rules after this motion is accepted; none is implemented now.
+
+Files changed: new `player_environment_hand_ik_v2.gd` and `player_environment_hand_modifier_v2.gd`; updated `player_v2.tscn` and `player_debug_v2.gd`; new `test/test_environment_hand_ik_v2.gd`; this document. Movement, StepSolver, FootGrounding, Foot IK/pelvis/planting source files and animation/GLB assets are unchanged. No Git commit/push.
+
+# V2 — Environmental Hand Interaction Phase 1 (2026-09-06)
+
+**Sensing only. No arm/hand/finger IK, bone overrides, animation changes, movement authority, attraction, or contextual interaction selection.** Dedicated `PlayerV2/EnvironmentalHandInteraction` contains `LeftHandProbe`, `RightHandProbe` (ShapeCast3D), `LeftHandTarget`, `RightHandTarget` (Marker3D), plus runtime debug geometry. Component physics priority 30 samples after motor 0 / animation controller 10 / AnimationTree 20, reading current evaluated bone poses in world space.
+
+## Verified rig
+
+Canonical skeleton: `PlayerV2/VisualRoot/MasterRig/Base Armature and Mesh/Skeleton3D`. Its effective world basis scale is .01; PlayerV2 and VisualRoot are unit scale, MasterRig has the existing 180-degree yaw correction. Exact bones (underscore, not colon):
+
+| Side | Shoulder | Upper arm | Forearm | Hand |
+| --- | --- | --- | --- | --- |
+| Left | `mixamorig_LeftShoulder` | `mixamorig_LeftArm` | `mixamorig_LeftForeArm` | `mixamorig_LeftHand` |
+| Right | `mixamorig_RightShoulder` | `mixamorig_RightArm` | `mixamorig_RightForeArm` | `mixamorig_RightHand` |
+
+Both hands have Thumb/Index/Middle/Ring/Pinky chains numbered 1–4. Rest upper-arm-to-forearm and forearm-to-hand distances are approximately .278 m and .283 m in world units. `LOC_WALKING` is the current Free Walk clip, length 1.06666672229767 seconds. Actual evaluated walking probe origins in the test were approximately 1.33–1.34 m above floor. Origins use `LeftArm`/`RightArm` at the outer shoulder joint, not central clavicle or swinging hand. Skeleton global transform converts the imported units; lateral directions use VisualRoot local -X/+X, forward is -Z.
+
+## Configuration and clean Phase 2 data
+
+Inspector on EnvironmentalHandInteraction:
+
+| Setting | Default |
+| --- | --- |
+| Enabled / debug | true / false |
+| Reach distance | .50 m from upper-arm origin; raw and offset target both validated |
+| Sphere radius | .08 m |
+| Forward bias | .10 (dimensionless forward contribution to lateral direction) |
+| Collision mask | 1: world/environment |
+| Surface offset | .025 m outward along collision normal |
+| Vertical limits from origin | -.40 to +.25 m |
+| Maximum behind body | .15 m |
+| Position smoothing | 14 /second, exponential |
+| Normal smoothing | 12 /second, normalized exponential |
+| Miss grace | .10 seconds |
+| Maximum horizontal speed | 4.5 m/s (normal Walk is 4) |
+
+The body and environment currently share layer/mask 1, so the body is explicitly excepted. Casts ignore Areas and accept StaticBody3D only; ancestry containing the player, queued deletion, or `lock_on_target`, `enemy`, `enemies`, `hitbox`, `weapon` groups is rejected. This excludes existing dummy helpers and non-static characters without requiring world tags. Vertical normals (absolute Y > .6), wrong-facing surfaces, excessive distance/height, behind-body and wrong-side contacts are rejected. No extra raycasts or physics queries: at most two manually updated sphere casts per eligible tick, none when ineligible. Sphere sweep endpoint can encounter geometry beyond nominal reach due radius, but actual contact distance validation enforces .50 m.
+
+Both candidates independently expose `left/right_hand_surface_valid`, `...surface_position`, `...surface_normal`, `...target_position`, `...target_score`, and raw/smoothed target position aliases. `left/right_surface_normal` are also available. A lightweight per-side record additionally provides collider, origin, query endpoint, distance, provisional flag and reason. Score is simple 0–1 proximity, not hand selection. Target = contact + normal × offset; markers follow smoothed targets only while valid. Invalidating clears data/score and hides/resets markers. This is the read-only data boundary intended for Phase 2.
+
+Position/normal interpolation occurs only on continuous hits to the same collider with compatible normals. New geometry or sharp normal changes seed fresh targets instead of interpolating across corners/gaps. Brief missing hits retain a provisional target only while still reachable, collider valid, and grace not expired. State loss, deleted/rejected collider or loss of reach clears immediately, with no grace carrying into an action.
+
+## Eligibility and debug
+
+Requires grounded Free WALK with meaningful movement input, actual speed above .1 and at most 4.5, outer animation Locomotion and grounded Loops. Run, Sprint, Idle, lock-on, active dodge or visible Run recovery, Jump/Fall/Land, non-loop action states, active StepSolver/RollTraversal and 180 turns invalidate both sides immediately and skip queries. Future action states must remain outside the explicit Locomotion/Loops allowlist. This component never changes those states or their configuration.
+
+**F11** toggles `environment_hand_debug` (default OFF). Use **F3** to show the existing overlay if hidden. White crosses = origins; green/red cast lines and circular radius footprints = valid/invalid; yellow = contact/normal; cyan = raw target; magenta = smoothed target. Mesh vertices are world-space with an identity top-level transform. The overlay shows eligibility, query count, side validity, HIT/GRACE/rejection status, distance, score, target and normal. Both sides can report valid; no actual reach is selected.
+
+## Hand Interaction Test Zone
+
+New `PlayerV2Lab/HandInteractionTestZone`, west of the original floor: **X -55 to -31, Z -3 to 27**, connected at the western edge. Includes a long wall at X -36, opposite-side wall ending abruptly at X -40, segmented uneven stone-like wall at X -44, cylinder pillar near (-47,18), narrow rail at X -47/Z 9, and a 1.04 m interior corridor centered X -51. Walk within roughly .5 m of either upper-arm origin to inspect contacts. Existing lab lanes, StepSolver geometry and player spawn remain unchanged.
+
+## Validation / limits / next phase
+
+`test_environment_hands_v2.gd` passes: independent left/right wall hits (45/45 sampled walking ticks each), strict reach/normals, both-sided corridor, grace expiration, enemy rejection, every eligibility gate with zero extra queries, wall-end release, narrow pillar acquisition/release, distant-wall rejection, uneven-segment continuity, rail contact, floor rejection, deleted-collider release, and exact no-write assertions for every skeleton bone pose plus motor transform/velocity. Six existing suites also pass: player, StepSolver, Foot IK, locked roll realignment, Run handoff and Sprint roll. A rendered debug capture was inspected and corrected for world-space debug alignment; left-wall contact was about .36 m away, right invalid. Default Godot certificate-store warning is environmental and unchanged.
+
+Limitations: two shoulder-level lateral casts do not search the entire vertical reach band; low furniture may not be found. Static geometry only; moving platforms/physics props are deliberately not supported. Continuous flat surfaces smooth well, but segmented objects seed new targets and curved corners may require future surface projection. Provisional grace retains a bounded world target, not a confirmed live contact. No hand/palm orientation or shoulder reach feasibility solve exists yet. Current collision layers are broad; a dedicated touchable-world layer is advisable before enemies/weapons proliferate.
+
+Before Phase 2, manually walk the west-side zone with F11 at different camera angles, tune comfortable reach/height and inspect curved/segmented surfaces. Then design arm-length constraints, palm offset/orientation and single-hand selection/weight blending using these existing data outputs, without giving the system movement authority. Do not add IK until target behavior is accepted.
+
+Files: new `Characters/Player/V2/player_environment_hands_v2.gd`, updated `player_v2.tscn` and `player_debug_v2.gd`; new `test/hand_interaction_zone_v2.gd` and `test/test_environment_hands_v2.gd`; updated `test/player_v2_lab.tscn` and this document. Movement controller, StepSolver, FootGrounding, Foot IK, pelvis/planting and animation scripts/assets are unchanged. No Git commit/push.
+
 # V2 — Locked Dodge Facing Reacquisition (2026-09-06)
 
 Yaw audit: `player_v2.gd` writes VisualRoot yaw toward captured direction while a moving dodge is active, then immediately selects `lock_on.face_target(delta)` after dodge completion. Normal facing was already exponential `lerp_angle` at rate 12, **not a literal hard target-yaw assignment**. At 60 Hz its first update consumes about 18.13% of the remaining error (~32.6 degrees from a 180-degree roll). That abrupt change of owner/large first angular step is the identified procedural source of snap-like recovery. Animation/grounded Locked code does not independently set VisualRoot yaw; the CharacterBody's target-relative input basis is separate from visual facing. No imported bone/clip edits were made.

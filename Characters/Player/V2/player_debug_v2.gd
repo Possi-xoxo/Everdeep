@@ -46,6 +46,10 @@ func _process(_delta: float) -> void:
 		var weights: Vector4=combat.direction_weights()
 		label.text+="\nDirectional Weights (F/B/L/R): %.2f / %.2f / %.2f / %.2f" % [weights.x,weights.y,weights.z,weights.w]
 	var ik = motor.get_node("FootIKController")
+	var hands=motor.get_node("EnvironmentalHandInteraction")
+	if hands.environment_hand_debug: label.text+="\n\n"+hands.debug_text()
+	var hand_ik=motor.get_node("EnvironmentalHandIK")
+	if hands.environment_hand_debug or hand_ik.environment_hand_ik_debug: label.text="F11: Environmental hand debug\nState: "+hands.state_reason+"\n"+hand_ik.debug_text()
 	if lock_tuning_debug or motor.dodge.debug_dodge: label.text+="\n\n"+motor.lock_on.realign_debug_text()
 	if motor.dodge.debug_dodge: label.text+="\n\n"+motor.dodge.handoff_debug_text()+motor.dodge.debug_text(motor.velocity)
 	if motor.dodge.debug_dodge or motor.roll_traversal.debug_steps: label.text+="\n\n"+motor.roll_traversal.debug_text()
