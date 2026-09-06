@@ -25,6 +25,11 @@ window/stretch/aspect="expand"
 
 [input]
 
+crouch={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194326)]
+}
+
 lock_on={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"physical_keycode":70)]

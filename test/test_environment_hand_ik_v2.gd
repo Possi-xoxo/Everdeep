@@ -51,7 +51,7 @@ func run() -> void:
 		await roll_tick(Vector2(0,-1))
 		check(hands.probe_updates-count==2,"one Phase 1 sample per evaluated pose, no duplicate queries")
 		for frame in 15: await roll_tick()
-		check(not arm_ik.environment_hand_contact_active and arm_ik.active_side==-1,"Idle no longer holds wall after release")
+		check(arm_ik.environment_hand_contact_active and arm_ik.contact_state==arm_ik.ContactState.IDLE_HOLD,"Idle preserves Walk-acquired wall contact")
 		wall.free()
 	await setup_player()
 	var walls: Array[Node]=[box(Vector3(199.38,1.1,0),Vector3(.12,2.2,30)),box(Vector3(200.62,1.1,0),Vector3(.12,2.2,30))]

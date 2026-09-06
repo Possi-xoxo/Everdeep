@@ -55,9 +55,9 @@ func run() -> void:
 		check(absf((arm_ik.contact_world_position-arm_ik.contact_hit_position).dot(arm_ik.contact_surface_normal)-.08)<.0001,"Inspector clearance updates held contact")
 		arm_ik.hand_palm_clearance=.05
 		for frame in 15: await roll_tick()
-		check(not arm_ik.environment_hand_contact_active and arm_ik.arms[0].weight==0 and arm_ik.arms[1].weight==0,"Idle releases and becomes animation-only")
+		check(arm_ik.environment_hand_contact_active and arm_ik.contact_state==arm_ik.ContactState.IDLE_HOLD,"Walk contact persists into Idle")
 		for frame in 15: await roll_tick(Vector2(0,-1))
-		check(arm_ik.contact_acquisitions==acquisitions and arm_ik.active_side==-1,"Idle to Walk respects release cooldown")
+		check(arm_ik.contact_acquisitions==acquisitions and arm_ik.contact_state==arm_ik.ContactState.CONTACT,"Idle to Walk resumes without reacquisition")
 		print("CONTACT side=",side," minimum_palm=",minimum_palm," acquisitions=",acquisitions)
 		for frame in 40: await roll_tick(Vector2(-side,0))
 		check(not arm_ik.environment_hand_contact_active,"walking away releases")

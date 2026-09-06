@@ -109,7 +109,19 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		environment_hand_debug=not environment_hand_debug
 
 func can_use_environment_hand_ik() -> bool:
-	return eligibility()=="WALK"
+	# Compatible pose ownership, including walking release/cooldown frames.
+	return eligibility()=="WALK" or can_persist_environment_hand_contact()
+
+func can_acquire_environment_hand_contact() -> bool:
+	var ik=motor.get_node("EnvironmentalHandIK")
+	return eligibility()=="WALK" and ik.active_side<0 and ik.environment_hand_cooldown_remaining<=0
+
+func can_persist_environment_hand_contact() -> bool:
+	var ik=motor.get_node("EnvironmentalHandIK")
+	if eligibility() not in ["WALK","IDLE"]: return false
+	if not ik.environment_hand_contact_active or not ik.contact_acquired_while_walking or ik.active_side<0: return false
+	# Live query validation and geometric limits are enforced in update_contact.
+	return is_instance_valid(ik.contact_surface)
 
 func eligibility(_allow_idle: bool = false) -> String:
 	if not enabled: return "DISABLED"
@@ -117,6 +129,7 @@ func eligibility(_allow_idle: bool = false) -> String:
 	if ik!=null and not ik.enabled: return "DISABLED"
 	if skeleton==null or left.bone<0 or right.bone<0: return "MISSING_RIG"
 	var s=motor.animation_state
+	if motor.crouch.active(): return "CROUCH"
 	if s.locked_on: return "LOCKED"
 	if motor.dodge.is_dodging or motor.dodge.run_roll_recovery_visible: return "DODGE"
 	var animation=motor.get_node("AnimationController")
@@ -138,7 +151,12 @@ func _physics_process(delta: float) -> void:
 
 func sample(delta: float, _held_side: int = -1) -> void:
 	state_reason=eligibility()
-	if not can_use_environment_hand_ik():
+	if state_reason=="IDLE" and can_persist_environment_hand_contact():
+		var ik=motor.get_node("EnvironmentalHandIK")
+		state_reason="IDLE_HOLD"
+		update_side(left if ik.active_side==0 else right,delta)
+		invalidate(right if ik.active_side==0 else left,"IDLE_NO_ACQUISITION")
+	elif state_reason!="WALK":
 		invalidate(left,state_reason)
 		invalidate(right,state_reason)
 	else:

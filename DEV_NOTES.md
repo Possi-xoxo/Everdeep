@@ -1,3 +1,174 @@
+# Persistent Crouch Toggle (2026-09-06)
+
+Crouch idle/movement/run-stop crossfades now use a dedicated crouch_locomotion_blend_time (.30s). Locked directional pose blending is rate-limited by the same duration, retaining exponential direction smoothing. These are presentation-only changes; movement speeds, crouch toggle/clearance, entry/exit timing, dodges and source clips are unchanged.
+
+CTRL now toggles the crouch request on each press; releasing or holding the key does not change the request. This supersedes earlier hold-to-crouch instructions. The request persists through movement, Lock-On and dodges. Toggling off beneath a ceiling waits for standing clearance. Animation mappings, movement tuning and IK are unchanged. Deterministic step_motor tests still supply an explicit desired crouch state.
+
+# Crouch BOW Animation Set (2026-09-06)
+
+User-directed replacement of the previous LOC/torch movement set using ONLY Actions already present in Blender Master Rig.glb. No desktop FBX imported or copied. Canonical backward Run is BOW_STANDING_RUN_BACK. User shorthand CRC_Crouch_to_Standing / CRC_Standing_to_crouched resolves to the existing CRC_CROUCH_TO_STANDING / CRC_STAND_TO_CROUCH. This section supersedes the earlier crouch Walk-only rule: Shift now selects crouch Run, but never Sprint.
+
+| Role | Imported Action | Seconds |
+| --- | --- | --- |
+| Enter | CRC_STAND_TO_CROUCH | .666667 |
+| Exit | CRC_CROUCH_TO_STANDING | .666667 |
+| Idle | CRC_CROUCH_IDLE | 2.533333 |
+| Walk forward/left/right | BOW_STANDING_WALK_FORWARD / BOW_STANDING_WALK_LEFT / BOW_STANDING_WALK_RIGHT | 1.233333 each |
+| Walk back | BOW_STANDING_WALK_BACK | 1.500 |
+| Run forward | BOW_STANDING_RUN_FORWARD | .900 |
+| Run left/back | BOW_STANDING_RUN_LEFT / BOW_STANDING_RUN_BACK | .700 each |
+| Run right | BOW_STANDING_RUN_RIGHT | .800 |
+| Forward run stop | BOW_STANDING_RUN_FORWARD_STOP | .900 |
+
+Walk and Run each have a target-relative four-direction Locked BlendSpace with CRC Idle at center. Free mode rotates toward travel using the existing smoother and uses the corresponding BOW forward Walk/Run. Forward Run release uses the .9 s nonlooping stop clip, with existing motor deceleration; renewed movement, crouch exit or Dodge cancels it. Locked sideways/backward stops blend to Idle instead of playing a mismatched forward stop. Loops, horizontal travel cancellation and all playback configuration affect only duplicated runtime resources. No source pose editing or bow prop added.
+
+Crouch Walk speed remains inherited current Walk (2 m/s). New crouch_run_speed=0 inherits current standing run_start_speed (4 m/s); positive values override. Crouch running is a separate request flag, not permission for the standing Sprint buildup or running-roll action. Shift is consumed by crouch and standing gait stays Walk internally; Sprint timer remains zero. Moving crouch ALT still selects DOD_STAND_TO_ROLL, stationary ALT Backstep. CTRL hold, locked crouch, capsule/base preservation, clearance, Jump suppression, foot IK, environmental-hand exclusion and camera behavior are retained.
+
+Updated crouch tests validate the imported mappings, locked four-direction Run including Back, speeds, no Sprint, run-stop completion/interruption, and crouch Run's walk-roll ownership. Existing core crouch and standing regressions pass. These BOW_STANDING clips are used as requested; their authored posture/weapon-arm pose may still need future art adjustment to become a consistent low-profile crouch set. No claim of new mesh-level head-clearance correction.
+
+Changed player_crouch_v2.gd, player_animation_v2.gd, the motor's crouch input handoff, crouch tests and these notes. No GLB/FBX changes; no commit/push.
+
+# V2 Phase 5A — Crouch Rebuild
+
+2026-09-06. Replaces the previous temporary crouch implementation's clip selection and lock rejection. The user authorized torch presets for missing directions and horizontal-travel cancellation in runtime copies only. GLB remains SHA256 B3CC9744D338A87E6F7594E78ABAEB0F4F572F175684B1A2C2E7B8A5310DD8B9.
+
+## Verified Actions and source review
+
+| Role | Canonical Action | Duration | Runtime looping |
+| --- | --- | --- | --- |
+| Enter | LOC_STAND_TO_CROUCH_B | 4.100 s | None |
+| Exit | LOC_CROUCH_TO_STAND_B | 3.466667 s | None |
+| Idle | CRC_CROUCH_IDLE | 2.533333 s | Linear |
+| Free / Locked forward | LOC_SNEAK_FORWARD | 1.700 s | Linear |
+| Locked left | LOC_WALK_STRAFE_LEFT_SLOW | 1.500 s | Linear |
+| Locked right | LOC_WALK_STRAFE_RIGHT_SLOW_RAW | 1.500 s | Linear |
+| Locked backward, temporary torch fallback | TRC_CROUCH_TORCH_WALK_BACK | 1.200 s | Linear |
+
+All source Actions import with loop mode NONE. Loop modes are set only on duplicated runtime resources. Neutral CRC_CROUCH_IDLE is a suitable canonical crouch idle and has approximately matching endpoint pose; no frozen arbitrary sneak pose used. No neutral crouch-backward Action found. Magic and torch backward candidates exist; the user-authorized torch backward clip is used normally, not reversed. Its torch-carrying upper-body pose is temporary and no torch prop is spawned.
+
+RAW right strafe contains -90.095 rig units of lateral Hips travel, about -.901 m at player scale, over 1.5 seconds. Only the Hips position track has significant translation in the reviewed Actions; no separate authored world/root travel was found. Existing instance-local library duplication and horizontal Hips X/Y normalization now cover all crouch Actions, including RAW right strafe. Vertical local Z and bone rotations are preserved. Runtime test confirms constant horizontal Hips coordinates while the separately loaded source clip still retains >80 rig units of lateral displacement. CharacterBody remains the only movement authority; no root-motion-driven physical displacement was added.
+
+Source limitations are important: the two requested slow strafe clips are upright walking poses (sampled head height ~1.56 m), NOT visually deep crouch poses. CRC idle head is ~.78 m; sneak head is ~1.12-1.16 m at endpoints; torch backward head ~1.22-1.24 m. Sneak has about 4.8 cm vertical endpoint mismatch despite matching rotation endpoints. Left strafe rotation seam ~.38 degrees, torch backward ~.056 degrees; others nearly zero. These are endpoint checks, not exhaustive loop-quality approval. Source vertical motion was not flattened or retargeted to invent crouch. Therefore pose-height transitions and sneak-loop bob remain visible; upright strafes can intersect a low visual ceiling even though the capsule safely fits. Replace these with authored low-profile strafe/backward clips and a height-consistent forward/Idle set when the library is ready.
+
+## State, movement and priorities
+
+CTRL remains HOLD TO STAY crouched in Free AND Locked-On. CrouchController retains STANDING/ENTER/CROUCHED/EXIT, with AnimationTree playback driving transition completion, no duplicate timer. Default playback 1x and exit progress 1.0 retain the full authored 4.1/3.4667-second clips. Long transition duration is intentional pending user tuning; no accelerated arbitrary .6-second window. Enter/exit playback speeds expose .8-1.2 and configure custom timeline duration when the player tree is built.
+
+Free crouch rotates toward camera-relative travel with the same angular Walk smoother and uses LOC_SNEAK_FORWARD for all movement directions. Idle camera orbit still does not turn the character. Standing 180 actions remain excluded. Locked crouch stays target-facing using the existing target-relative movement basis. CrouchLocked is a five-point cyclic BlendSpace2D (neutral center, forward, left, right, torch backward); input is exponentially smoothed at 12/s. Lock/unlock changes movement mode without forcing a stand. No crouch-specific camera was added.
+
+Shift cannot enable Run/Sprint or accumulate Sprint buildup in either mode, including transitions and crouch-started Dodge. Crouch speed inherits the current 2 m/s Walk speed by default (`crouch_move_speed=0` means inherit; positive value overrides). Jump is blocked, with no auto-stand-and-jump. Dodge and airborne presentation remain higher priority. Stationary ALT uses current Backstep; moving ALT uses DOD_STAND_TO_ROLL even with Shift. Crouch-started Dodge retains the reduced collider, then held CTRL returns to crouch; released CTRL checks standing clearance. Lock stays active if the target remains valid. Environmental hand eligibility continues to reject crouch.
+
+## Collider, safety and tuning
+
+Standing capsule height 1.80 m, radius .45 m, local center .90 m; crouch height 1.10 m, same radius, center .55 m. Each instance duplicates its shape. Every resize recomputes center from the original base, preserving the bottom. Entry begins shrinking at `crouch_collider_transition_speed=4 m/s`; exit expands at that rate only after a FULL standing-capsule overlap test. This is a physical collision transition, not an exact animated mesh/head envelope; at default speed it completes well before the long transition clips.
+
+The standing query uses the original full capsule, collision mask and self exclusion, with existing 2 mm floor-contact tolerance. CTRL release under a roof keeps crouch active with no exit spam, continuously checks clearance and automatically exits once clear. Exit rechecks clearance each tick; if obstructed it cancels back to crouch and restores the small collider. Reduced-capsule Dodge does not expand into the ceiling. No ray-only clearance shortcut or StepSolver redesign.
+
+Inspector Crouch defaults: move speed 0 (inherit Walk=2), enter/exit crossfades .15/.15 s, enter/exit playback 1/1, full-clip exit progress 1/1, collider transition 4 m/s, capsule 1.10 m, locked direction blend 12/s. These are starting values, not a claim the inconsistent source heights have been solved. No crouch IK multiplier or camera offset was needed for the tested numerical stability. Existing foot grounding/IK/pelvis/knee implementation and settings were left unchanged.
+
+## Lab, tests and debug
+
+Existing crouch zone retains standing-clear corridor, 1.30 m tunnel/room, too-low obstacle, open exits and cumulative curbs. Added a 15-degree slope and a target beside the tunnel using the existing lock target contract. The existing open target arena remains available. Crouch debug shows CTRL, Free/Locked, phase, physical dimensions, clearance/blocker, node, dominant canonical Action, target-relative input/blend and speed.
+
+Updated `test_crouch_v2.gd` passes natural-duration entry/exit, capsule-base preservation, Free motion, Shift/Jump suppression, no hands, low-roof release/no spam, Lock-On under the roof, stationary/moving crouch dodges, CTRL release during Dodge, automatic stand after clearing, low-tunnel traversal, too-low collision, curb/three-stair traversal and Free direction changes.
+
+New `test_crouch_locked_v2.gd` passes exact four directional clip assignments, smoothed cardinal blend convergence, target-facing, Walk speed, Shift/Jump suppression, lock/unlock retention, runtime RAW cancellation/source preservation, Free angular smoothing, and 20-degree slope finite/non-stretching pole-consistent knees. Standing regressions pass: Walk direction, environmental-hand isolation, sprint roll, running-roll handoff and locked-roll realignment. No claim that all historical IK suites are green; their pre-existing limitations are documented below.
+
+Rendered new Idle, Free sneak and Locked right strafe were inspected. The right strafe render confirms the source's upright posture while physical state is crouched; it has no accumulating RAW sideways drift. Tests plus snapshots are not comprehensive interactive visual approval. There is no promise of mesh-safe low-ceiling traversal with the currently requested upright clips.
+
+Future assassination/sneak-attack systems may query CrouchController.active()/phase and current lock state. No attacks, stealth detection, noise, enemies, prone, cover or new Dodge mechanics implemented.
+
+Files changed: `Characters/Player/V2/player_crouch_v2.gd`, `player_animation_v2.gd`, `player_v2.gd`; `test/crouch_test_zone_v2.gd`, `test/test_crouch_v2.gd`, new `test/test_crouch_locked_v2.gd`; this document. GLB/source animations unchanged. Not committed or pushed.
+
+# Master GLB Refresh (2026-09-06)
+
+Replaced Characters/Player/Models/Blender Master Rig.glb with the desktop export, preserving the asset path/import configuration. Source and destination SHA256: B3CC9744D338A87E6F7594E78ABAEB0F4F572F175684B1A2C2E7B8A5310DD8B9. Previous asset is recoverable in the task workspace at work/master_glb_backup_20260906/Blender Master Rig.glb.
+
+Animation count 843 -> 847 with no removed names; node-name inventory and 65-joint skin count unchanged. Verified imported new clips: LOC_CROUCH_TO_SPRINT (.5333 s), LOC_CROUCH_TO_STAND_B (3.4667 s), LOC_CROUCHED_WALKING (1.1 s), LOC_STAND_TO_CROUCH_B (4.1 s). Existing controller mappings remain unchanged; new crouch Actions were imported but not activated.
+
+Nine selected regressions pass: Walk direction, hand contact/pose/isolation, crouch, Dodge, sprint roll, running-roll handoff and locked-roll realignment. Normal startup runs 180 frames without script errors. Import succeeded; editor also reported stale legacy PlayerTest instance warnings and an environment permission error saving global editor settings, plus the existing root-certificate warning. No asset-import or V2 runtime script errors found. This is automated compatibility verification, not exhaustive visual approval of all 847 clips. No commit/push performed.
+
+# Selective Foot IK Rollback (2026-09-06)
+
+At the user's request, reverted Walk foot IK responsiveness, slope-adaptive stabilization, target-displacement/bend-reserve refinements and their diagnostic startup guard to the pre-responsiveness foot system. Restored the foot IK, grounding, planting and knee-test files from the saved pre-change revision. Removed the three experiment-specific test scripts and their UID sidecars; recovery copies and superseded notes are in the task workspace under work/foot_ik_rollback_backup_20260906.
+
+Walk-to-Idle environmental hand persistence, Walk direction smoothing, crouch work, tuned movement and other systems are preserved. No new stair solver or IK substitute was added. This rollback is not committed or pushed.
+
+Verification: restored four files match the saved originals after line-ending normalization. Motor and both environmental hand scripts retain their exact pre-rollback SHA256 hashes. Seven selected tests pass: Walk direction, hand contact, hand pose, hand isolation, crouch, sprint roll and running-roll handoff. Normal automatic startup runs 180 frames with no script errors; the unrelated root-certificate-store warning remains. Visual playtesting is still the user's final check.
+
+# Minor Cleanup — Hand Idle Persistence + Walk Turn Smoothing
+
+2026-09-06. This section supersedes the older Walk-Only Isolation section's deliberate removal of Idle Hold; its hard action-state isolation remains in force.
+
+## Environmental hands
+
+The regression came from using strict WALK eligibility for both acquisition and continued skeletal ownership. `can_acquire_environment_hand_contact()` requires ordinary grounded Free Walk, meaningful movement, no incompatible action, no selected contact and an expired cooldown. `can_persist_environment_hand_contact()` permits Walk or Idle only with a live existing surface and a contact acquired during Walk. Contact updating continues to validate the sensed surface, safe reach, body angle and normal continuity; persistence permission does not bypass those geometric checks.
+
+Walk -> Idle now retains the selected hand as IDLE_HOLD, with the existing Idle follow rate, wall orientation and tangent. Idle -> Walk along the same wall resumes CONTACT without restarting staged reach or applying cooldown. Idle without a Walk-acquired contact cannot acquire. Walking away, losing the surface/reach or exceeding geometric limits releases through the existing release/cooldown path. Run, Sprint, rolls/backstep, Jump/Fall/Land, Lock-On, 180 turns and other incompatible actions still immediately clear all environmental arm authority, including deferred modifier execution. Debug distinguishes acquisition permission, persistence permission and Walk acquisition provenance.
+
+## Free Walk direction
+
+Previously ordinary Walk fed raw input directly into its velocity target, while facing used a quick proportional blend. There was no angular-rate-limited travel target for ordinary successive 45-90 degree input changes. The existing large-turn arc and authored reversal handling were separate paths, not a general Walk smoother.
+
+PlayerV2 Inspector **Free Walk / Walk Direction Turn Speed** defaults to **360 degrees/second**, with recommended tuning range **240-480** (lower gives wider turns, higher responds faster). Raw camera-relative `desired_move_direction` remains immediately available to decisions. After reversal/arc selection, ordinary standing Free Walk rotates `smoothed_walk_direction` toward the desired horizontal yaw using shortest-angle `rotate_toward`, bounded by turn speed times delta. That unit direction feeds the existing acceleration/deceleration target and Walk facing. No linear direction interpolation through zero at a reversal.
+
+The smoother bypasses crouch, Run/Sprint, locked movement, airborne/actions/dodges, authored 180 ownership and the existing large-turn arc. Walk180 still reads raw input before smoothing. No-input frames retain current facing rather than following a stale target; orbiting the camera while Idle does not rotate the body. Existing movement speeds, acceleration/deceleration, action curves, camera, StepSolver, Foot IK, pelvis and source clips were not changed. Enable `debug_walk_direction` for desired/smoothed direction, facing error, angular speed and active Walk180 diagnostics.
+
+## Verification
+
+Automated headless checks (not interactive manual playtesting): repeated W -> D -> S -> A -> W and diagonal changes produce progressive unit-direction rotation, with maximum yaw step approximately **6 degrees at 60 FPS** at the default speed. Raw input updates immediately; genuine opposite input still triggers Walk180. Idle camera orbit preserves yaw, and Run/Sprint/Lock bypass smoothing. The angular helper also converges consistently at 30/60/120 Hz.
+
+Hand contact, sensing, IK, pose and isolation tests pass. Coverage includes no spontaneous Idle acquisition, Walk -> Idle Hold -> Walk without reacquisition, preserved tangent, and action handoffs from Idle Hold with zero native IK/wrist authority and source-pose comparisons. Running-roll handoff, sprint-roll, locked-roll realignment, turn-arc and crouch regressions also pass (11 selected tests total including the new Walk direction test). The unrelated Windows root-certificate-store warning remains. No interactive visual approval is implied.
+
+Files in this cleanup: `Characters/Player/V2/player_v2.gd`, `player_debug_v2.gd`, `player_environment_hands_v2.gd`, `player_environment_hand_ik_v2.gd`; `test/test_walk_direction_v2.gd` (new), `test_environment_hand_contact_v2.gd`, `test_environment_hand_ik_v2.gd`, `test_environment_hand_pose_v2.gd`, `test_environment_hand_isolation_v2.gd`; this document. Crouch implementation remains on hold and unchanged by this cleanup. Not committed or pushed.
+
+# V2 Phase 5A — Crouch Foundation (2026-09-06)
+
+## Input, state and Actions
+
+InputMap `crouch` uses physical CTRL, hold-to-crouch (not toggle). The motor's optional final `crouch_held` argument supports deterministic tests while preserving prior call signatures. New `CrouchController` owns STANDING / ENTER / CROUCHED / EXIT, capsule size, standing-clearance queries and requested state. AnimationTree owns transition playback/progress; no duplicate clip timer.
+
+Verified current imported canonical Actions and lengths:
+
+| State | Action | Source length |
+| --- | --- | --- |
+| Enter | `CRC_STAND_TO_CROUCH` | .666667 s |
+| Exit | `CRC_CROUCH_TO_STANDING` | .666667 s |
+| Idle | `CRC_CROUCH_IDLE` | 2.533333 s |
+| Walk | `MGC_CROUCH_WALK_FORWARD` | 1.166667 s |
+
+**MGC_CROUCH_WALK_FORWARD is temporary** and must be replaced with a neutral crouch-walk Action after a future master GLB update. All moving directions currently use it, with ordinary camera-relative Free facing and no dedicated crouch pivot/strafe/backward clips. Standing 180 clips cannot start while crouched. Only runtime instance-local animation copies are configured: transitions non-loop, Idle/Walk loop, horizontal Hips motion normalized as with existing locomotion while authored vertical crouch remains intact. No source clips were renamed or changed.
+
+Inspector controls live on CrouchController under Crouch: speed (0 inherits motor Walk), capsule height 1.10 m, enter/exit blends .15/.15 s, enter/exit exit-progress .90/.90, debug false. Transition source windows therefore run about .60 s before changing state. Shift is ignored and Sprint buildup reset throughout crouch, including transitions and crouch-started dodges. Jump is ignored while crouched; no automatic stand-and-jump in Phase 5A. Normal gait logic resumes after the standing transition, with the completion tick still Walk rather than jumping directly into Sprint.
+
+## Physical collider and standing clearance
+
+Standing collider was inspected: CapsuleShape3D **height 1.80 m, radius .45 m**, centered at local Y=.90 (bottom Y=0). Crouch duplicates the shape per player instance and uses **height 1.10 m, same .45 m radius**, center Y=.55. It lowers only the capsule top, preserving its base. The Inspector height is clamped between capsule diameter and original standing height. Resize is immediate and stable in deterministic floor/tunnel/curb tests; no character scale or VisualRoot offset was introduced.
+
+Standing height/radius are derived once from the original collider. On CTRL release, a direct standing CapsuleShape3D overlap query checks its full intended volume against the motor collision mask, excluding the player RID. A 2 mm upward query tolerance avoids floor-contact false positives; no expansion into a detected obstruction. Blocker name/result appear in debug. A blocked request retains the small capsule and does not restart the exit clip; the released CTRL state is checked each physics tick. Once clear, the full collider is restored and CRC_CROUCH_TO_STANDING plays automatically. Expansion is done only after the clearance check, so the standing collision body protects the rest of the exit transition.
+
+This remains an approximate capsule, not exact animated head/hand collision. The temporary magic walk's head bone peaks near **1.30 m** above the body base in the sampled cycle, above the 1.10 m physical capsule; head/arms can visually intersect particularly tight overhangs even though collision traversal is valid. Crouch Idle is much lower. Until the neutral clip arrives, use higher visual tunnel clearances or tune Crouch Capsule Height upward (and corresponding lab geometry) if mesh clearance matters more than the initial compact crawl-space size. No arbitrary downward mesh offset was used because it would sink the feet.
+
+## Compatibility and priorities
+
+Entry requires Free, grounded, ordinary Locomotion/Loops, no Dodge/recovery, active StepSolver/roll traversal or 180 turn. Crouch remains a physical mode if stepping off an edge: existing Fall/Land presentation has priority, with no crouch jump. Dodge wins over crouch presentation. A crouch Idle ALT uses existing Backstep; moving ALT uses DOD_STAND_TO_ROLL, never the Shift Run/Sprint roll. Crouch-started Dodge retains/reasserts the crouched capsule throughout the action, including interruption of crouch-enter/exit. Afterward, held CTRL returns to crouch; released CTRL attempts standing and remains small when obstructed.
+
+Lock-On while already locked ignores CTRL. A lock attempt while crouched is rejected; if clear it begins a stand transition, and the player must request Lock-On again once standing (release CTRL to stay standing). A future externally forced locked+crouched state clears Lock-On, attempts standing and reports any ceiling blocker rather than allowing an invalid combined mode. No combat locomotion or camera tuning changed.
+
+Environmental hand eligibility explicitly rejects CROUCH, including transitions/dodges. StepSolver already queries the live CollisionShape3D transform/shape and base-relative risers, so no duplicated solver or threshold adjustment was needed. Crouch allows the normal step path and normal smooth Free facing, while standing 180 actions stay suppressed. Foot terrain sensing, leg IK and pelvis stay unchanged and active as permitted by their existing support logic. Crouch Idle does not opt into the special standing-Idle extended-reach override. On the test curb, IK remained finite/non-stretching and pelvis drop remained within the existing .20 m limit (sample around -.006 m); no crouch-specific IK multiplier was needed for this foundation.
+
+Camera framing and distance controls are untouched; no automatic crouch camera drop. Crouch debug is default off and displays CTRL, phase, physical dimensions, clearance/blocker, animation mode and speed through the existing debug overlay. Enable CrouchController.crouch_debug for it; the normal debug panel must also be enabled.
+
+## Lab and verification
+
+New Crouch Test Zone is centered around **(45,0,8)**, east of spawn, with its own floor and simple box collision. Labeled lanes: standing-clear 2.10 m, low beam 1.65 m, short tunnel 1.30 m, too-low obstacle .85 m. It also includes a larger 1.30 m low-ceiling room with open exits and three .10/.20/.30 m cumulative curbs under a 1.60 m overhang. These values are test geometry, not automatic derivatives of Inspector capsule tuning.
+
+`test_crouch_v2.gd` passes: actual CTRL mapping; Enter/Idle/Walk/Exit nodes; physical height and bottom preservation; inherited current **2 m/s** Walk speed; Shift/Sprint and Jump suppression; no crouch wall hands; blocked standing/no transition spam; tunnel traversal with CTRL released inside and automatic standing outside; Backstep/moving roll and post-dodge CTRL handling; released CTRL during low-ceiling dodge without expansion; blocked Lock-On and locked CTRL suppression; too-low obstacle collision; crouch curb traversal; camera-relative direction changes without standing pivot clips; finite non-stretching leg IK and bounded pelvis correction.
+
+Standing regressions passed: environmental hand isolation/pose, running-roll handoff, sprint roll and locked-roll realignment. Enter/Idle/Walk renders were inspected; tests are automated plus rendered inspection, not interactive manual playtesting. Existing historical tests with hardcoded old walking speeds were not rewritten as part of this feature. Root-certificate warning remains unrelated.
+
+Known limitations: temporary magic arm/height profile, one forward crouch clip for all travel directions, no crouch strafing/combat/Jump, no anatomical head collision, no special camera offset, and existing terrain support weights rather than dedicated crouch foot planting. Reduced-capsule dodges may have visible source-pose intersections in very tight spaces; movement remains collision constrained. No Run/Sprint crouch, prone, stealth/noise, sliding or cover mechanics added. Not committed or pushed.
+
 # Environmental Hand IK — Walk-Only Isolation (2026-09-06)
 
 ## Reproduced ownership leak

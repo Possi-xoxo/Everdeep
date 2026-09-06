@@ -55,6 +55,9 @@ func run() -> void:
 		check(max_palm_error<22 and max_finger_error<22,"palm faces wall and fingers point upward")
 		var count: int=arm_ik.contact_acquisitions
 		var tangent: Vector3=arm_ik.contact_wall_tangent
+		for frame in 60: await roll_tick()
+		check(arm_ik.contact_state==arm_ik.ContactState.IDLE_HOLD,"Idle holds existing contact")
+		check(tangent.dot(arm_ik.contact_wall_tangent)>.999,"Idle tangent stable")
 		for frame in 30: await roll_tick(Vector2(0,-1))
 		check(arm_ik.contact_state==arm_ik.ContactState.CONTACT,"ordinary Walk retains contact")
 		check(tangent.dot(arm_ik.contact_wall_tangent)>.999,"straight Walk preserves tangent")

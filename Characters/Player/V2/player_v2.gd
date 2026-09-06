@@ -26,6 +26,12 @@ const Dodge = preload("res://Characters/Player/V2/player_dodge_v2.gd")
 @export var turn_acceleration: float = 65.0
 @export var lateral_damping: float = 80.0
 @export var turn_rate: float = 16.0
+@export_category("Free Walk")
+@export_range(240,480,10) var walk_direction_turn_speed: float = 360.0
+@export var debug_walk_direction: bool = false
+var smoothed_walk_direction := Vector3.ZERO
+var desired_move_direction := Vector3.ZERO
+var walk_direction_smoothing_active: bool = false
 @export_category("Directional Turn Arc")
 @export_range(0.0, 180.0) var large_turn_threshold_degrees: float = 90.0
 @export_range(1.0, 90.0) var max_move_angle_from_forward: float = 60.0
@@ -55,6 +61,7 @@ var turn_180: Resource
 @onready var step_solver = $StepSolver
 @onready var roll_traversal = $RollTraversal
 @onready var lock_on = $LockOnController
+@onready var crouch = $CrouchController
 
 func _ready() -> void:
 	dodge=dodge.duplicate(true)
@@ -62,12 +69,21 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("lock_on"): lock_on.toggle()
-	step_motor(delta, Input.get_vector("move_left", "move_right", "move_forward", "move_backward"), Input.is_action_pressed("sprint"), Input.is_action_just_pressed("jump"), Input.is_action_just_pressed("dodge"))
+	if Input.is_action_just_pressed("crouch"): crouch.requested = not crouch.requested
+	step_motor(delta, Input.get_vector("move_left", "move_right", "move_forward", "move_backward"), Input.is_action_pressed("sprint"), Input.is_action_just_pressed("jump"), Input.is_action_just_pressed("dodge"), crouch.requested)
 
 ## Input boundary also supports deterministic play tests without emulating OS keys.
-func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pressed: bool = false) -> void:
+func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pressed: bool = false, crouch_requested: bool = false) -> void:
 	var dodge_was_active: bool=dodge.is_dodging
 	dodge.advance_timers(delta,roll_traversal.active)
+	var was_crouched: bool=crouch.active()
+	crouch.update(crouch_requested,delta)
+	crouch.motion_request(stick,shift)
+	if crouch.active() or was_crouched:
+		shift=false
+		jump=false
+		_run_time=0
+		animation_state.gait=State.Gait.WALK
 	dodge.handoff_input=stick
 	if dodge.handoff_waiting_for_input:
 		if stick.length()<dodge.dodge_movement_input_threshold:
@@ -97,6 +113,7 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		right=forward.cross(Vector3.UP)
 		direction=(right*stick.x-forward*stick.y).normalized()
 	s.move_direction_world = direction
+	desired_move_direction=direction
 	if dodge.handoff_reorienting:
 		var facing: Vector3=-visual.global_basis.z
 		if not dodge.handoff_this_tick and (locked or direction.is_zero_approx() or rad_to_deg(facing.angle_to(direction))<=turn_arc_release_angle):
@@ -111,6 +128,9 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		if s.move_input_magnitude>=dodge.dodge_movement_input_threshold:
 			roll_gait=(maxi(roll_gait,1) if shift else 0)
 		if dodge.begin(roll_direction,roll_gait,locked,anim.player,s.move_input_magnitude,s.horizontal_speed,s.combat_input,forward):
+			if crouch.active():
+				crouch.phase=crouch.Phase.CROUCHED
+				crouch.resize(crouch.crouch_capsule_height)
 			# A running roll starts a fresh Sprint buildup at control return.
 			if dodge.clip==dodge.RUN: _run_time=0.0
 			turn_arc_active=false
@@ -145,6 +165,7 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 	elif s.gait == State.Gait.SPRINT:
 		target_speed = sprint_speed
 	if locked: target_speed=locked_speed(s.combat_input,shift)
+	if crouch.active(): target_speed=crouch.speed()
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
 	if dodge.handoff_this_tick:
 		if grounded_before and direction.is_zero_approx(): horizontal=Vector3.ZERO
@@ -156,7 +177,7 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		horizontal = Vector3.FORWARD.rotated(Vector3.UP, visual.global_rotation.y) * turn_180.entry_speed
 		s.takeoff_speed = turn_180.entry_speed
 	if turn_180 != null:
-		turn_180.begin_motor_tick(direction, horizontal, grounded_before and not s.jump_started and not turn_arc_suppressed and not turn_arc_active and not locked and not dodge.is_dodging and not dodge.handoff_reorienting, source_gait, s.gait, visual)
+		turn_180.begin_motor_tick(direction, horizontal, grounded_before and not s.jump_started and not crouch.active() and not turn_arc_suppressed and not turn_arc_active and not locked and not dodge.is_dodging and not dodge.handoff_reorienting, source_gait, s.gait, visual)
 		if turn_180.started:
 			turn_180.entry_buildup = _run_time
 	var turning: bool = turn_180 != null and turn_180.active
@@ -178,6 +199,14 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		allowed_direction = turn_180.target_direction
 	else:
 		allowed_direction = _turn_arc_direction(direction, horizontal.length(), grounded_before and not s.jump_started, delta)
+	# Decisions above consume RAW camera-relative intent, especially Walk180.
+	# Only ordinary standing Free Walk feeds a smoothed target to the motor.
+	var free_walk_presentation: bool=(anim.current_state==&"Locomotion" and anim.grounded.transition==&"Loops") or (crouch.active() and String(anim.current_state).begins_with("Crouch"))
+	walk_direction_smoothing_active=not locked and s.gait==State.Gait.WALK and grounded_before and not s.jump_started and not dodge.is_dodging and not dodge.run_roll_recovery_visible and not dodge.handoff_reorienting and not turning and not turn_arc_active and not (turn_180!=null and turn_180.resume_pending) and free_walk_presentation
+	if walk_direction_smoothing_active and not direction.is_zero_approx():
+		allowed_direction=_smooth_walk_direction(allowed_direction,delta)
+	else:
+		smoothed_walk_direction=-visual.global_basis.z.normalized()
 	if s.jump_started:
 		velocity.y = jump_velocity
 	if dodge.is_dodging:
@@ -214,6 +243,8 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		visual.rotation.y=lerp_angle(visual.rotation.y,atan2(-dodge.dodge_direction.x,-dodge.dodge_direction.z),1-exp(-dodge.dodge_rotation_speed*delta))
 	elif locked:
 		lock_on.face_target(delta)
+	elif walk_direction_smoothing_active and not direction.is_zero_approx():
+		visual.rotation.y=rotate_toward(visual.rotation.y,atan2(-smoothed_walk_direction.x,-smoothed_walk_direction.z),deg_to_rad(walk_direction_turn_speed)*delta)
 	elif not dodge.is_dodging and s.move_input_magnitude > 0.01 and horizontal.length() > 0.1 and not turn_arc_active and not turning:
 		visual.rotation.y = lerp_angle(visual.rotation.y, atan2(-horizontal.x, -horizontal.z), 1.0 - exp(-turn_rate * delta))
 	if not grounded_before or s.jump_started:
@@ -292,6 +323,17 @@ func _turn_arc_direction(desired: Vector3, speed: float, grounded: bool, delta: 
 	# animation cancels any stationary turn before it can overwrite this yaw.
 	visual.rotation.y += clampf(angle, -deg_to_rad(large_turn_rotation_speed) * delta, deg_to_rad(large_turn_rotation_speed) * delta)
 	return allowed
+
+func _smooth_walk_direction(desired: Vector3, delta: float) -> Vector3:
+	if smoothed_walk_direction.is_zero_approx(): smoothed_walk_direction=-visual.global_basis.z.normalized()
+	var current:=atan2(-smoothed_walk_direction.x,-smoothed_walk_direction.z)
+	var target:=atan2(-desired.x,-desired.z)
+	var next:=rotate_toward(current,target,deg_to_rad(walk_direction_turn_speed)*delta)
+	smoothed_walk_direction=Vector3.FORWARD.rotated(Vector3.UP,next)
+	return smoothed_walk_direction
+
+func walk_direction_debug_text() -> String:
+	return "FREE WALK TURN\nDesired: %s\nSmoothed: %s\nFacing Error: %.1f degrees / Turn Speed: %.0f deg/s\nSmoothing: %s / Walk180 Active: %s" % [desired_move_direction,smoothed_walk_direction,rad_to_deg((-visual.global_basis.z).angle_to(desired_move_direction)) if not desired_move_direction.is_zero_approx() else 0.0,walk_direction_turn_speed,walk_direction_smoothing_active,turn_180!=null and turn_180.active and not turn_180.running]
 
 func locked_speed(input: Vector2, run: bool) -> float:
 	var longitudinal: float=(lock_run_forward_speed if run else lock_walk_forward_speed) if input.y>=0 else (lock_run_backward_speed if run else lock_walk_backward_speed)

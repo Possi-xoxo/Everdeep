@@ -20,6 +20,13 @@ const CLIPS := {
 	"DodgeStand": &"DOD_STAND_TO_ROLL", "DodgeRun": &"DOD_RUN_TO_ROLL",
 	"DodgeSprint": &"DOD_SPRINT_TO_ROLL",
 	"DodgeBack": &"DPD_DODING_BACK",
+	"CrouchEnter": &"CRC_STAND_TO_CROUCH", "CrouchExit": &"CRC_CROUCH_TO_STANDING",
+	"CrouchIdle": &"CRC_CROUCH_IDLE", "CrouchWalk": &"BOW_STANDING_WALK_FORWARD",
+	"CrouchLeft": &"BOW_STANDING_WALK_LEFT", "CrouchRight": &"BOW_STANDING_WALK_RIGHT",
+	"CrouchBack": &"BOW_STANDING_WALK_BACK",
+	"CrouchRun": &"BOW_STANDING_RUN_FORWARD", "CrouchRunLeft": &"BOW_STANDING_RUN_LEFT",
+	"CrouchRunRight": &"BOW_STANDING_RUN_RIGHT", "CrouchRunBack": &"BOW_STANDING_RUN_BACK",
+	"CrouchRunStop": &"BOW_STANDING_RUN_FORWARD_STOP",
 }
 @export_category("Gait Crossfades (seconds)")
 @export var idle_to_walk_blend: float = 0.2
@@ -127,7 +134,7 @@ func _prepare_library() -> bool:
 	for state: String in CLIPS:
 		var clip := player.get_animation(CLIPS[state])
 		var airborne := state in ["JumpStanding", "JumpMoving", "Fall", "Land"]
-		clip.loop_mode = Animation.LOOP_NONE if state in ["JumpStanding", "JumpMoving", "Land", "DodgeStand", "DodgeRun", "DodgeSprint", "DodgeBack"] else Animation.LOOP_LINEAR
+		clip.loop_mode = Animation.LOOP_NONE if state in ["JumpStanding", "JumpMoving", "Land", "DodgeStand", "DodgeRun", "DodgeSprint", "DodgeBack", "CrouchEnter", "CrouchExit", "CrouchRunStop"] else Animation.LOOP_LINEAR
 		# This Blender rig uses local Z for vertical; local X/Y are horizontal.
 		for track in clip.get_track_count():
 			if clip.track_get_type(track) != Animation.TYPE_POSITION_3D or not String(clip.track_get_path(track)).ends_with(":mixamorig_Hips"):
@@ -164,6 +171,12 @@ func _trim_backstep() -> void:
 func _clip(state: String) -> AnimationNodeAnimation:
 	var node := AnimationNodeAnimation.new()
 	node.animation = CLIPS[state]
+	if state in ["CrouchEnter","CrouchExit"]:
+		node.use_custom_timeline=true
+		node.stretch_time_scale=true
+		var crouch_controller=motor.get_node("CrouchController")
+		var rate: float=crouch_controller.crouch_enter_playback_speed if state=="CrouchEnter" else crouch_controller.crouch_exit_playback_speed
+		node.timeline_length=player.get_animation(CLIPS[state]).length/rate
 	if state == "Land":
 		node.use_custom_timeline = true
 		node.stretch_time_scale = false
@@ -175,15 +188,32 @@ func _build_tree() -> void:
 	var locomotion = grounded.build()
 	var machine := AnimationNodeStateMachine.new()
 	machine.add_node(&"Locomotion", locomotion)
-	for state in ["JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack"]:
+	var states: Array[String]=["Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack", "CrouchEnter", "CrouchExit", "CrouchIdle", "CrouchWalk", "CrouchLocked", "CrouchRun", "CrouchLockedRun", "CrouchRunStop"]
+	for state in states:
+		if state=="Locomotion": continue
+		if state in ["CrouchLocked","CrouchLockedRun"]:
+			var run: bool=state=="CrouchLockedRun"
+			var space:=AnimationNodeBlendSpace2D.new()
+			space.sync_mode=AnimationNodeBlendSpace2D.SYNC_MODE_CYCLIC_MUTABLE
+			space.add_blend_point(_clip("CrouchIdle"),Vector2.ZERO,-1,&"Idle")
+			space.add_blend_point(_clip("CrouchRun" if run else "CrouchWalk"),Vector2(0,1),-1,&"Forward")
+			space.add_blend_point(_clip("CrouchRunLeft" if run else "CrouchLeft"),Vector2(-1,0),-1,&"Left")
+			space.add_blend_point(_clip("CrouchRunRight" if run else "CrouchRight"),Vector2(1,0),-1,&"Right")
+			space.add_blend_point(_clip("CrouchRunBack" if run else "CrouchBack"),Vector2(0,-1),-1,&"Back")
+			machine.add_node(state,space)
+			continue
 		machine.add_node(state, _clip(state))
 	# Direct edges prevent travel() routing through unrelated one-shot states.
-	for from in ["Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack"]:
-		for to in ["Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack"]:
+	for from in states:
+		for to in states:
 			if from == to:
 				continue
 			var transition := AnimationNodeStateMachineTransition.new()
 			transition.xfade_time = land_blend_out if to == "Locomotion" else (land_blend_in if to == "Land" else (jump_to_fall_blend if to == "Fall" else jump_blend_in))
+			if to.begins_with("Crouch"): transition.xfade_time=motor.get_node("CrouchController").crouch_enter_blend_time
+			if from=="CrouchExit" or to=="CrouchExit": transition.xfade_time=motor.get_node("CrouchController").crouch_exit_blend_time
+			if from in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchRunStop","CrouchLocked","CrouchLockedRun"] and to in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchRunStop","CrouchLocked","CrouchLockedRun"]:
+				transition.xfade_time=motor.get_node("CrouchController").crouch_locomotion_blend_time
 			machine.add_transition(from, to, transition)
 	tree.root_node = tree.get_path_to(rig)
 	tree.anim_player = tree.get_path_to(player)
@@ -197,6 +227,13 @@ func _physics_process(delta: float) -> void:
 	if _playback == null:
 		return
 	var s = motor.animation_state
+	# Limit pose travel as well as smoothing it: a full idle/direction change
+	# must span the crouch locomotion blend, even when input changes instantly.
+	var crouch_blend: Vector2=motor.crouch.direction_blend
+	var crouch_target: Vector2=crouch_blend.lerp(s.combat_input,1.0-exp(-motor.crouch.crouch_direction_blend_speed*delta))
+	motor.crouch.direction_blend=crouch_blend.move_toward(crouch_target,delta/motor.crouch.crouch_locomotion_blend_time)
+	tree.set("parameters/CrouchLocked/blend_position",motor.crouch.direction_blend)
+	tree.set("parameters/CrouchLockedRun/blend_position",motor.crouch.direction_blend)
 	# Recovery pose continues independently of movement authority. Air/jump
 	# still interrupts it, while grounded current-input motion can steer it.
 	if s.is_airborne or s.jump_started:
@@ -258,9 +295,12 @@ func _physics_process(delta: float) -> void:
 		var progress := land_source_progress
 		if _impact_time >= land_min_impact_time and (s.move_input_magnitude > 0.01 or progress >= float(_land_profile.exit)):
 			_enter(&"Locomotion")
+	if not motor.dodge.is_dodging and not motor.dodge.run_roll_recovery_visible and s.is_grounded and current_state!=&"Land":
+		if motor.crouch.active(): _enter(motor.crouch.animation_node())
+		elif String(current_state).begins_with("Crouch"): _enter(&"Locomotion")
 	grounded.configure_lock_blends(lock_animation_enter_blend,lock_animation_exit_blend)
 	grounded.update(tree, s, gait_blend, current_state == &"Locomotion", visual_root,delta,self)
-	motor.turn_arc_suppressed = current_state != &"Locomotion"
+	motor.turn_arc_suppressed = current_state != &"Locomotion" and not String(current_state).begins_with("Crouch")
 
 func _sample_passive_ground() -> void:
 	# Presentation sensor only: never snaps, alters velocity, or claims ground.

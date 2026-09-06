@@ -209,7 +209,7 @@ func candidate(index: int):
 	return sensing.left if index==0 else sensing.right
 
 func usable(index: int) -> bool:
-	return sensing.can_use_environment_hand_ik() and candidate(index).valid
+	return sensing.can_acquire_environment_hand_contact() and candidate(index).valid
 
 func choose_side() -> int:
 	if usable(0) and usable(1): return 0 if sensing.left.score>=sensing.right.score else 1
@@ -227,8 +227,8 @@ func prepare_targets(delta: float) -> void:
 		environment_hand_cooldown_remaining=maxf(0,environment_hand_cooldown_remaining-delta)
 		if environment_hand_cooldown_remaining<=0: contact_state=ContactState.INACTIVE
 	protect_non_walk_pose()
-	# Only the explicitly requested Idle exit fade is allowed outside Walk.
-	# Every action skips native target preparation and manual wrist writes.
+	# Walk-acquired Idle Hold retains ownership; incompatible actions still
+	# skip target preparation and manual wrist writes immediately.
 	if not sensing.can_use_environment_hand_ik() and not (sensing.eligibility()=="IDLE" and contact_state==ContactState.RELEASING):
 		ensure_environment_hand_pose_released(sensing.eligibility())
 		return
@@ -358,9 +358,9 @@ func update_contact(delta: float) -> void:
 			rotation_alpha=smoothstep(hand_rotation_start_fraction,1,progress)
 			if progress>=1: contact_state=ContactState.CONTACT
 		if contact_state!=ContactState.REACHING:
-			contact_state=ContactState.CONTACT
-		persistence="WALL_DRAG"
-		var speed: float=hand_wall_drag_follow_speed
+			contact_state=ContactState.IDLE_HOLD if sensing.state_reason=="IDLE_HOLD" else ContactState.CONTACT
+		persistence="IDLE_HOLD" if sensing.state_reason=="IDLE_HOLD" else "WALL_DRAG"
+		var speed: float=hand_idle_hold_follow_speed if persistence=="IDLE_HOLD" else hand_wall_drag_follow_speed
 		var before:=contact_world_position
 		contact_world_position=contact_world_position.lerp(data.surface+n*hand_palm_clearance,1-exp(-speed*delta))
 		# Preserve tangent smoothing, but project normal separation every frame.
@@ -368,7 +368,7 @@ func update_contact(delta: float) -> void:
 		contact_tangent_speed=(contact_world_position-before).slide(n).length()/maxf(delta,.0001)
 		if world(arms[active_side].bones[0]).distance_to(contact_world_position)>max_environment_hand_reach:
 			release_contact("OUT_OF_REACH")
-	elif contact_state==ContactState.INACTIVE and active_side<0 and sensing.can_use_environment_hand_ik():
+	elif contact_state==ContactState.INACTIVE and sensing.can_acquire_environment_hand_contact():
 		var chosen:=choose_side()
 		if chosen<0: return
 		active_side=chosen
@@ -504,6 +504,7 @@ func debug_text() -> String:
 	var palm_axis: Vector3=arms[active_side].get("contact_basis",Basis.IDENTITY).z if active_side>=0 else Vector3.ZERO
 	var result: String="ENVIRONMENT HAND IK\nActive Side: %s / Switching: %s\nLeft/Right Valid: %s / %s / Scores: %.2f / %.2f" % ["NONE" if active_side<0 else arms[active_side].side,switching,sensing.left.valid,sensing.right.valid,sensing.left.score,sensing.right.score]
 	result="ENV HAND ISOLATION\nEligible: %s / Reason: %s\n" % [sensing.can_use_environment_hand_ik(),sensing.eligibility()]+result
+	result+="\nAcquisition Eligible: %s / Persistence Eligible: %s\nAcquired From: %s" % [sensing.can_acquire_environment_hand_contact(),sensing.can_persist_environment_hand_contact(),"WALK" if contact_acquired_while_walking else "NONE"]
 	for arm in arms:
 		result+="\n%s Native IK: %.2f / Pole Weight: %.2f / Bone Write: %s" % [arm.side,arm.solver.influence,arm.weight,arm.get("override_active",false)]
 	result+="\nState: %s / Reach Progress: %.2f / Prep: %.2f\nPosition Weight: %.2f / Rotation Weight: %.2f\nCooldown Remaining: %.2f / Can Acquire: %s\nWall Tangent: %s\nPalm Contact Axis: %s / Rotation Error: %.1f degrees\nMapping: Palm +Z / Fingers +Y / Thumb Left -X, Right +X\nAxes: X red / Y green / Z blue" % [reach_stage(),clampf(reach_elapsed/maxf(hand_reach_total_duration,.001),0,1),hand_reach_prep_fraction,position_weight,rotation_weight,environment_hand_cooldown_remaining,contact_state==ContactState.INACTIVE and choose_side()>=0,contact_wall_tangent,palm_axis,rad_to_deg(palm_axis.angle_to(-contact_surface_normal)) if active_side>=0 else 0.0]

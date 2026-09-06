@@ -36,6 +36,9 @@ func run() -> void:
 		await reset_contact()
 		for frame in 45: await roll_tick(Vector2(0,-1))
 		check(arm_ik.environment_hand_contact_active and arm_ik.arms[0].weight>.5,"Walk contact prepared: "+gate)
+		if gate!="turn":
+			for frame in 20: await roll_tick()
+			check(arm_ik.contact_state==arm_ik.ContactState.IDLE_HOLD,"Walk-acquired contact persists before action: "+gate)
 		var acquisitions: int=arm_ik.contact_acquisitions
 		if gate=="lock":
 			dummy.position=Vector3(200,0,0)
@@ -53,8 +56,11 @@ func run() -> void:
 			var expected: String={"stand_roll":"DOD_STAND_TO_ROLL","run_roll":"DOD_RUN_TO_ROLL","sprint_roll":"DOD_SPRINT_TO_ROLL","backstep":"DPD_DODING_BACK"}[gate]
 			check(String(dodge.clip)==expected,"correct source clip exercised: "+gate)
 		if gate=="idle":
-			check(not arm_ik.environment_hand_contact_active and arm_ik.contact_state==arm_ik.ContactState.RELEASING,"Idle releases instead of holding")
-			for frame in 15: await roll_tick()
+			check(arm_ik.environment_hand_contact_active and arm_ik.contact_state==arm_ik.ContactState.IDLE_HOLD,"Idle holds only prior Walk contact")
+			check(not hands.can_acquire_environment_hand_contact() and hands.can_persist_environment_hand_contact(),"acquisition and persistence distinct")
+			stick=Vector2(0,-1)
+			shifted=true
+			await roll_tick(stick,shifted)
 		await assert_clean(gate+" first evaluated pose")
 		var compared:=0
 		var saw_land:=false

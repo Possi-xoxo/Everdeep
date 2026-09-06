@@ -58,6 +58,7 @@ func toggle() -> void:
 	if movement_mode==MovementMode.LOCKED_ON:
 		clear()
 		return
+	if not motor.crouch.lock_attempt(): return
 	var forward: Vector3=-motor.camera.global_basis.z
 	forward.y=0
 	if forward.length_squared()<0.0001: forward=-motor.visual.global_basis.z
