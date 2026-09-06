@@ -13,6 +13,9 @@
 [ext_resource type="Script" path="res://Characters/Player/V2/player_environment_hands_v2.gd" id="11"]
 [ext_resource type="Script" path="res://Characters/Player/V2/player_environment_hand_ik_v2.gd" id="12"]
 [ext_resource type="Script" path="res://Characters/Player/V2/player_crouch_v2.gd" id="13"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_traversal_v2.gd" id="14"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_context_interaction_v2.gd" id="15"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_ledge_detector_v2.gd" id="16"]
 
 [sub_resource type="CapsuleShape3D" id="Body"]
 radius = 0.45
@@ -31,6 +34,15 @@ script = ExtResource("1")
 
 [node name="LockOnController" type="Node3D" parent="."]
 script = ExtResource("9")
+
+[node name="TraversalController" type="Node" parent="."]
+script = ExtResource("14")
+
+[node name="LedgeDetector" type="Node3D" parent="TraversalController"]
+script = ExtResource("16")
+
+[node name="ContextInteraction" type="Node3D" parent="."]
+script = ExtResource("15")
 
 [node name="CrouchController" type="Node" parent="."]
 script = ExtResource("13")

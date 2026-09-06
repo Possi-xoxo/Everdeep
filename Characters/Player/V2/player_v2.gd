@@ -67,13 +67,27 @@ func _ready() -> void:
 	dodge=dodge.duplicate(true)
 	dodge.initialize(true)
 
+@onready var traversal = $TraversalController
+@onready var context_interaction = $ContextInteraction
+
 func _physics_process(delta: float) -> void:
-	if Input.is_action_just_pressed("lock_on"): lock_on.toggle()
-	if Input.is_action_just_pressed("crouch"): crouch.requested = not crouch.requested
+	context_interaction.tick(Input.is_action_just_pressed("interact"))
+	if not traversal.is_traversing:
+		if Input.is_action_just_pressed("lock_on"): lock_on.toggle()
+		if Input.is_action_just_pressed("crouch"): crouch.requested = not crouch.requested
 	step_motor(delta, Input.get_vector("move_left", "move_right", "move_forward", "move_backward"), Input.is_action_pressed("sprint"), Input.is_action_just_pressed("jump"), Input.is_action_just_pressed("dodge"), crouch.requested)
 
 ## Input boundary also supports deterministic play tests without emulating OS keys.
 func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pressed: bool = false, crouch_requested: bool = false) -> void:
+	traversal.advance(delta)
+	if traversal.is_traversing:
+		# Phase 0 yields input authority only; braking, gravity and collisions
+		# still run through the normal motor. No traversal pose/translation yet.
+		stick=Vector2.ZERO
+		shift=false
+		jump=false
+		dodge_pressed=false
+		crouch_requested=crouch.requested
 	var dodge_was_active: bool=dodge.is_dodging
 	dodge.advance_timers(delta,roll_traversal.active)
 	var was_crouched: bool=crouch.active()

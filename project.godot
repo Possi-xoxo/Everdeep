@@ -25,6 +25,11 @@ window/stretch/aspect="expand"
 
 [input]
 
+interact={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":69)]
+}
+
 crouch={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"physical_keycode":4194326)]

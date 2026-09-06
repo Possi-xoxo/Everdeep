@@ -1,10 +1,12 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=11 format=3]
 [ext_resource type="PackedScene" path="res://Characters/Player/V2/player_v2.tscn" id="1"]
 [ext_resource type="Script" path="res://test/player_v2_lab.gd" id="2"]
 [ext_resource type="Script" path="res://test/step_traversal_zone_v2.gd" id="3"]
 [ext_resource type="PackedScene" path="res://test/lock_on_target_dummy.tscn" id="4"]
 [ext_resource type="Script" path="res://test/hand_interaction_zone_v2.gd" id="5"]
 [ext_resource type="Script" path="res://test/crouch_test_zone_v2.gd" id="6"]
+[ext_resource type="PackedScene" path="res://test/traversal_test_interactable.tscn" id="7"]
+[ext_resource type="Script" path="res://test/mantle_test_zone_v2.gd" id="8"]
 [sub_resource type="ProceduralSkyMaterial" id="SkyMaterial"]
 sky_top_color = Color(0.17, 0.27, 0.40, 1)
 sky_horizon_color = Color(0.55, 0.64, 0.71, 1)
@@ -16,6 +18,16 @@ ambient_light_color = Color(0.70, 0.80, 0.95, 1)
 ambient_light_energy = 0.65
 [node name="PlayerV2Lab" type="Node3D"]
 script = ExtResource("2")
+[node name="MantleLedgeTestZone" type="Node3D" parent="."]
+script = ExtResource("8")
+[node name="TestMantle" parent="." instance=ExtResource("7")]
+position = Vector3(-4, 0, 3)
+[node name="TestGeneric" parent="." instance=ExtResource("7")]
+position = Vector3(-6, 0, 3)
+action_text = "Interact"
+interaction_type = 11
+[node name="Label" parent="TestGeneric" index="2"]
+text = "Generic Phase 0\nE: Interact"
 [node name="Environment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment")
 [node name="Sun" type="DirectionalLight3D" parent="."]
