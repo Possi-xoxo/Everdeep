@@ -1,3 +1,130 @@
+# V2 — Run-roll exit blend (2026-09-06)
+
+Added Inspector `Dodge → Run/Sprint Roll → Run Roll Exit Blend`, default **0.20 seconds**. Only DodgeRun → Locomotion uses this presentation crossfade in Free/Locked mode. Backstep, walking roll and airborne handoff retain their existing .10-second blends. Movement curve frames 43/65, exit progress, base speeds and recovery/retrigger timers are unchanged. New test_run_roll_exit_blend_v2 and existing test_dodge_frame_windows_v2 both pass. No commit/push performed.
+
+# V2 — Revised Backstep endpoint / Run pause and resume (2026-09-06)
+
+Supersedes the frame-45 Backstep endpoint and frame-26 Run stop below. Backstep now retains original source frames **15–60** (0.5–2.0 s at the verified 30 fps), giving a 1.5-second runtime clip. Existing speed/profile and full trimmed-window exit remain unchanged; measured travel ~2.21 m.
+
+Run/Sprint movement eases to zero at **frame 43** (1.4333 source seconds, 43/74 = 58.1081%), stays zero through **frame 65** (2.1667 s, 87.8378%), then resumes along the originally captured direction. Resume is a linear ramp from zero at frame 65 to full configured dodge speed at frame 70, retained through the existing exit (.95, approximately frame 70.3). This is resumed dodge movement, not an early handoff to normal controls. No hard speed snap; animation playback speed and exit rules unchanged. First-lobe points are at frames 0/.25, 4/.75, 9/1, 30/1, 36/.7, 40/.25, 43/0; later points 65/0, 70/1, 74/1.
+
+Updated frame-window and curve tests verify the new trim against original poses, pause/resume at 1.0/.9 playback, held-input stationary pause, captured resumed direction, and no stored wall velocity during the pause. All four dodge suites pass. Walking roll, camera, lock-on, IK, StepSolver and base-speed tuning unchanged. No Git commit/push performed.
+
+# V2 — Dodge frame timing adjustments (2026-09-06)
+
+- Import frame rate verified at 30 fps; source frame timestamps use frame / 30 (frame 0 = time 0).
+- Running/Sprinting roll movement curve now reaches zero at frame 26: 0.8667 source seconds, 26/74 = 0.351351 normalized source progress. Earlier movement-curve points were compressed proportionally to retain its acceleration/deceleration shape; base speed and animation playback are unchanged. Remaining recovery has zero translation. Stand/Walk roll is unchanged.
+- Backstep's instance-local animation is sliced to original frames 15–45, inclusive endpoint poses: source 0.5–1.5 s, a one-second clip at 1x. All 31 authored 30 fps pose samples are retained, with no playback acceleration. Imported GLB/full action remain untouched. Exit defaults to 1.0 so it reaches frame 45 rather than cutting the trimmed window early.
+- Backstep keeps its existing speed and movement-curve shape, evaluated over the trimmed action's normalized progress. This intentionally shortens travel to ~1.47 m at 5 m/s, with translation stopping at trimmed progress .60 and recovery continuing in place. Run/Sprint now travels ~5.69 m; no magnitude retuning performed.
+- New test_dodge_frame_windows_v2 verifies sliced poses against the original source, one-second duration, and zero run motion after frame 26 at 1.0/.9 playback. Updated curve-default/timing tests. Existing dodge selection, general dodge and curve tests pass. No Git commit/push performed.
+
+# V2 Phase 4B.2 — Dodge Movement Curves (2026-09-06)
+
+Replaced the single shared exit-remapped `dodge_speed_curve` with three saved Curve assets. No saved scene/resource overrides of the old property existed. The earlier notes below describe historical behavior.
+
+## Inspector and resources
+
+Open `PlayerV2 → Dodge / Roll → Dodge`, then Backstep, Stand/Walk Roll, or Run/Sprint Roll. Each group contains its existing speed, playback and exit controls plus a graphically editable Movement Curve. Shared recovery/debug settings remain in their own group.
+
+- `res://Characters/Player/V2/Curves/dodge_backstep_curve.tres` → `backstep_movement_curve`
+- `res://Characters/Player/V2/Curves/dodge_stand_roll_curve.tres` → `stand_roll_movement_curve`
+- `res://Characters/Player/V2/Curves/dodge_run_roll_curve.tres` → `run_roll_movement_curve` (also Sprint)
+
+Saved assets are the source of defaults, not hardcoded production point arrays. At player startup, curves are copied per instance so runtime changes cannot mutate the reusable assets. A null field gets a duplicate of its corresponding default; assigned custom curves are preserved. Empty curves safely yield zero. Default graph range is 0–1.5 to allow modest overshoot; movement clamps only negative values, not values above 1.0.
+
+Default points `(clip progress, movement multiplier)` use linear tangents:
+
+| Curve | Points |
+| --- | --- |
+| Backstep | (0,0), (.10,.20), (.20,.75), (.30,1), (.42,.65), (.52,.20), (.60,0), (1,0) |
+| Stand/Walk | (0,0), (.08,.45), (.18,.90), (.30,1), (.60,1), (.75,.55), (.85,.10), (.90,0), (1,0) |
+| Run/Sprint | (0,.25), (.08,.75), (.18,1), (.60,1), (.72,.70), (.80,.25), (.86,0), (1,0) |
+
+Base speeds preserved: Backstep 5.0, Stand/Walk 6.0, Run/Sprint 8.0 m/s. Playback remains 1.0 for all, exits remain .90 / .95 / .95. Input threshold, direction capture, rotation, lock-on/camera, recovery, collision, gravity, StepSolver and IK timing/architecture are unchanged.
+
+## Timeline and zero-speed recovery
+
+`AnimationTree.mixer_applied` reads the active dodge state's evaluated play position. Existing custom timeline length = imported source length / user playback multiplier. `dodge_progress = evaluated_position / timeline_length` therefore represents normalized full source-clip progress. Curves sample this directly; there is **no division by exit_progress**. Exit truncates the profile, it does not stretch it. Changing a playback multiplier before starting an action stretches clip and curve timing together; settings remain captured for that action as before.
+
+The motor still overwrites horizontal velocity every active dodge tick with `captured_direction * base_speed * max(0, curve.sample(progress))`. Thus a zero curve explicitly sets X/Z velocity to zero; ordinary locomotion stays suppressed until existing completion rules allow exit. No previous speed is retained or banked against walls. Movement reads the last evaluated pose, so timing has normal one-physics-tick evaluation latency rather than a separate movement clock. Numeric debug distinguishes latest Clip Progress from Sampled Progress, and shows Curve Value, Effective Dodge Speed, direction, and actual horizontal velocity (including collision response).
+
+Measured flat-ground defaults at 60 Hz / 1.0 playback: Backstep ~3.98 m (was ~9.54 m), Stand/Walk ~9.37 m, Run/Sprint ~13.80 m. Zero-speed visual recovery lasts approximately .80 s / .12 s / .22 s respectively before exit. Backstep stops at source progress .60; stand .90; run .86. At .9 playback all timing stretches by 1/.9; because base speed is unchanged, distance also increases proportionally. This is intended timing synchronization, not distance normalization.
+
+## Designer workflow and limitations
+
+- Too far overall: lower that type's Base Speed.
+- Correct distance but movement lasts too long: move the curve's zero tail earlier, then retune speed if necessary.
+- Run translation ends too early: extend the run curve's nonzero phase; do not change the other curves.
+- Animation too fast/slow: adjust Playback Speed; movement timing follows automatically.
+- Edit the saved Curve assets or assign a custom Curve in the corresponding Inspector field. No code change/custom graph UI needed. Edit local scene/resources for persistent changes, not only the running Remote inspector.
+- These are the requested initial point profiles, not final per-pose artistic calibration. Long full-length roll clips still travel far at 6/8 m/s. Early exit before a nonzero part of a custom curve truncates it and resumes ordinary motor response; place a zero tail before the chosen exit when a planted recovery is desired.
+- No root motion, displacement extraction, motion warping, event markers, stamina, immunity, attacks or chaining added.
+
+Files: updated `player_dodge_v2.gd`, `player_v2.gd` (startup curve isolation only), `player_debug_v2.gd`, `test/test_dodge_v2.gd` (distance assertion accommodates shorter Backstep), and these notes. Added the three Curve assets and `test/test_dodge_curves_v2.gd` (+ UID).
+
+Verification: curve suite passes saved default points, per-instance isolation, null fallbacks, type selection including Sprint, actual progress domain, .9 playback synchronization, no-input/held-input stationary recovery, custom early-zero profile, >1 overshoot, and wall-release no-launch checks. Existing dodge and locked-direction suites pass. Full V2 regression: 18/22 suites pass, with the same idle_contact, foot_planting, contact_refinement and lock_on uniform-speed expectation failures. Editor import and 120-frame main-scene smoke test completed without script errors. No Git commit/push performed.
+
+# V2 — Dodge Selection + Locked Direction Refinement (2026-09-06)
+
+Verified the imported Godot library before wiring: neutral backward dodge is exactly `DPD_DODING_BACK` (2.700 s). No weapon-specific action substituted. This section supersedes the stationary-roll and locked-roll-facing rules in the earlier foundation notes below.
+
+- `dodge_movement_input_threshold=0.15`: below threshold selects BACKSTEP even with residual velocity or a Run/Sprint gait. At/above threshold selects `DOD_STAND_TO_ROLL` for Walk or `DOD_RUN_TO_ROLL` for Run/Sprint. Current Shift intent is respected on the trigger frame, including starting from rest. Source horizontal speed/gait/mode are captured for diagnostics.
+- Free backstep captures character backward (`visual.global_basis.z`) without turning to that direction. Locked backstep captures away from target and retains existing target-facing.
+- Moving locked direction uses the same combat basis as locomotion: `forward=lock_on.direction()`, `right=forward.cross(UP)`, then normalized `right*stick.x-forward*stick.y`. W moves toward, S away, A/D tangent left/right; diagonals have the same type-based speed. Direction and raw combat input/basis are captured once, not retargeted during action.
+- The previous moving direction math already followed combat input; the visible bias was target-facing remaining active during lateral/backward rolls. Moving rolls now orient the visual toward captured travel in either mode using existing 20/s dodge yaw response. On locked exit the existing smooth face_target response resumes, without a snap. Backsteps never use travel-facing, even if input changes while active.
+- Inspector `PlayerV2 → Dodge / Roll → Dodge`: new Backstep Speed **5.0 m/s**, Playback Speed **1.0**, Exit Progress **0.90**. Duration still follows evaluated clip timeline; same normalized speed curve and recovery used. Existing roll speeds, playback, curve, exits and recovery unchanged.
+- At these suggested starting values the long source produces about **9.54 m** of backstep travel. This is not yet a tuned short hop: manually lower Backstep Speed if a short retreat is desired (e.g. 1.5–2.0 m/s gives roughly 2.9–3.8 m with the same clip/profile). Keep playback 1.0 initially. Input threshold 0.15 is the initial recommendation; raise toward 0.20 if small analog input unintentionally rolls.
+- Lock targeting, camera/distance, combat movement speeds, locked Sprint prohibition, airborne handling, IK architecture and StepSolver are unchanged. Existing dodge suppression applies to Backstep too. Optional dodge debug now reports captured magnitude, source speed, raw combat input, direction, and target-relative forward/right.
+
+Files: updated `Characters/Player/V2/player_dodge_v2.gd`, `player_v2.gd`, `player_animation_v2.gd`, `test/test_dodge_v2.gd`; added `test/test_dodge_selection_v2.gd` (+ UID); updated these notes. No GLB modifications.
+
+Validation: both dodge suites pass, including ALT dispatch, momentum-release selection, threshold boundary, all locked cardinal/diagonal directions at both gaits, actual displacement (no toward-target bias), normalized speeds, travel-facing, captured input persistence, smooth exit-facing and camera target framing. Rendered Free Backstep and Locked lateral roll poses inspected. Full V2 regression: 17/21 suites pass; the same known idle_contact, foot_planting, contact_refinement and lock_on uniform-speed expectation failures remain. Editor import and 120-frame main-scene smoke test completed; no script errors. No commit/push requested.
+
+# V2 Phase 4B.1 — Dodge Foundation (2026-09-06)
+
+Ground-only committed roll, driven by CharacterBody3D physics and the evaluated AnimationTree clip timeline. Existing InputMap `dodge` already binds left ALT and is now consumed by V2 via `is_action_just_pressed`; no duplicate binding added. No root-motion extraction.
+
+## Actions and direction
+
+- Imported exact names verified: `DOD_STAND_TO_ROLL` (2.400 s), `DOD_RUN_TO_ROLL` (2.467 s). Idle/Walk use Stand; Run/Sprint use Run. Runtime instance-local clips are non-looping; Hips local X/Y translation is normalized using the existing rig convention, while authored vertical movement and rotations remain.
+- One Resource, `PlayerV2.dodge`, owns configuration, captured clip/type, source gait/mode, direction, evaluated elapsed/progress, cooldown and recovery. No repeated ALT restart, buffering, aerial roll, or jump-cancel. Simultaneous grounded Jump + ALT gives Jump priority.
+- Free input uses camera-relative requested direction; no input defaults to character forward. Free visual yaw approaches captured direction at 20/s, bypassing Walk180/Run180 and turn arcs.
+- Locked input uses captured target-relative axes, with no-input default away from target. Existing target-facing continues; travel does not rotate the locked body. Lock and camera are not cleared or retargeted by dodge. Explicit unlock or normal invalid-target/range-break behavior still works, and current mode determines exit.
+
+## Inspector: PlayerV2 → Dodge / Roll → Dodge
+
+| Setting | Initial value |
+| --- | --- |
+| Stand Roll Speed | 6.0 m/s peak |
+| Run Roll Speed | 8.0 m/s peak |
+| Stand / Run Playback Speed | 1.0 / 1.0 |
+| Stand / Run Exit Progress | 0.95 / 0.95 |
+| Dodge Rotation Speed | 20/s |
+| Dodge Recovery Time | 0.10 s |
+| Dodge Retrigger Delay | 0.05 s |
+| Debug Dodge | Off |
+
+Inspector-editable Curve uses points (0,0), (.1,.8), (.25,1), (.7,1), (.9,.4), (1,0), with linear tangents. The curve spans the configured playable exit window, ensuring zero requested speed at early exit. Horizontal velocity is replaced with captured direction × peak speed × curve; ordinary acceleration does not run underneath. Collision, gravity and move_and_slide remain authoritative. Recovery is the outgoing animation crossfade with ordinary motor acceleration resuming immediately, not an additional movement lockout. Retrigger waits the greater of recovery and retrigger delay.
+
+Source playback is only scaled by the explicitly selected playback multiplier; no arbitrary movement duration drives clip speed. At these starting values, measured flat stand travel is about 10.74 m over ~2.28 s, and run travel is expected around 14.7 m. These are long full-clip rolls, not a final short combat dodge tune. First playtest the supplied values, then lower the speed curve's plateau (e.g. 0.45–0.60 for roughly 5–6.5 m stand travel) or peak speed if needed. Keep playback at 1.0 initially; do not accelerate the clip to shorten displacement.
+
+## Coordination and safety
+
+- StepSolver automatic lift is suppressed/cancelled during the active roll. Ramps remain ordinary body collision; stairs may stop the roll. Existing solver resumes afterward. No geometry or solver tuning changed.
+- Foot IK's existing fade-out targets zero, planting releases, pelvis target returns to zero, and knee stabilization is gated out by non-Locomotion presentation. Existing fade-in/confidence logic reacquires after exit; no permanent disable or tuning changes.
+- Losing floor support cancels roll immediately and commits Fall; subsequent real landing uses existing Land behavior. Normal roll completion goes directly to Locomotion and does not count as landing or trigger sink. Collider stays upright/full-size; no roll-shaped collision or under-obstacle capability added.
+- Free sprint buildup freezes during dodge if Shift and movement remain held; releasing either resets buildup. Normal gait rules resume on exit. Locked mode continues to forbid Sprint. No new sprint restoration mechanic.
+- Inert hooks `dodge_invulnerable=false`, `dodge_stamina_cost=0.0`, and `can_cancel_attack_into_dodge=false` have no gameplay effect. No attacks, stamina consumption, immunity windows, chaining or weapon-specific clips implemented.
+- Existing Free orbit, locked tracking, SpringArm collision, and wheel-distance preference are unchanged. Optional debug is enabled through the Dodge resource's `Debug Dodge` checkbox and appears in the existing debug canvas (F3).
+
+## Verification and files
+
+Added `player_dodge_v2.gd` and `test/test_dodge_v2.gd` (plus generated UIDs). Updated `player_v2.gd`, `player_animation_v2.gd`, `player_foot_ik_v2.gd`, `player_pelvis_ik_v2.gd`, `player_debug_v2.gd`, and these notes. No scene or InputMap edit needed.
+
+All 20 V2 suites run: 16 pass; same known failures remain in idle_contact, foot_planting, contact_refinement, and lock_on's old uniform-speed expectations. No script errors. Dodge tests cover actual ALT dispatch, repeat/jump rejection, all source gaits and Sprint restoration, Free back direction/reversal priority, Locked cardinal/diagonal/no-input directions, target preservation, unlock during roll, animation-driven duration at 0.85x/1.15x, IK release, clean exit, walls, stairs and support-loss Fall handoff. Rendered stand-roll poses inspected at three points; subjective feel still needs manual playtesting, particularly roll distance and forward-roll presentation during lateral/backward locked travel.
+
+No Git commit or push performed for Phase 4B.1.
+
 # Corrected master rig / backward locomotion (2026-09-06)
 
 Imported the desktop Blender Master Rig.glb (SHA256 9345D5BF993AF4DECA19461C2F1ED779457237440EDF66AB26D3896C8E480607). Previous binary backed up outside the project in Codex work/rig_backup_20260906_031339. Import settings retained.

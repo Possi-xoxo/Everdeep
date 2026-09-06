@@ -13,7 +13,7 @@ var corrected_position := Vector3.ZERO
 
 func prepare(delta: float) -> void:
 	var s = controller.motor.animation_state
-	var allowed: bool = controller.pelvis_enabled and controller.enabled and s.is_grounded and not s.jump_started and not s.is_airborne
+	var allowed: bool = controller.pelvis_enabled and controller.enabled and s.is_grounded and not s.jump_started and not s.is_airborne and not controller.motor.dodge.is_dodging
 	var lowest := 0.0
 	for i in controller.legs.size():
 		var leg = controller.legs[i]

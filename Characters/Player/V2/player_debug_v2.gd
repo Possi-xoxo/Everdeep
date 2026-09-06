@@ -34,6 +34,7 @@ func _process(_delta: float) -> void:
 	var gait: String = ["WALK", "RUN", "SPRINT"][s.gait] if s.horizontal_speed > 0.1 or s.move_input_magnitude > 0.01 else "IDLE"
 	label.text = "Player V2\n\nGait: %s\nPhysical: %s\nAnimation: %s\nHorizontal Speed: %.2f m/s\nVertical Velocity: %.2f m/s\nRun Buildup: %.0f%%\nAir Time: %.2f s\n\nWASD: Move  Shift: Run / Sprint\nSpace: Jump  Mouse: Orbit\nF3: Debug  Esc: Release mouse" % [gait, "GROUNDED" if s.is_grounded else "AIRBORNE", $"../AnimationController".presentation_label(), s.horizontal_speed, s.vertical_velocity, s.run_buildup_ratio * 100.0, s.air_time]
 	var animation = $"../AnimationController"
+	label.text+="\nAlt: Dodge"
 	if s.locked_on: label.text=label.text.replace("Shift: Run / Sprint","Shift: Combat Run (no Sprint)").replace("Mouse: Orbit","Mouse orbit disabled")
 	if lock_tuning_debug:
 		label.text="F10: Tuning overlay\n"+motor.lock_on.debug_text()
@@ -45,6 +46,7 @@ func _process(_delta: float) -> void:
 		var weights: Vector4=combat.direction_weights()
 		label.text+="\nDirectional Weights (F/B/L/R): %.2f / %.2f / %.2f / %.2f" % [weights.x,weights.y,weights.z,weights.w]
 	var ik = motor.get_node("FootIKController")
+	if motor.dodge.debug_dodge: label.text+="\n\n"+motor.dodge.debug_text(motor.velocity)
 	if ik.knee_ik_debug: label.text += "\n\n"+ik.knee_debug_text()
 	if ik.foot_ik_debug: label.text += "\n\n"+ik.debug_text()
 	var feet = motor.get_node("FootGrounding")

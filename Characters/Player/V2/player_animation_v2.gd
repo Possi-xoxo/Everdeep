@@ -17,6 +17,8 @@ const CLIPS := {
 	"Run": &"LOC_RUNNING_FOWARD_A", "Sprint": &"LOC_SPRINT_FORWARD",
 	"JumpStanding": &"AIR_STANDING_JUMP_(2)", "JumpMoving": &"AIR_RUNNING_JUMP",
 	"Fall": &"AIR_FALLING_IDLE", "Land": &"AIR_FALLING_TO_LANDING",
+	"DodgeStand": &"DOD_STAND_TO_ROLL", "DodgeRun": &"DOD_RUN_TO_ROLL",
+	"DodgeBack": &"DPD_DODING_BACK",
 }
 @export_category("Gait Crossfades (seconds)")
 @export var idle_to_walk_blend: float = 0.2
@@ -124,7 +126,7 @@ func _prepare_library() -> bool:
 	for state: String in CLIPS:
 		var clip := player.get_animation(CLIPS[state])
 		var airborne := state in ["JumpStanding", "JumpMoving", "Fall", "Land"]
-		clip.loop_mode = Animation.LOOP_NONE if state in ["JumpStanding", "JumpMoving", "Land"] else Animation.LOOP_LINEAR
+		clip.loop_mode = Animation.LOOP_NONE if state in ["JumpStanding", "JumpMoving", "Land", "DodgeStand", "DodgeRun", "DodgeBack"] else Animation.LOOP_LINEAR
 		# This Blender rig uses local Z for vertical; local X/Y are horizontal.
 		for track in clip.get_track_count():
 			if clip.track_get_type(track) != Animation.TYPE_POSITION_3D or not String(clip.track_get_path(track)).ends_with(":mixamorig_Hips"):
@@ -136,7 +138,27 @@ func _prepare_library() -> bool:
 				if airborne:
 					value.z = reference.z
 				clip.track_set_key_value(track, key, value)
+	_trim_backstep()
 	return grounded.prepare(player)
+
+func _trim_backstep() -> void:
+	# Slice only this instance's duplicated action. Retain authored 30 fps
+	# poses and 1x timing; shared GLB and its full action remain untouched.
+	var clip := player.get_animation(CLIPS.DodgeBack)
+	var start: float=motor.dodge.BACKSTEP_START_FRAME/motor.dodge.SOURCE_FPS
+	var finish: float=motor.dodge.BACKSTEP_END_FRAME/motor.dodge.SOURCE_FPS
+	for track in clip.get_track_count():
+		var samples: Array=[]
+		for frame in range(motor.dodge.BACKSTEP_START_FRAME,motor.dodge.BACKSTEP_END_FRAME+1):
+			var time: float=frame/motor.dodge.SOURCE_FPS
+			match clip.track_get_type(track):
+				Animation.TYPE_POSITION_3D: samples.append(clip.position_track_interpolate(track,time))
+				Animation.TYPE_ROTATION_3D: samples.append(clip.rotation_track_interpolate(track,time))
+				Animation.TYPE_SCALE_3D: samples.append(clip.scale_track_interpolate(track,time))
+				_: push_error("Unexpected track type in Backstep slice"); return
+		for key in range(clip.track_get_key_count(track)-1,-1,-1): clip.track_remove_key(track,key)
+		for frame in samples.size(): clip.track_insert_key(track,frame/motor.dodge.SOURCE_FPS,samples[frame])
+	clip.length=finish-start
 
 func _clip(state: String) -> AnimationNodeAnimation:
 	var node := AnimationNodeAnimation.new()
@@ -152,11 +174,11 @@ func _build_tree() -> void:
 	var locomotion = grounded.build()
 	var machine := AnimationNodeStateMachine.new()
 	machine.add_node(&"Locomotion", locomotion)
-	for state in ["JumpStanding", "JumpMoving", "Fall", "Land"]:
+	for state in ["JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack"]:
 		machine.add_node(state, _clip(state))
 	# Direct edges prevent travel() routing through unrelated one-shot states.
-	for from in ["Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land"]:
-		for to in ["Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land"]:
+	for from in ["Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack"]:
+		for to in ["Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack"]:
 			if from == to:
 				continue
 			var transition := AnimationNodeStateMachineTransition.new()
@@ -181,6 +203,15 @@ func _physics_process(delta: float) -> void:
 	_update_gait(s, delta)
 	ground_within_grace = false
 	passive_ground_distance = INF
+	if motor.dodge.is_dodging and s.is_grounded:
+		_enter(&"DodgeBack" if motor.dodge.clip==motor.dodge.BACK else (&"DodgeRun" if motor.dodge.clip==motor.dodge.RUN else &"DodgeStand"))
+	elif current_state in [&"DodgeStand", &"DodgeRun", &"DodgeBack"]:
+		if s.is_airborne:
+			_episode_visible=true
+			fall_visual_committed=true
+			_enter(&"Fall")
+		else:
+			_enter(&"Locomotion")
 	if s.jump_started:
 		_intentional_jump_episode = true
 		fall_visual_committed = false
@@ -262,6 +293,8 @@ func playback_debug_text() -> String:
 
 func _on_pose_applied() -> void:
 	grounded.on_pose_applied(visual_root)
+	if current_state in [&"DodgeStand", &"DodgeRun", &"DodgeBack"] and _playback.get_current_node()==current_state:
+		motor.dodge.evaluate(_playback.get_current_play_position())
 	# Read the evaluated AnimationTree timeline, not a guessed source timer.
 	if current_state == &"Land" and _playback.get_current_node() == &"Land":
 		var land_node := tree.tree_root.get_node(&"Land") as AnimationNodeAnimation
@@ -338,6 +371,21 @@ func _update_gait(s, delta: float) -> void:
 func _enter(next: StringName) -> void:
 	if current_state == next:
 		return
+	if next in [&"DodgeStand", &"DodgeRun", &"DodgeBack"]:
+		var roll_node := tree.tree_root.get_node(next) as AnimationNodeAnimation
+		roll_node.use_custom_timeline=true
+		roll_node.stretch_time_scale=true
+		roll_node.timeline_length=motor.dodge.timeline_length
+		roll_node.start_offset=0
+		land_visual_offset=0
+		_recover_start_offset=0
+		_episode_visible=false
+		visual_root.position=visual_root_base_position
+	if current_state in [&"DodgeStand", &"DodgeRun", &"DodgeBack"]:
+		var machine := tree.tree_root as AnimationNodeStateMachine
+		for index in machine.get_transition_count():
+			if machine.get_transition_from(index)==current_state and machine.get_transition_to(index)==next:
+				machine.get_transition(index).xfade_time=motor.dodge.run_roll_exit_blend if current_state==&"DodgeRun" and next==&"Locomotion" else motor.dodge.dodge_recovery_time
 	if next == &"Land":
 		var s = motor.animation_state
 		# Select once at contact. A standing takeoff that moves in the air uses

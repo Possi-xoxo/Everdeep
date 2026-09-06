@@ -1,5 +1,8 @@
 extends CharacterBody3D
 const State = preload("res://Characters/Player/V2/player_animation_state.gd")
+const Dodge = preload("res://Characters/Player/V2/player_dodge_v2.gd")
+@export_category("Dodge / Roll")
+@export var dodge: Resource = Dodge.new()
 @export_category("Gaits")
 @export var walk_speed: float = 4.0
 @export var run_start_speed: float = 4.0
@@ -52,12 +55,17 @@ var turn_180: Resource
 @onready var step_solver = $StepSolver
 @onready var lock_on = $LockOnController
 
+func _ready() -> void:
+	dodge=dodge.duplicate(true)
+	dodge.initialize(true)
+
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("lock_on"): lock_on.toggle()
-	step_motor(delta, Input.get_vector("move_left", "move_right", "move_forward", "move_backward"), Input.is_action_pressed("sprint"), Input.is_action_just_pressed("jump"))
+	step_motor(delta, Input.get_vector("move_left", "move_right", "move_forward", "move_backward"), Input.is_action_pressed("sprint"), Input.is_action_just_pressed("jump"), Input.is_action_just_pressed("dodge"))
 
 ## Input boundary also supports deterministic play tests without emulating OS keys.
-func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool) -> void:
+func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pressed: bool = false) -> void:
+	dodge.advance_timers(delta)
 	lock_on.update_target()
 	var locked: bool=lock_on.is_locked()
 	var s = animation_state
@@ -81,7 +89,23 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool) -> void:
 		right=forward.cross(Vector3.UP)
 		direction=(right*stick.x-forward*stick.y).normalized()
 	s.move_direction_world = direction
-	if locked:
+	var anim=get_node("AnimationController")
+	if dodge_pressed and grounded_before and not s.is_airborne and not s.jump_started and anim.current_state not in [&"JumpStanding", &"JumpMoving", &"Fall"]:
+		var roll_direction: Vector3=direction
+		if s.move_input_magnitude<dodge.dodge_movement_input_threshold:
+			roll_direction=-lock_on.direction() if locked else visual.global_basis.z
+		roll_direction.y=0
+		var roll_gait: int=(min(source_gait,1) if locked else source_gait) if s.horizontal_speed>0.1 else (-1 if s.move_input_magnitude<dodge.dodge_movement_input_threshold else (1 if shift else 0))
+		if s.move_input_magnitude>=dodge.dodge_movement_input_threshold:
+			roll_gait=(maxi(roll_gait,1) if shift else 0)
+		if dodge.begin(roll_direction,roll_gait,locked,anim.player,s.move_input_magnitude,s.horizontal_speed,s.combat_input,forward):
+			turn_arc_active=false
+			if turn_180!=null: turn_180.cancel()
+	if dodge.is_dodging: s.jump_started=false
+	if dodge.is_dodging:
+		# Freeze existing Free buildup while eligible; releasing input resets it.
+		if locked or not shift or stick.is_zero_approx(): _run_time=0
+	elif locked:
 		_run_time=0.0
 		s.gait=State.Gait.RUN if shift else State.Gait.WALK
 	elif not shift:
@@ -109,12 +133,15 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool) -> void:
 		horizontal = Vector3.FORWARD.rotated(Vector3.UP, visual.global_rotation.y) * turn_180.entry_speed
 		s.takeoff_speed = turn_180.entry_speed
 	if turn_180 != null:
-		turn_180.begin_motor_tick(direction, horizontal, grounded_before and not s.jump_started and not turn_arc_suppressed and not turn_arc_active and not locked, source_gait, s.gait, visual)
+		turn_180.begin_motor_tick(direction, horizontal, grounded_before and not s.jump_started and not turn_arc_suppressed and not turn_arc_active and not locked and not dodge.is_dodging, source_gait, s.gait, visual)
 		if turn_180.started:
 			turn_180.entry_buildup = _run_time
 	var turning: bool = turn_180 != null and turn_180.active
 	var allowed_direction := direction
-	if locked:
+	if dodge.is_dodging:
+		turn_arc_active=false
+		allowed_direction=dodge.dodge_direction
+	elif locked:
 		turn_arc_active=false
 		_movement_input_was_active=s.move_input_magnitude>0.01
 		s.desired_turn_angle=0.0
@@ -130,7 +157,10 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool) -> void:
 		allowed_direction = _turn_arc_direction(direction, horizontal.length(), grounded_before and not s.jump_started, delta)
 	if s.jump_started:
 		velocity.y = jump_velocity
-	if grounded_before and not s.jump_started:
+	if dodge.is_dodging:
+		horizontal=dodge.motion()
+		target_speed=horizontal.length()
+	elif grounded_before and not s.jump_started:
 		if turn_180 != null and turn_180.resume_pending:
 			var restored_speed: float = turn_180.entry_speed if shift else minf(turn_180.entry_speed, walk_speed)
 			horizontal = turn_180.target_direction * restored_speed
@@ -157,15 +187,17 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool) -> void:
 		horizontal = horizontal.move_toward(direction * target_speed * s.move_input_magnitude, acceleration * air_control * delta)
 	velocity.x = horizontal.x
 	velocity.z = horizontal.z
-	if locked:
+	if dodge.is_dodging and dodge.dodge_type!="BACKSTEP":
+		visual.rotation.y=lerp_angle(visual.rotation.y,atan2(-dodge.dodge_direction.x,-dodge.dodge_direction.z),1-exp(-dodge.dodge_rotation_speed*delta))
+	elif locked:
 		lock_on.face_target(delta)
-	elif s.move_input_magnitude > 0.01 and horizontal.length() > 0.1 and not turn_arc_active and not turning:
+	elif not dodge.is_dodging and s.move_input_magnitude > 0.01 and horizontal.length() > 0.1 and not turn_arc_active and not turning:
 		visual.rotation.y = lerp_angle(visual.rotation.y, atan2(-horizontal.x, -horizontal.z), 1.0 - exp(-turn_rate * delta))
 	if not grounded_before or s.jump_started:
 		velocity.y = maxf(velocity.y - (rise_gravity if velocity.y > 0.0 else fall_gravity) * delta, -max_fall_speed)
 	else:
 		velocity.y = -0.5
-	var step_allowed: bool = grounded_before and not s.jump_started and not turn_arc_suppressed and not turning
+	var step_allowed: bool = grounded_before and not s.jump_started and not turn_arc_suppressed and not turning and not dodge.is_dodging
 	var stepping: bool = step_solver.prepare(delta,horizontal,direction,step_allowed)
 	var saved_snap := floor_snap_length
 	if stepping:
@@ -181,6 +213,7 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool) -> void:
 	s.is_grounded = is_on_floor() or step_solver.active
 	s.is_airborne = not s.is_grounded
 	if s.is_airborne:
+		dodge.finish()
 		turn_arc_active = false
 		if turn_180 != null:
 			turn_180.cancel()
