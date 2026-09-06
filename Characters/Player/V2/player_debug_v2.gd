@@ -14,3 +14,19 @@ func _process(_delta: float) -> void:
 	var s = motor.animation_state
 	var gait: String = ["WALK", "RUN", "SPRINT"][s.gait] if s.horizontal_speed > 0.1 or s.move_input_magnitude > 0.01 else "IDLE"
 	label.text = "Player V2\n\nGait: %s\nPhysical: %s\nAnimation: %s\nHorizontal Speed: %.2f m/s\nVertical Velocity: %.2f m/s\nRun Buildup: %.0f%%\nAir Time: %.2f s\n\nWASD: Move  Shift: Run / Sprint\nSpace: Jump  Mouse: Orbit\nF3: Debug  Esc: Release mouse" % [gait, "GROUNDED" if s.is_grounded else "AIRBORNE", $"../AnimationController".presentation_label(), s.horizontal_speed, s.vertical_velocity, s.run_buildup_ratio * 100.0, s.air_time]
+	var animation = $"../AnimationController"
+	if animation.debug_tree_playback:
+		label.text += "\n\n" + animation.playback_debug_text()
+	var turn = motor.turn_180
+	if turn != null and turn.debug_180:
+		label.text += "\n\nRun180 Active: %s\nStored Entry Speed: %.2f\nTurn Target Direction: %s\nHorizontal Translation Paused: %s" % [turn.active and turn.running, turn.entry_speed, turn.target_direction, turn.active and turn.running and turn.progress >= turn.run_180_carry_end_progress]
+		label.text += "\n\n180 Turn Active: %s\nTurn Type: %s\nTurn Progress: %.2f\nTurn Target Angle: %.1f\nMovement Multiplier: %.2f\nSource Gait: %s\nTarget Gait: %s" % [turn.active, "RUN" if turn.running else "WALK", turn.progress, rad_to_deg(turn.target_angle), turn.movement_multiplier, ["WALK","RUN","SPRINT"][turn.source_gait], ["WALK","RUN","SPRINT"][turn.target_gait]]
+	if motor.debug_turn_arc:
+		label.text += "\n\nDesired Angle: %.1f degrees\nArc Active: %s\nArc Limit: %.1f degrees\nFacing Delta: %.1f degrees\nAllowed Move Delta: %.1f degrees\nTurn Sign: %s" % [rad_to_deg(s.desired_turn_angle), s.turn_arc_active, motor.max_move_angle_from_forward, rad_to_deg(s.facing_delta), rad_to_deg(s.allowed_move_delta), "Left" if motor.last_large_turn_sign > 0 else "Right"]
+	if animation.grounded.debug_grounded:
+		label.text += "\n\nMove Local: (%.2f, %.2f)\nLocomotion Direction: %s\nTransition: %s\nFacing Delta: %.1f degrees" % [s.move_local.x, s.move_local.y, animation.grounded.direction_label(s), "None" if animation.grounded.transition == &"Loops" else animation.grounded.transition, rad_to_deg(s.facing_delta)]
+	if animation.debug_land_visual_compression:
+		label.text += "\n\nLand Visual Offset: %.3f\nVisualRoot Base Y: %.3f\nVisualRoot Current Y: %.3f" % [animation.land_visual_offset, animation.visual_root_base_position.y, $"../VisualRoot".position.y]
+		label.text += "\nLand Source / Window: %.3f / %.3f\nContact Frame: %d" % [animation.land_source_progress, animation.land_window_progress, animation.land_contact_frame]
+		if not animation.land_debug_sample.is_empty():
+			label.text += "\nFoot Bone Y (L/R): %.3f / %.3f" % [animation.land_debug_sample.left_foot_y, animation.land_debug_sample.right_foot_y]

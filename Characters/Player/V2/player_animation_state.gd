@@ -14,4 +14,11 @@ var gait: Gait = Gait.WALK
 var run_buildup_ratio: float = 0.0
 var air_time: float = 0.0
 var move_direction_world: Vector3 = Vector3.ZERO
-
+## Actual travel relative to visual facing: +Y forward, +X right.
+var move_local: Vector2 = Vector2.ZERO
+var facing_delta: float = 0.0
+var allowed_move_direction_world: Vector3 = Vector3.ZERO
+var turn_arc_active: bool = false
+## Pre-turn angles for the current acceleration target, in radians.
+var desired_turn_angle: float = 0.0
+var allowed_move_delta: float = 0.0
