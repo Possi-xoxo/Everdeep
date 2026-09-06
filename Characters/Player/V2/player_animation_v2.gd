@@ -3,9 +3,17 @@ const State = preload("res://Characters/Player/V2/player_animation_state.gd")
 const Grounded = preload("res://Characters/Player/V2/player_grounded_animation_v2.gd")
 @export var grounded: Resource = Grounded.new()
 @export var debug_tree_playback: bool = false
+@export_category("Lock-On Animation Blending")
+@export_range(0,1,0.01) var lock_animation_enter_blend: float = 0.15
+@export_range(0,1,0.01) var lock_animation_exit_blend: float = 0.15
+@export_range(0,1,0.01) var lock_idle_to_move_blend: float = 0.15
+@export_range(0,1,0.01) var lock_move_to_idle_blend: float = 0.15
+@export_range(0,1,0.01) var lock_walk_to_run_blend: float = 0.20
+@export_range(0,1,0.01) var lock_run_to_walk_blend: float = 0.20
+@export_range(1,30,0.5) var lock_direction_blend_speed: float = 15.0
 var playback_recoveries: int = 0
 const CLIPS := {
-	"Idle": &"IDL_IDLE_A", "Walk": &"LOC_WALKING",
+	"Idle": &"IDL_IDLE_A_RAW", "Walk": &"LOC_WALKING",
 	"Run": &"LOC_RUNNING_FOWARD_A", "Sprint": &"LOC_SPRINT_FORWARD",
 	"JumpStanding": &"AIR_STANDING_JUMP_(2)", "JumpMoving": &"AIR_RUNNING_JUMP",
 	"Fall": &"AIR_FALLING_IDLE", "Land": &"AIR_FALLING_TO_LANDING",
@@ -207,7 +215,8 @@ func _physics_process(delta: float) -> void:
 		var progress := land_source_progress
 		if _impact_time >= land_min_impact_time and (s.move_input_magnitude > 0.01 or progress >= float(_land_profile.exit)):
 			_enter(&"Locomotion")
-	grounded.update(tree, s, gait_blend, current_state == &"Locomotion", visual_root)
+	grounded.configure_lock_blends(lock_animation_enter_blend,lock_animation_exit_blend)
+	grounded.update(tree, s, gait_blend, current_state == &"Locomotion", visual_root,delta,self)
 	motor.turn_arc_suppressed = current_state != &"Locomotion"
 
 func _sample_passive_ground() -> void:
@@ -317,6 +326,7 @@ func _exit_tree() -> void:
 		visual_root.position = visual_root_base_position
 
 func _update_gait(s, delta: float) -> void:
+	if s.locked_on: gait_blend=minf(gait_blend,2.0)
 	var target: float = float(s.gait + 1) if s.horizontal_speed > 0.10 or s.move_input_magnitude > 0.01 else 0.0
 	var duration: float
 	if target > gait_blend:
@@ -373,5 +383,6 @@ func _select_land_profile(standing: bool) -> Dictionary:
 
 func presentation_label() -> String:
 	if current_state == &"Locomotion":
+		if motor.animation_state.locked_on: return "LOCKED / "+grounded.combat.label(motor.animation_state)
 		return String(grounded.transition) if grounded.transition != &"Loops" else ["IDLE", "WALK", "RUN", "SPRINT"][clampi(roundi(gait_blend), 0, 3)]
 	return {&"JumpStanding": "JUMP_STANDING", &"JumpMoving": "JUMP_MOVING", &"Fall": "FALL", &"Land": "LAND"}.get(current_state, String(current_state))

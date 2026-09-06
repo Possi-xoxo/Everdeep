@@ -1,4 +1,7 @@
 extends Resource
+const Combat = preload("res://Characters/Player/V2/player_combat_animation_v2.gd")
+var combat = Combat.new()
+var _locked: bool = false
 ## Grounded presentation and a shared animation-led turn coordinator.
 @export var turn_180: Resource = preload("res://Characters/Player/V2/player_turn_180_v2.gd").new()
 const ACTIONS := {
@@ -30,7 +33,7 @@ var playback_recoveries: int = 0
 func prepare(player: AnimationPlayer) -> bool:
 	_player = player
 	var reference := Vector3.ZERO
-	var idle := player.get_animation("IDL_IDLE_A")
+	var idle := player.get_animation("IDL_IDLE_A_RAW")
 	for t in idle.get_track_count():
 		if idle.track_get_type(t) == Animation.TYPE_POSITION_3D and String(idle.track_get_path(t)).ends_with(":mixamorig_Hips"):
 			reference = idle.track_get_key_value(t, 0)
@@ -65,7 +68,7 @@ func prepare(player: AnimationPlayer) -> bool:
 					samples.append(Vector2(clip.track_get_key_time(t, k), yaw))
 					clip.track_set_key_value(t, k, Quaternion(Vector3(0,0,1), -yaw) * q)
 				_turn_curves[key] = samples
-	return true
+	return combat.prepare(player,reference)
 
 func animation(action: String) -> AnimationNodeAnimation:
 	var node := AnimationNodeAnimation.new()
@@ -93,11 +96,12 @@ func build() -> AnimationNodeStateMachine:
 	# Gait children include nested spaces, not finite AnimationNodeAnimation
 	# leaves: cyclic sync is inappropriate here. Preserve Phase 1 gait clocks.
 	loops.sync_mode = AnimationNodeBlendSpace1D.SYNC_MODE_INDEPENDENT
-	loops.add_blend_point(animation("IDL_IDLE_A"), 0, -1, &"Idle")
+	loops.add_blend_point(animation("IDL_IDLE_A_RAW"), 0, -1, &"Idle")
 	loops.add_blend_point(directional(false), 1, -1, &"Walk")
 	loops.add_blend_point(directional(true), 2, -1, &"Run")
 	loops.add_blend_point(animation("LOC_SPRINT_FORWARD"), 3, -1, &"Sprint")
 	_machine.add_node(&"Loops", loops)
+	_machine.add_node(&"Locked",combat.build())
 	# Parent state re-entry resets this nested machine to Start. Start must
 	# resolve to a pose in the same evaluation, not depend on a queued start()
 	# that the parent reset can overwrite.
@@ -112,8 +116,8 @@ func build() -> AnimationNodeStateMachine:
 		run_node.use_custom_timeline = true
 		run_node.stretch_time_scale = true
 		run_node.timeline_length = _player.get_animation(ACTIONS.RunPivot).length / clampf(turn_180.run_180_playback_speed,0.9,1.1)
-	for from in ["Loops", "RunStop", "TurnLeft", "TurnRight", "WalkPivot", "RunPivot"]:
-		for to in ["Loops", "RunStop", "TurnLeft", "TurnRight", "WalkPivot", "RunPivot"]:
+	for from in ["Loops", "Locked", "RunStop", "TurnLeft", "TurnRight", "WalkPivot", "RunPivot"]:
+		for to in ["Loops", "Locked", "RunStop", "TurnLeft", "TurnRight", "WalkPivot", "RunPivot"]:
 			if from == to:
 				continue
 			var edge := AnimationNodeStateMachineTransition.new()
@@ -121,15 +125,25 @@ func build() -> AnimationNodeStateMachine:
 			_machine.add_transition(from,to,edge)
 	return _machine
 
-func update(tree: AnimationTree, s, gait_blend: float, active: bool, visual: Node3D) -> void:
+func configure_lock_blends(enter_blend: float,exit_blend: float) -> void:
+	for index in _machine.get_transition_count():
+		if _machine.get_transition_to(index)==&"Locked": _machine.get_transition(index).xfade_time=enter_blend
+		elif _machine.get_transition_from(index)==&"Locked": _machine.get_transition(index).xfade_time=exit_blend
+
+func update(tree: AnimationTree, s, gait_blend: float, active: bool, visual: Node3D, delta: float=1.0/60.0, tuning: Node=null) -> void:
 	_tree = tree
 	_playback = tree.get("parameters/Locomotion/playback")
 	var moving: bool = s.move_input_magnitude > 0.01
 	var direction: Vector2 = s.move_local if s.horizontal_speed > 0.1 else Vector2(0,1)
+	# Clear Sprint contribution even while the old Free branch crossfades out.
+	if s.locked_on: gait_blend=minf(gait_blend,2.0)
 	tree.set("parameters/Locomotion/Loops/blend_position", gait_blend)
 	tree.set("parameters/Locomotion/Loops/Walk/blend_position", direction)
 	# No neutral backward Run source: use forward while the motor reorients.
 	tree.set("parameters/Locomotion/Loops/Run/blend_position", Vector2(direction.x, maxf(direction.y, 0.01)).normalized())
+	combat.update(tree,s,delta,tuning)
+	var was_locked:=_locked
+	_locked=s.locked_on
 	if not active or s.jump_started:
 		turn_180.cancel()
 		_active = false
@@ -137,6 +151,20 @@ func update(tree: AnimationTree, s, gait_blend: float, active: bool, visual: Nod
 		_had_input = moving
 		_last_gait = s.gait
 		return
+	if _locked:
+		turn_180.cancel()
+		transition=&"Loops" # Ordinary terrain/plant support, not a free action.
+		_active=true
+		_had_input=moving
+		_last_gait=s.gait
+		if _playback.get_current_node()!=&"Locked" and not _playback.get_travel_path().has(&"Locked"):
+			_playback.travel(&"Locked")
+		return
+	if was_locked:
+		transition=&"Loops"
+		_playback.travel(&"Loops")
+		_had_input=moving
+		_last_gait=s.gait
 	if not _active:
 		transition = &"Loops"
 		_active = true
@@ -192,11 +220,12 @@ func recover_playback() -> void:
 	if _playback == null or not _active:
 		return
 	var actual := _playback.get_current_node()
+	var expected: StringName=&"Locked" if _locked else transition
 	if not _playback.is_playing() or actual in [&"", &"Start", &"End"]:
-		_playback.start(transition)
+		_playback.start(expected)
 		playback_recoveries += 1
-	elif actual != transition and not _playback.get_travel_path().has(transition):
-		_playback.travel(transition)
+	elif actual != expected and not _playback.get_travel_path().has(expected):
+		_playback.travel(expected)
 		playback_recoveries += 1
 
 func on_pose_applied(visual: Node3D) -> void:

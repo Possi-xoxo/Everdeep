@@ -30,7 +30,7 @@ func run() -> void:
 	check(anim_player != null, "canonical AnimationPlayer is present")
 	check(controller != null and tree != null and tree.active, "canonical AnimationTree controller is active")
 	var required := {
-		&"IDL_IDLE_A": Animation.LOOP_LINEAR,
+		&"IDL_IDLE_A_RAW": Animation.LOOP_LINEAR,
 		&"LOC_WALKING": Animation.LOOP_LINEAR,
 		&"LOC_RUNNING_FOWARD_A": Animation.LOOP_LINEAR,
 		&"LOC_SPRINT_FORWARD": Animation.LOOP_LINEAR,

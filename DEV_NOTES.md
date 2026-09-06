@@ -1,3 +1,129 @@
+# Corrected master rig / backward locomotion (2026-09-06)
+
+Imported the desktop Blender Master Rig.glb (SHA256 9345D5BF993AF4DECA19461C2F1ED779457237440EDF66AB26D3896C8E480607). Previous binary backed up outside the project in Codex work/rig_backup_20260906_031339. Import settings retained.
+
+- Updated Walk uses re-exported LOC_WALKING_BACKWARDS under its existing name.
+- RunBack now uses LOC_RUNNING_BACKWARDS instead of the diagonal placeholder LOC_RUNNING_BACKWARDS_RIGHT.
+- Export omits IDL_IDLE_A and IDL_IDLE_B. User authorized RAW fallback: all executable Idle A references, including legacy controller and integration-test references, now use IDL_IDLE_A_RAW. No executable Idle B references existed. Historical notes below remain historical. Combat Idle D remains unchanged.
+- Added explicit backward Walk/Run blend-tree wiring assertions to test_lock_on_v2.gd. Movement, camera, and IK tuning unchanged.
+- Godot import and 120-frame main-scene smoke test completed without script errors. All 19 V2 suites ran: 15 passed; remaining failures are the previously known idle-contact, idle-planting, terrain-refinement assertions and 10 hardcoded uniform-speed assertions in lock-on tests (directional speeds are user-tuned). New backward mapping assertions pass; no script errors in suite logs. This is automated compatibility verification, not a guarantee of visual animation quality.
+- No commit or push performed.
+
+# V2 — Mousewheel Camera Distance Levels (2026-09-06)
+
+One shared player preference now drives Free and Locked camera distance. Inspector: **PlayerV2 / CameraRig / Camera Distance Levels**:
+
+- `camera_distance_level`: integer **5**, clamped 1–10, ready for a future preference store (no save/load added).
+- `camera_distance_min=2.0 m`, `camera_distance_max=6.5 m`.
+- `camera_distance_smoothing=12 /s`, exponential approach of requested SpringArm length.
+- `camera_distance_display_duration=5.0 s`.
+
+Linear mapping: min + (max-min)*(level-1)/9. Defaults give 0.5 m per level: 1=2.0 m, **5=4.0 m**, 6=4.5 m, 10=6.5 m. Thus the default requested distance is now 4.0 m rather than the earlier 4.5 m. Min/max stay Inspector-tunable; invalid reversed ranges collapse to the safe minimum rather than invert the wheel direction. The old independent `distance` and `lock_camera_distance` exports were replaced, not left as competing distance authorities. Optional `lock_camera_distance_multiplier=1.0` scales the selected distance during lock, blended by the existing mode weight.
+
+The existing camera `_unhandled_input` consumes pressed vertical wheel events before generic mouse-button capture: Up subtracts one level, Down adds one, with no wrap. A wheel event does not recapture a released cursor and already-handled UI scrolling does not reach the camera. Other orbit/F/gameplay controls remain intact. Level changes update the notification immediately, while requested SpringArm length approaches the newest target smoothly; collision hit length never writes the user's level. Startup initializes the selected distance without a notification.
+
+UI: **PlayerV2/UI/CameraDistanceDisplay**, a viewport-anchored Label on a separate CanvasLayer. Text `Camera Distance: N`, top margin 20 and right margin 24 logical pixels, right aligned, mouse-ignore. It stays independent of F3/F10 debug visibility. Every actual level change (wheel or runtime Inspector) restarts a single countdown. After five seconds it hides; no fade added. Repeated input at a clamped endpoint is not a level change and does not refresh the timer. Anchor checks account for the project's canvas stretch mode: 1280x720, 1920x1080 and 800x600 window sizes all retain the top-right inset in logical canvas coordinates.
+
+Free orbit and Locked target-facing/height/pitch behavior are unchanged. The SpringArm remains the only camera-distance placement authority; its existing mask, player exclusion, Free near-plane shape and Locked sphere sweep remain. Level 10 near a wall retracts via actual collision while the requested arm stays 6.5 m and level stays 10; removing the wall restores the selected distance. The optional multiplier defaults to one, so toggling lock cannot silently replace the chosen zoom. F10's default-off camera diagnostics now include selected level, target distance, requested arm length and collision length.
+
+New `test/test_camera_distance_v2.gd` passes: real viewport wheel dispatch, direction/clamping, non-snapping distance response, newest UI value/timer restart/hide, free orbit independence, resolution anchoring, Free/Locked zoom endpoints, target framing, multiplier, wall retraction/restoration with preference preserved, unlock persistence and configurable min/max. Existing camera-tuning and core player suites pass. The old `test_lock_on_v2` has speed assertion failures because it still assumes all combat directions use 4/6 m/s: current user tuning is backward Walk **3.0**, strafe Walk **3.5**, backward Run **4.5**. Those movement values and the old test were left untouched by this zoom task. The previously documented Idle A contact issues were not modified. Rendered level 1 Free and level 10 Locked views inspected for framing and top-right notification. Recommended starting settings remain min 2.0/max 6.5/smoothing 12; raise minimum toward 2.5 if a future character mesh needs more close-camera clearance.
+
+Changed this pass: `player_camera_v2.gd`, `player_v2.tscn` (UI only), new `test_camera_distance_v2.gd` (+UID), `test_lock_tuning_v2.gd` (assert selected distance instead of removed legacy distance property), and this document. No movement, targeting, animation, StepSolver, foot IK or pelvis edits. No settings menu, save system, shoulder/FOV/first-person features. No commit or push performed.
+
+# V2 Phase 4A.2 — Locked Camera + Combat Locomotion Tuning (2026-09-06)
+
+## Inspector guide and defaults
+
+Select the V2 player instance, or edit its reusable scene for persistent defaults:
+
+| Node / Inspector category | Controls and defaults |
+| --- | --- |
+| PlayerV2 / Lock-On Movement | `lock_walk_forward_speed`, `lock_walk_backward_speed`, `lock_walk_strafe_speed`: **4.0 m/s each** |
+| PlayerV2 / Lock-On Movement | `lock_run_forward_speed`, `lock_run_backward_speed`, `lock_run_strafe_speed`: **6.0 m/s each** |
+| PlayerV2 / Lock-On Movement | `lock_acceleration`, `lock_deceleration`: **0**, meaning inherit existing motor response |
+| CameraRig / Lock-On Camera | `lock_camera_distance=4.5 m`, `lock_camera_height=2.0 m`, `lock_camera_target_height_bias=0.0 m` |
+| CameraRig / Lock-On Camera | position smoothing **8/s**, rotation smoothing **12/s**, enter/exit blend times **0.25/0.25 s** |
+| CameraRig / Lock-On Camera | target framing weight **0.65**, max pitch up/down **40/45 degrees** |
+| AnimationController / Lock-On Animation Blending | mode enter/exit **0.15/0.15 s**, Idle-to-move / move-to-Idle **0.15/0.15 s** |
+| AnimationController / Lock-On Animation Blending | Walk-to-Run / Run-to-Walk **0.20/0.20 s**, direction blend speed **15/s** |
+| DebugCanvas | `lock_tuning_debug=false`; **F10** toggles the compact tuning overlay |
+
+Physical speed defaults deliberately preserve 4A.1 rather than selecting final combat pacing. Suggested manual experiment: backward Walk **2.8**, strafe Walk **3.2**, backward Run **4.5**, strafe Run **5.0**, with forward Walk/Run left at **4.0/6.0**. These are suggestions, NOT saved defaults. Change one value at a time in the Inspector. Remote Inspector changes apply during that session; edit the scene/local Inspector to persist them.
+
+## Locked camera architecture
+
+Retains CameraRig -> YawPivot -> PitchPivot -> SpringArm3D -> Camera3D. No direct camera positioning bypasses SpringArm. Locked mode smooths a world-space follow anchor toward the player, owns yaw from the horizontal player/target relationship, and aims pitch toward `lerp(player chest at 1.55 m, LockOnPoint + target height bias, target weight)`. Height is the **arm pivot/anchor height**, not an exact camera lens height: pitching the arm also moves its endpoint vertically. Default height was raised from the first 1.7 m trial to **2.0 m** after rendered inspection showed excessive player-head occlusion of the dummy. The original global FOV remains unchanged.
+
+Yaw/pitch use exponential response; the entry weight ramps smoothly over 0.25 s and rotation continues converging at the selected smoothing rate. Anchor position and arm distance blend between Free and Locked using that weight. Locked mouse motion is ignored. Unlock retains the current view angles (no return to a stale pre-lock yaw), immediately restores mouse input, and blends anchor/distance back over 0.25 s. Free sensitivity/pitch bounds/distance remain unchanged. Target loss uses the same exit path. Pitch limits avoid inversion with elevated targets; extremely close/high targets still require sensible framing values and may be constrained by collision/pitch limits.
+
+Collision remains the existing SpringArm query with the existing mask, excluded player RID, and margin. A **0.12 m SphereShape3D** is selected only while Locked or blending out; Free's original shape (null = automatic camera near-plane shape) is restored afterward. The near-plane fixture initially put the lens origin ~2 mm into a wall even though the view plane was protected; increasing margin did not meaningfully fix it. The small sphere solved that origin-clearance issue without adding a new query system or touching body collision. In the wall fixture, requested arm length 4.5 m retracts to ~1.689 m; camera Z 17.679 remains clear of wall front Z 17.8. This is not a promise against every thin/fast-moving geometry case; normal camera-collision playtesting still applies. Godot [SpringArm documentation](https://docs.godotengine.org/en/stable/classes/class_springarm3d.html) describes the retained shape-cast architecture.
+
+## Movement and animation tuning
+
+Directional physical speed is the weighted interpolation of longitudinal and strafe values, using abs(input.x)/(abs(input.x)+abs(input.y)); it never adds cardinal speeds. Motor input stays normalized/raw, and analog magnitude still scales the result once. Ground acceleration/turn response/deceleration inherit the existing values when overrides are zero. Positive overrides adjust locked ground acceleration/braking only; air control, free movement, lateral damping, jump/fall and StepSolver remain unchanged. No Sprint buildup or Sprint gait is introduced.
+
+AnimationController exports the independent blend values. Mode settings update only edges into/out of the nested Locked node. Combat Idle/Walk/Run transitions capture their current blend on a request change and interpolate over the chosen duration; rapid toggles start from the current blend, not a reset pose. Physics reads `combat_input`; the animation object separately exposes `raw_combat_move_input` and smoothed `move_blend`. Direction smoothing changes only animation, not physical steering or speed. Runtime tests lower direction response to 1/s while showing immediate raw right input.
+
+No optional playback-rate controls were added. No rate is calculated from CharacterBody speed. Existing cyclic directional phase synchronization is retained; solo clips remain at source speed. All previous canonical mappings, including the explicitly approved temporary `LOC_RUNNING_BACKWARDS_RIGHT`, remain unchanged. Mode transitions, Idle D, Walk/Run cardinal spaces and shared airborne architecture remain intact.
+
+F10 / `lock_tuning_debug` (default OFF) replaces the ordinary HUD with a compact targeting/camera/movement/blend view: mode, distance/height/weight, collision length, physical target/actual speed, Run/Sprint state, raw/smoothed input, branch/clip and directional F/B/L/R weights. Weights are computed from the actual 2D space's triangulation and closest edge, not guessed from raw input; they are within-direction weights, before the separate Idle/Walk/Run blend.
+
+## Validation and scope
+
+New `test_lock_tuning_v2.gd` passes: entry displacement bounded, behind-player target focus, mouse suppression/restoration, 400-frame Run circle with target in a 1280x720 viewport (sample ~649,349), elevated/depressed targets and pitch limits, no stale-yaw reset on unlock, restoration of Free anchor/distance, real SpringArm wall collision, independent Inspector speed changes, diagonal interpolation, raw-vs-smoothed input, tunable Walk/Run duration, live mode-edge durations, and directional debug weights. Existing `test_lock_on_v2` passes with the new camera, including indefinite Shift, invalid targets, Sprint entry, jumps, and locked 20 cm stair traversal. Rendered Idle and Run circling checked for player/target framing; this is not exhaustive human motion-quality testing.
+
+Full run: **15 suites pass, 3 existing Idle A-related suites fail** (Idle contact, Idle locks, contact-strength ratio). Same known failures as Phase 4A.1; no assertions weakened and no IK retuning. Main scene and editor import load without new script errors. Existing certificate-store and old canonical-lab recovery warnings remain unrelated.
+
+Changed this pass: `player_camera_v2.gd`, `player_v2.gd`, `player_animation_v2.gd`, `player_grounded_animation_v2.gd`, `player_combat_animation_v2.gd`, `player_debug_v2.gd`, new `test/test_lock_tuning_v2.gd` (+UID), and this document. No StepSolver, foot probes/IK/planting/pelvis, body collision, target acquisition, animation assets, weapons/attacks/dodge, or Sprint-rule changes. No commit or push performed.
+
+# V2 Phase 4A.1 — Lock-On Combat Locomotion (2026-09-06)
+
+## Controls, target contract and lab
+
+`lock_on` InputMap action uses physical F; the existing motor physics input boundary consumes its just-pressed state. F acquires a candidate or clears the current lock. Runtime `LockOnController` is a child of the reusable PlayerV2 scene, with FREE / LOCKED_ON modes. Target eligibility is a Node3D in group `lock_on_target`, with a direct Marker3D child named `LockOnPoint`. No target-dummy path is hardcoded in the controller. Removing the group or marker, queueing/freeing the target, or leaving range clears lock safely; target tree-exit also clears the reference immediately.
+
+New reusable `res://test/lock_on_target_dummy.tscn`: orange capsule/base, chest marker at 1.4 m, F-key label; deliberately no collision/combat/AI. One instance at **(8, 0, 10)** in `player_v2_lab.tscn`, visible ahead-right from spawn (0, 0.1, 18), away from the main test lane. Existing terrain geometry is unchanged. Yellow chest reticle is owned by the locking player, follows LockOnPoint and faces the camera. Its unshaded/no-depth-test material keeps it visible inside the dummy mesh; it disappears on unlock. This is debug UI, not final occlusion-aware targeting art.
+
+Inspector settings on LockOnController: acquisition **20 m**, acquisition half-angle **80 degrees** from horizontal camera forward, break distance **30 m**, rotation response **12 /s exponential**. Score is normalized angle + 0.25 * normalized distance, so centered candidates lead, with distance breaking similarly centered choices. Runtime break radius is at least acquisition radius. No line-of-sight rejection, target cycling, camera auto-orbit, or enemy-specific target API added.
+
+## Movement and mode boundaries
+
+Locked forward is normalized horizontal player-to-marker direction; right = forward cross world-up. Input uses right*x - forward*y, diagonals normalized. Body yaw smoothly follows target independently of camera orbit and velocity. At coincident horizontal positions use current body forward rather than a zero basis. A/D are tangential motion through the normal CharacterBody motor, not orbital position constraints.
+
+No Shift: existing Walk **4 m/s**. Shift: existing Run end speed **6 m/s**, immediately requested without buildup; acceleration/deceleration remain existing values. Locked `_run_time` and published buildup stay zero, gait is only Walk/Run. Entering lock immediately cancels Sprint gait/buildup and any active/pending free 180; the next animation update removes any Free Sprint blend contribution even during the Free-to-Locked crossfade. The Locked animation branch contains no Sprint. Unlock begins normal Free buildup from zero rather than a hidden saved Sprint timer. Neither toggle writes velocity or body position; speed changes use the existing motor response. Free movement retains all tuned values and its previous camera-relative logic.
+
+Locked input bypasses only free directional-arc/reversal initiation and travel-facing yaw; it does NOT use the global action/StepSolver suppression flag. StepSolver still receives target-relative horizontal motion and ordinary eligibility. Existing Jump/Fall/Land logic is retained: logical lock persists in air, yaw can track target, and landing returns to Locked. No special combat jumps. Stationary free-turn/pivot animation callbacks cannot overwrite locked target yaw because their coordinator is canceled and grounded Free actions are bypassed.
+
+## Animation architecture and exact imported Actions
+
+Preserved outer Locomotion / JumpStanding / JumpMoving / Fall / Land machine. Inside Locomotion: original Free `Loops` and action nodes plus dedicated `Locked` branch. This keeps existing ordinary-locomotion IK/planting hooks and recovery ownership intact. Locked uses a 1D Idle/Walk/Run blend (0/1/2), with four-cardinal 2D spaces under Walk and Run. Idle is separate, not embedded in direction spaces. Direction parameters use normalized combat input (+X right, +Y forward), exponentially filtered at 15/s; gait blends at 0.2 s. Grounded mode transition uses existing 0.15 s return blend into Free, 0.15 s turn blend into Locked. No per-frame animation restart or time seeking.
+
+| Combat role | Actual imported Action |
+| --- | --- |
+| Idle | `IDL_IDLE_D` |
+| Walk forward | `LOC_WALKING` |
+| Walk back | `LOC_WALKING_BACKWARDS` |
+| Walk left / right | `LOC_LEFT_STRAFE_WALKING` / `LOC_RIGHT_STRAFE_WALKING` |
+| Run forward | `LOC_RUNNING_FOWARD_A` (existing rig spelling) |
+| Run back, TEMPORARY | `LOC_RUNNING_BACKWARDS_RIGHT` |
+| Run left / right | `LOC_LEFT_STRAFE` / `LOC_RIGHT_STRAFE` |
+
+The requested `LOC_WALK_BACKWARDS`, `LOC_RUNNING_FORWARD_A`, and `LOC_RUNNING_BACKWARDS` are absent under those exact names. User authorized the existing backward-right run pending re-export. Replace **`player_combat_animation_v2.gd` -> `CLIPS.RunBack`** when the proper neutral backward action is imported; no state/motor change needed. No weapon-specific substitutions made.
+
+All nine clips are checked at runtime, looped in the instance-local animation library and use the existing in-place hips-horizontal normalization/reference from Free Idle A. Authored vertical and bone rotation motion remain; source GLB is untouched. Directional spaces use `SYNC_MODE_CYCLIC_MUTABLE` (solo clips keep natural speed; mixed clips share normalized phase). Parent gait space stays independent because it has nested spaces and a separate Idle. See Godot's [BlendSpace2D sync documentation](https://docs.godotengine.org/en/stable/classes/class_animationnodeblendspace2d.html). No seams are hidden with source edits, seeks or root-motion hacks. Backward-right is knowingly not a true straight backpedal; source-loop/motion-quality playtesting remains appropriate after the replacement export.
+
+## Debug and validation
+
+V2 HUD adds LOCK-ON: mode, target name, marker distance, acquisition angle, combat gait/input, yaw error, Sprint Allowed, FREE/LOCKED branch and dominant combat clip (labeled directional blend). Existing air animation label remains visible. Camera script is unchanged. Rendered locked Idle D and Run-strafe poses/UI were inspected; reticle depth behavior was corrected after that visual check.
+
+New `test/test_lock_on_v2.gd` passes: real parsed F-key input; group/marker acquisition; front/behind/range checks; centered-versus-near scoring with a second test-only dummy; all eight directions at 4/6 m/s; diagonal normalization; target-facing; indicator clear; camera orbit independence; loop resource/branch structure; 1000 Shift-strafe frames with no Sprint/buildup; lock while Sprinting; preservation of toggle velocity; cancel active Free Run180 and backpedal without retriggering; standing/moving locked jumps, Fall/Land return, playback recovery; target removal/freeing; and locked Walk/Run ascent of six existing 20 cm steps. Circling for 16.67 s (~two revolutions) measured radius 8.00 -> 8.60 m, maximum yaw error 3.95 degrees. Small outward integration drift is retained rather than adding prohibited orbit constraints.
+
+Existing regression run: **13 pass, 3 fail**; new lock-on suite passes separately. Remaining failures are the committed Idle A baseline's Idle sole contact, both Idle-lock assertions, and contact-strength improvement ratio. The latter was explicitly repeated against committed 5b10bf4: both old/current runs give mean 0.0259134 -> 0.0163896 m, above the test's 0.60 ratio threshold. Tests were not weakened and IK was not retuned for combat. Other suites pass: motor, grounded animation, foot IK, pelvis, landing compression, pivots, arcs, recovery, passive fall, grounding, StepSolver, narrow steps, knees. Main scene loads without script errors; environment certificate-store warning remains unrelated.
+
+StepSolver, FootGrounding, FootIK (including 40 cm Idle pelvis selection and knee guidance), planting, pelvis modifier, camera and reversal resource are byte-identical to committed 5b10bf4. Body capsule/physics settings and all existing motion exports are unchanged. Existing strafing/terrain contact imperfections are not solved in this foundation. Dummy can be walked through; acquisition/reticle can see through walls; no final lock camera, health, weapons, attacks, dodge, stamina, damage, target cycling, or AI.
+
+Changed: `project.godot`; `player_v2.gd/.tscn`, `player_animation_state.gd`, `player_animation_v2.gd`, `player_grounded_animation_v2.gd`, `player_debug_v2.gd`; new `player_lock_on_v2.gd`, `player_combat_animation_v2.gd`; lab scene, new dummy scene and lock-on test; corresponding generated UIDs; this document. No commit or push performed for Phase 4A.1.
+
 # V2 — Idle A Selection (2026-09-06)
 
 User requested `IDL_IDLE_A` (not RAW), replacing `IDL_IDLE_B_RAW`. Verified the clip exists in the canonical GLB (8.3333 s). Updated primary Idle mapping, grounded hips-reference lookup and active blend-space node. No movement, crossfade, IK, pelvis or imported asset edits. Player and grounded-animation suites pass. Idle-contact suite reports one reachable-sole contact failure; planting suite reports both Idle-lock assertions failing with this different authored pose. Retained all existing tuning and test assertions; animation selection alone does not guarantee the previous Idle B contact results. See the latest test results before treating this as a stable IK checkpoint. No commit/push performed.

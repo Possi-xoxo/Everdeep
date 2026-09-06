@@ -1,7 +1,7 @@
 class_name PlayerAnimationController
 extends Node
 
-const IDLE_NAME := &"IDL_IDLE_A"
+const IDLE_NAME := &"IDL_IDLE_A_RAW"
 const WALK_NAME := &"LOC_WALKING"
 const RUN_NAME := &"LOC_RUNNING_FOWARD_A"
 const SPRINT_NAME := &"LOC_SPRINT_FORWARD"

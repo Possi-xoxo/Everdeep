@@ -1,6 +1,8 @@
 extends RefCounted
 ## Written once after move_and_slide by the motor; read-only to presentation.
 enum Gait { WALK, RUN, SPRINT }
+var locked_on: bool = false
+var combat_input := Vector2.ZERO
 var horizontal_speed: float = 0.0
 var vertical_velocity: float = 0.0
 var is_grounded: bool = false
