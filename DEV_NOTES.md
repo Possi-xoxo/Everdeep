@@ -1,3 +1,50 @@
+# V2 — Idle A Selection (2026-09-06)
+
+User requested `IDL_IDLE_A` (not RAW), replacing `IDL_IDLE_B_RAW`. Verified the clip exists in the canonical GLB (8.3333 s). Updated primary Idle mapping, grounded hips-reference lookup and active blend-space node. No movement, crossfade, IK, pelvis or imported asset edits. Player and grounded-animation suites pass. Idle-contact suite reports one reachable-sole contact failure; planting suite reports both Idle-lock assertions failing with this different authored pose. Retained all existing tuning and test assertions; animation selection alone does not guarantee the previous Idle B contact results. See the latest test results before treating this as a stable IK checkpoint. No commit/push performed.
+
+# V2 — Idle B RAW Selection (2026-09-06)
+
+User requested the RAW version of the same active Idle letter. Verified both `IDL_IDLE_B` and `IDL_IDLE_B_RAW` exist in the canonical Blender Master Rig.glb. Switched the V2 primary Idle mapping, grounded blend-space Idle node and grounded hips reference lookup to `IDL_IDLE_B_RAW` (9.9667 s). Existing runtime looping/in-place normalization and all movement, crossfade, IK and pelvis settings remain unchanged; no imported animation data edited. Player, grounded animation, Idle contact and foot planting suites pass. Knee stability has one strict-threshold failure: the 25-degree UPHILL Walk fixture measures 5.53 mm inward deviation against its 5 mm assertion; downhill, diagonal, turning and stair checks pass. Left the test and IK tuning unchanged rather than broadening this animation-selection request. Changed `player_animation_v2.gd`, `player_grounded_animation_v2.gd` and this document. No commit/push performed.
+
+# V2 — Downhill Walk Knee Stabilization (2026-09-06)
+
+## Diagnosis and scope
+
+Existing `LeftKneePole` / `RightKneePole` markers already feed native `TwoBoneIK3D` chains (UpLeg -> Leg -> Foot). They were positioned at the animated knee plus its projected bend vector times 0.6 m. That is an animation-derived plane, not an anatomical body-relative reference: a small inward component becomes a much larger medial bend when terrain IK flexes the leg. Below 15 mm bend magnitude the old fallback abruptly chooses body-forward. The existing "knee_stable" test only checks the solver agrees with its own pole, so it cannot detect an inward-pointing pole. New tests measure signed body-outward knee displacement from the hip-to-ankle axis using the FINAL modifier callback pose.
+
+Reproduced with identical real physics/Walk cycles on generated ramps: old maximum support-phase medial deviation was 23.44 mm flat, 74.21 mm at 12 degrees, 106.82 mm at 25 degrees, 116.33 mm at 35 degrees, and 113.87 mm at 40 degrees. Pole-only correction removes the large downhill amplification without changing ankle destinations, pelvis or solver weights. Foot torsion is not implicated: PreserveAnimatedAnkles already restores authored ankle world orientation after both IK solvers. No normal alignment or artificial yaw was being applied. Existing reach/partial-weight limits do leave slope contact error, but no larger pelvis budget or IK attenuation was required to stabilize the knees.
+
+## Pole implementation and tuning
+
+Retained runtime hierarchy `PlayerV2/FootIKController/{LeftKneePole,RightKneePole}` and all native bone chains. Ordering remains animation -> probes/confidence -> pelvis lowering -> target/pole placement -> left/right solvers -> authored ankle orientation -> diagnostics. Only ordinary grounded moving Walk/Loops receives new guidance; Idle, Run, Sprint, air, land/actions and reversals keep the previous pole path exactly.
+
+Inspector category **Walk Knee Stabilization**:
+
+- `walk_knee_stabilization_enabled=true` is the A/B switch.
+- `knee_pole_forward_offset=0.40 m` along VisualRoot -Z.
+- `knee_pole_outward_offset=0.10 m` from each hip: left -X, right +X.
+- `knee_pole_vertical_offset=0.00 m` relative to bounded animated knee-height reference, not the foot.
+- `knee_pole_smoothing_speed=15 /s`: exponential smoothing of the hip-relative reference in body space (knee-height/tuning changes). Body translation and yaw are applied immediately, so poles cannot lag behind the body or cross sides during turns. This intentionally does not world-space low-pass character yaw.
+- `walk_downhill_knee_stabilization_angle=25 degrees`, with smooth 20–30 degree strengthening. Reads existing ground normals; positive dot of horizontal movement and normal identifies descending motion, including diagonals. No new probes or gameplay slope limit.
+
+Preferred target is hip plus body-basis local forward/outward/knee-height offsets. Blend from authored pole by smoothstep(0.1, 0.65, support confidence) times 0.65 on flat/uphill, approaching 1.0 on steep downhill. Below 0.1 support there is no additional guidance, and existing IK/swing release is unchanged. Near-straight (<15 mm projected bend) supporting legs use the preferred reference at full support strength rather than normalizing a tiny animation bend. Native 99.5% reach clamp remains. Modest outward offset was tested against solved knee displacement; maximum supporting outward displacement across the Walk ramp fixtures is ~4.7 cm, not a forced wide stance.
+
+Walk downhill IK multiplier: **1.0 (no attenuation)**; ordinary Walk weight remains **0.95**. Pelvis multiplier: **1.0 (no additional attenuation)**; ordinary pelvis weight/cap remain 0.8 / 0.20 m. Idle max drop remains **0.40 m**, with all prior Idle settings untouched. No new foot-rotation constraints; authored orientation restoration is unchanged.
+
+## Debug and verification
+
+**F9** independently toggles knee geometry and KNEE IK overlay: colored hip/knee/ankle/pole crosses, limb segments, knee-to-pole line and left/right outward arrows; per-leg pole validity, slope degrees, support, guidance and IK multiplier. F8 retains existing foot/pelvis display. Knee diagnostics capture actual final hip/knee positions, not the skeleton's restored animation pose.
+
+New `test/test_knee_stability_v2.gd` builds a test-only ramp (no live lab/terrain edits), drives all three gaits on 0/12/25/35/40 degree slopes, uphill/diagonal/turning Walk at 25 degrees, then descends actual 15/20 cm lab stairs. Supports `-- --baseline` to disable the new guidance and `-- --render-knee` for a rendered 25-degree comparison saved under user://. Waits for modifier completion before comparing support and solved bones.
+
+Final Walk maximum medial deviation: flat **6.39 mm**, gentle downhill **15.82 mm**, 25/35 degrees **0 mm**, 40 degrees **0.63 mm**. Uphill/diagonal 25-degree samples: 0 mm; turning: 0.14 mm. Supporting knee forward direction stays positive. Both stair descents complete with stable bend planes and preserved limb lengths (180/164 supporting samples). No degenerate poles or limb extension observed. Run/Sprint baseline versus enabled metrics are identical across every slope. Flat Walk adds only modest guidance; rendered 25-degree before/after poses were inspected without an obvious wide-legged posture, but still require player motion-quality review.
+
+All 15 existing suites plus the new knee suite pass. This includes Idle contact through 40 cm, foot planting/lock release, Jump/Fall recovery, pivots, turn arcs, StepSolver and narrow steps. Main-scene smoke check passes aside from the environment's existing certificate-store warning.
+
+Known limitations: support thresholds are unchanged and swing remains animation-driven; this is not a hard anatomical knee-angle constraint or proof against all authored poses. Steep Walk support samples still show maximum ankle contact errors ~15.7–17.7 cm, essentially identical to baseline, due to existing correction/reach/influence budgets. Those limits were not relaxed to hide the error. The pole smoothing setting smooths the local reference, not world-space yaw; full-speed visual playtesting remains recommended.
+
+Modified: `Characters/Player/V2/player_foot_ik_v2.gd`, `Characters/Player/V2/player_debug_v2.gd`, new `test/test_knee_stability_v2.gd`, and this document. Motor/capsule, StepSolver, grounding probes, planting architecture, pelvis modifier, ankle orientation and reversal scripts are hash-identical to committed 6000e49. No commit/push performed for this pass.
+
 # V2 — Authorized 40 cm Idle Pelvis Budget (2026-09-06)
 
 Supersedes the reach limitation documented in the previous Idle refinement below. User authorized increasing the Idle pelvis cap from 20 to 40 cm and retrying those tests.

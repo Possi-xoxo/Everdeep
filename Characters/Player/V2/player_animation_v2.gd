@@ -5,7 +5,7 @@ const Grounded = preload("res://Characters/Player/V2/player_grounded_animation_v
 @export var debug_tree_playback: bool = false
 var playback_recoveries: int = 0
 const CLIPS := {
-	"Idle": &"IDL_IDLE_B", "Walk": &"LOC_WALKING",
+	"Idle": &"IDL_IDLE_A", "Walk": &"LOC_WALKING",
 	"Run": &"LOC_RUNNING_FOWARD_A", "Sprint": &"LOC_SPRINT_FORWARD",
 	"JumpStanding": &"AIR_STANDING_JUMP_(2)", "JumpMoving": &"AIR_RUNNING_JUMP",
 	"Fall": &"AIR_FALLING_IDLE", "Land": &"AIR_FALLING_TO_LANDING",

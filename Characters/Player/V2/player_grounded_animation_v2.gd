@@ -30,7 +30,7 @@ var playback_recoveries: int = 0
 func prepare(player: AnimationPlayer) -> bool:
 	_player = player
 	var reference := Vector3.ZERO
-	var idle := player.get_animation("IDL_IDLE_B")
+	var idle := player.get_animation("IDL_IDLE_A")
 	for t in idle.get_track_count():
 		if idle.track_get_type(t) == Animation.TYPE_POSITION_3D and String(idle.track_get_path(t)).ends_with(":mixamorig_Hips"):
 			reference = idle.track_get_key_value(t, 0)
@@ -93,7 +93,7 @@ func build() -> AnimationNodeStateMachine:
 	# Gait children include nested spaces, not finite AnimationNodeAnimation
 	# leaves: cyclic sync is inappropriate here. Preserve Phase 1 gait clocks.
 	loops.sync_mode = AnimationNodeBlendSpace1D.SYNC_MODE_INDEPENDENT
-	loops.add_blend_point(animation("IDL_IDLE_B"), 0, -1, &"Idle")
+	loops.add_blend_point(animation("IDL_IDLE_A"), 0, -1, &"Idle")
 	loops.add_blend_point(directional(false), 1, -1, &"Walk")
 	loops.add_blend_point(directional(true), 2, -1, &"Run")
 	loops.add_blend_point(animation("LOC_SPRINT_FORWARD"), 3, -1, &"Sprint")

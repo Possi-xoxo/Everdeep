@@ -2,6 +2,15 @@ extends Node3D
 const Orientation = preload("res://Characters/Player/V2/player_foot_ik_orientation_v2.gd")
 const Pelvis = preload("res://Characters/Player/V2/player_pelvis_ik_v2.gd")
 const Planting = preload("res://Characters/Player/V2/player_foot_planting_v2.gd")
+@export_category("Walk Knee Stabilization")
+@export var walk_knee_stabilization_enabled: bool = true
+@export_range(0.25,0.50,0.01) var knee_pole_forward_offset: float = 0.40
+@export_range(0.08,0.20,0.01) var knee_pole_outward_offset: float = 0.10
+@export_range(-0.10,0.10,0.01) var knee_pole_vertical_offset: float = 0.0
+@export_range(10,20,0.5) var knee_pole_smoothing_speed: float = 15.0
+@export_range(15,35,1) var walk_downhill_knee_stabilization_angle: float = 25.0
+@export var knee_ik_debug: bool = false
+var _pose_delta: float = 1.0/60.0
 @export_category("Idle Foot Contact")
 @export var idle_ik_override_enabled: bool = true
 @export_range(0.2,0.4,0.01) var idle_max_pelvis_drop: float = 0.40
@@ -120,6 +129,7 @@ func _after_pose() -> void:
 	skeleton.advance(get_physics_process_delta_time())
 
 func prepare_targets(delta: float) -> void:
+	_pose_delta=delta
 	for i in legs.size():
 		var leg: Dictionary=legs[i]
 		var data=feet.left if i==0 else feet.right
@@ -219,7 +229,45 @@ func place_targets() -> void:
 			bend=-motor.visual.global_basis.z
 			bend-=axis*bend.dot(axis)
 		leg.pole.global_position=knee+bend.normalized()*0.6
+		_stabilize_knee(leg,hip,knee,destination)
 		leg.solver.influence=leg.weight
+
+func _stabilize_knee(leg: Dictionary,hip: Vector3,knee: Vector3,destination: Vector3) -> void:
+	var data=feet.left if leg.side=="Left" else feet.right
+	var basis: Basis=motor.visual.global_basis.orthonormalized()
+	var outward: Vector3=basis.x*(-1.0 if leg.side=="Left" else 1.0)
+	leg.slope_angle=rad_to_deg(acos(clampf(data.ground_normal.dot(Vector3.UP),-1,1))) if data.valid else 0.0
+	leg.ik_multiplier=1.0 # Pole correction only; gait/pelvis weights are untouched.
+	var movement:=Vector3(motor.velocity.x,0,motor.velocity.z)
+	var downhill: bool=data.valid and movement.length()>0.1 and movement.normalized().dot(data.ground_normal)>0.02
+	var s=motor.animation_state
+	var animation=motor.get_node("AnimationController")
+	var active: bool=walk_knee_stabilization_enabled and enabled and data.valid and s.is_grounded and not s.is_airborne and not s.jump_started and s.gait==0 and s.move_input_magnitude>0.01 and animation.current_state==&"Locomotion" and animation.grounded.transition==&"Loops" and not motor.turn_180.active
+	leg.pole_guidance=0.0
+	leg.outward=outward
+	if active:
+		# Hip-relative reference follows the body, not the animated foot/knee XZ.
+		# Smooth in body space so translation/turns cannot leave a pole behind.
+		var knee_height: float=clampf((knee-hip).dot(basis.y),-leg.upper_length,-leg.upper_length*0.3)
+		var desired:=Vector3((-1.0 if leg.side=="Left" else 1.0)*knee_pole_outward_offset,knee_height+knee_pole_vertical_offset,-knee_pole_forward_offset)
+		var local: Vector3=leg.get("pole_local",desired)
+		local=local.lerp(desired,1-exp(-knee_pole_smoothing_speed*_pose_delta))
+		leg.pole_local=local
+		var preferred: Vector3=hip+basis*local
+		var steep: float=smoothstep(walk_downhill_knee_stabilization_angle-5,walk_downhill_knee_stabilization_angle+5,leg.slope_angle) if downhill else 0.0
+		var guidance: float=smoothstep(0.1,0.65,leg.swing)*lerpf(0.65,1.0,steep)
+		var axis: Vector3=(destination-hip).normalized()
+		var animated_bend: Vector3=knee-hip-axis*(knee-hip).dot(axis)
+		# Near extension has no reliable animation plane; use the anatomical
+		# reference rather than normalizing a tiny or sign-changing knee vector.
+		if animated_bend.length()<0.015: guidance=smoothstep(0.1,0.65,leg.swing)
+		leg.pole.global_position=leg.pole.global_position.lerp(preferred,guidance)
+		leg.pole_guidance=guidance
+	else:
+		leg.erase("pole_local")
+	var pole_axis: Vector3=(destination-hip).normalized()
+	var pole_direction: Vector3=leg.pole.global_position-hip
+	leg.pole_valid=leg.pole.global_position.is_finite() and pole_direction.cross(pole_axis).length()>0.001
 
 func _capture_result() -> void:
 	for leg in legs:
@@ -230,17 +278,29 @@ func _capture_result() -> void:
 		leg.contact_error=leg.solved.distance_to(leg.plant.locked_world_position) if leg.plant.locked else leg.terrain_error
 		var hip:=_world(leg.bones[0]).origin
 		var knee:=_world(leg.bones[1]).origin
+		leg.solved_hip=hip
+		leg.solved_knee=knee
 		var axis: Vector3=(leg.solved-hip).normalized()
 		var bend: Vector3=knee-hip-axis*(knee-hip).dot(axis)
 		var pole: Vector3=leg.pole.global_position-hip
 		pole-=axis*pole.dot(axis)
 		leg.knee_stable=bend.dot(pole)>=-0.0001
 		leg.length_error=maxf(absf(hip.distance_to(knee)-leg.upper_length),absf(knee.distance_to(leg.solved)-leg.lower_length))
-	_debug_node.visible=foot_ik_debug
-	if not foot_ik_debug: return
+	_debug_node.visible=foot_ik_debug or knee_ik_debug
+	if not _debug_node.visible: return
 	_mesh.clear_surfaces()
 	_mesh.surface_begin(Mesh.PRIMITIVE_LINES,_material)
 	for leg in legs:
+		if knee_ik_debug:
+			var color:=Color.CORNFLOWER_BLUE if leg.side=="Left" else Color.HOT_PINK
+			_line(leg.solved_hip,leg.solved_knee,color)
+			_line(leg.solved_knee,leg.solved,color)
+			_line(leg.solved_knee,leg.pole.global_position,Color.YELLOW)
+			_line(leg.solved_hip,leg.solved_hip+leg.outward*0.25,color)
+			for axis in [Vector3.RIGHT,Vector3.UP,Vector3.FORWARD]:
+				for point in [leg.solved_hip,leg.solved_knee,leg.solved,leg.pole.global_position]:
+					_line(point-axis*0.025,point+axis*0.025,color)
+		if not foot_ik_debug: continue
 		_line(leg.animated,leg.target.global_position,Color.YELLOW)
 		_line(leg.target.global_position,leg.solved,Color.CYAN)
 		_line(leg.solved-Vector3.RIGHT*0.04,leg.solved+Vector3.RIGHT*0.04,Color.LIME_GREEN)
@@ -285,3 +345,9 @@ func debug_text() -> String:
 			else:
 				result+="\nTerrain Target Error: %s / Solver Error: %.3fm" % [("%.3fm" % leg.terrain_error) if data.valid else "N/A",leg.solver_error]
 	return result+"\n\n"+pelvis.debug_text()
+
+func knee_debug_text() -> String:
+	var result:="KNEE IK (F9)"
+	for leg in legs:
+		result+="\n%s Pole Valid: %s / Slope: %.1f deg\nSupport: %.2f / Guidance: %.2f / IK Multiplier: %.2f" % [leg.side,leg.get("pole_valid",false),leg.get("slope_angle",0.0),leg.swing,leg.get("pole_guidance",0.0),leg.get("ik_multiplier",1.0)]
+	return result

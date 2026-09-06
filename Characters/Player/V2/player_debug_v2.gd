@@ -4,6 +4,10 @@ extends CanvasLayer
 @onready var motor = get_parent()
 
 func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F9:
+		var ik=motor.get_node("FootIKController")
+		ik.knee_ik_debug=not ik.knee_ik_debug
+		if ik.knee_ik_debug: enabled=true
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F8:
 		var ik = motor.get_node("FootIKController")
 		ik.foot_ik_debug=not ik.foot_ik_debug
@@ -27,6 +31,7 @@ func _process(_delta: float) -> void:
 	label.text = "Player V2\n\nGait: %s\nPhysical: %s\nAnimation: %s\nHorizontal Speed: %.2f m/s\nVertical Velocity: %.2f m/s\nRun Buildup: %.0f%%\nAir Time: %.2f s\n\nWASD: Move  Shift: Run / Sprint\nSpace: Jump  Mouse: Orbit\nF3: Debug  Esc: Release mouse" % [gait, "GROUNDED" if s.is_grounded else "AIRBORNE", $"../AnimationController".presentation_label(), s.horizontal_speed, s.vertical_velocity, s.run_buildup_ratio * 100.0, s.air_time]
 	var animation = $"../AnimationController"
 	var ik = motor.get_node("FootIKController")
+	if ik.knee_ik_debug: label.text += "\n\n"+ik.knee_debug_text()
 	if ik.foot_ik_debug: label.text += "\n\n"+ik.debug_text()
 	var feet = motor.get_node("FootGrounding")
 	if feet.foot_grounding_debug:
