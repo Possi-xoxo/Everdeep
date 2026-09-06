@@ -1,3 +1,45 @@
+# Softer Crouched Idle Blends (2026-09-06)
+
+Crouch move-to-idle and idle-to-move blends restored to .30s each (ranges extended to .60s). These also govern posture transitions into/out of crouched Idle and returns to crouched Idle; final edge configuration prevents the .08s posture handoff from overriding Idle softness. Locked idle uses the same .30s radial blend. Direct moving posture switches remain .15s; idle grace .15s, movement-intent continuity, BOW assignments, physical tuning and action takeoff timing are unchanged. Supersedes the shorter continuity defaults below.
+
+# Crouch Locomotion Continuity (2026-09-06)
+
+Removed the crouch run-stop node, binding, edges and timer/selection logic. The requested BOW_RUNNING_TO_STOP behavior was actually bound as BOW_STANDING_RUN_FORWARD_STOP in this project. That source animation remains in the imported GLB; it is no longer selected by crouch. Other BOW assignments remain intentional and unchanged.
+
+Animation intent uses current raw stick magnitude > crouch_move_input_threshold (.12). Separate animation_moving / animation_running flags retain the previous movement presentation during crouch_idle_entry_delay (.15 seconds) of sub-threshold input. Returning input clears the timer without re-entering the animation. Real stops crossfade straight to Idle, using crouch_move_to_idle_blend .15s; idle departure uses crouch_idle_to_move_blend .12s. Settings appear under Crouch > Locomotion Continuity, with existing direction smoothing speed 12. Recommended initial tuning is .12 / .15s / .15s / .12s respectively.
+
+Free movement selection was already input-based, not velocity-based; it now tolerates short gaps/overlapping opposite keys. Locked Cartesian direction interpolation could cross the blendspace's Idle center even with continuous input. It now smooths direction angle around the cardinal diamond, keeping movement weight separate from heading; only true Idle entry reduces that weight. Current direction is tracked from input independently of physical velocity. This eliminates Idle weight during Locked reversals without changing acceleration, braking, speed or facing physics.
+
+Motor change only passes delta to presentation continuity. Existing running-speed calculation, direct moving crouch architecture, toggle, capsule/clearance and action priority are retained. Dodge/air/inactive posture clears presentation grace. Debug shows raw intent, timer, retained animation mode/direction, speed and stop-clip-disabled status.
+
+Automated PASS: test_crouch_continuity_v2 (Free/Locked Walk/Run W↔S, A↔D, rapid WASD, forced zero-speed samples, brief input gaps, true stop, noise rejection, zero Idle weight on Locked diamond, Dodge during grace, source stop retained); existing crouch, locked crouch, modifier handoff and toggle suites also pass. Manual visual play-testing remains recommended. Earlier run-stop documentation below is historical and superseded.
+
+# Crouch Locomotion Modifier Architecture (2026-09-06)
+
+Supersedes moving handoff timing in the previous section. User confirmed preservation of BOW assignments, functional Shift crouch-running, and CTRL toggle; no LOC replacements or Walk-only downgrade.
+
+Moving entry/exit now bypass CRC posture clips entirely. Physical ENTER/EXIT tracks capsule resizing independently, while presentation immediately selects crouch Walk/Run (Free) or the corresponding Locked directional blendspace, and returns directly to standing Loops/Locked. Existing current-input gait/direction priming avoids idle weight on re-entry. Moving enter/exit blend settings default to .15s each (Inspector Crouch > Moving Transitions, range .10–.20); existing collider transition speed 4.0 remains there too. Moving completion depends on capsule height, never idle handoff progress or clip duration.
+
+Stationary entry/exit retains CRC clips and the previous .88/.08s handoff. Starting movement during stationary entry bypasses the remaining clip once the crouch capsule is established; starting movement during exit bypasses the clip after the existing clearance check. There is one physical phase controller and one animation selector, not competing state machines. No moving route includes CrouchIdle or a posture clip as an intermediary.
+
+Standing Run/Sprint buildup is cleared on entry without stopping momentum. Shift continues to select the intentional BOW crouch Run at its existing speed; without Shift, crouch Walk retains its speed. Free exit returns through Walk before normal gait promotion; Locked retains its current supported Walk/Run restoration. No movement tuning or action curves changed.
+
+Capsule interpolation keeps its original dimensions, rate, and fixed base. Repeated full-height clearance validation remains authoritative during exit expansion. A blocked release keeps crouch movement; when clear, current input selects direct moving exit or stationary posture exit. Dodge priority and return behavior, jump restriction, source GLB, IK, StepSolver, hands and camera remain unchanged. Debug includes modifier state, physical phase, selected clip, movement, previous gait, target speed and whether a posture clip or direct resize is active.
+
+Regression: updated test_crouch_handoff_v2 now tests direct moving entry/exit, no intermediary node, smooth independent capsule sizing, speed preservation, Run/Sprint entry, stationary interruption, low ceiling release, and all four Locked directions at Walk/Run. It passes, as do crouch, locked crouch, toggle and run-roll handoff suites. Visual blend feel requires manual play-testing; recommended initial blends are .15s/.15s.
+
+# Crouch Dynamic Transition Destinations (2026-09-06)
+
+Preserves CTRL toggle and the current CRC/BOW set; older hold-CTRL / LOC clip examples in the task are not asset or input changes. Existing Free selection was already dynamic, not a hardwired Idle bridge. The hitch risks were full transition-tail playback, stale/smoothed destination gait or direction (especially late input), and nested standing Start routing through Free Loops before Locked.
+
+Inspector: Crouch > Transitions exposes enter/exit handoff progress .88/.88 (range .80–.95), handoff crossfade .08 seconds (.05–.15), and meaningful input threshold .15 (.10–.20). Ordinary crouch locomotion crossfades remain .30 seconds. Start manual tuning at the defaults; .90 progress and .10–.12s blend are alternatives if the default feels too early/sharp.
+
+The motor supplies CURRENT stick and Shift every physics tick, not a transition-entry snapshot. At handoff, Free entry selects CrouchIdle without meaningful input, otherwise BOW crouch Walk/Run according to current Shift. Locked entry selects its current directional Walk/Run blendspace, primed to current combat input (or its idle center). Free exit selects standing Idle/Walk directly; normal Run/Sprint promotion follows physical completion. Locked exit selects current directional Walk/Run or its existing Idle, never Sprint. Source crossfade supplies pose blending, so destination gait/direction does not first interpolate from an obsolete Idle. Nested standing Start now resolves to current Free/Locked mode in the same evaluation.
+
+One handoff pulse per transition; normal destination selection continues afterward. Original physical phase completion thresholds, capsule dimensions/interpolation and repeated clearance validation remain in place through the outgoing tail. Dodge/air interruption and blocked clearance clear handoff metadata. No horizontal physics retiming, movement speed changes, source clip edits, IK, StepSolver, hand interaction or camera changes. Debug crouch text includes transition phase/progress/threshold, current stick/combat input, mode, predicted and last chosen destination.
+
+Automated regression: test_crouch_handoff_v2 covers stationary/moving entry and exit, adding/releasing input mid-clip, sub-threshold noise, all Locked cardinal directions, Shift exit, actual nested playback destination, one-shot handoff and original physical completion. Crouch, locked crouch, toggle, walk-direction, run-roll handoff and environmental hand isolation suites pass. Visual feel still requires play-testing.
+
 # Persistent Crouch Toggle (2026-09-06)
 
 Crouch idle/movement/run-stop crossfades now use a dedicated crouch_locomotion_blend_time (.30s). Locked directional pose blending is rate-limited by the same duration, retaining exponential direction smoothing. These are presentation-only changes; movement speeds, crouch toggle/clearance, entry/exit timing, dodges and source clips are unchanged.

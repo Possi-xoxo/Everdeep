@@ -77,10 +77,12 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 	var dodge_was_active: bool=dodge.is_dodging
 	dodge.advance_timers(delta,roll_traversal.active)
 	var was_crouched: bool=crouch.active()
-	crouch.update(crouch_requested,delta)
-	crouch.motion_request(stick,shift)
+	crouch.update(crouch_requested,delta,stick,shift)
+	crouch.motion_request(stick,shift,delta)
 	if crouch.active() or was_crouched:
-		shift=false
+		# Locked may resume Run immediately after the physical exit completes;
+		# Free keeps its first standing tick at Walk before normal promotion.
+		if crouch.active() or not lock_on.is_locked(): shift=false
 		jump=false
 		_run_time=0
 		animation_state.gait=State.Gait.WALK
@@ -128,6 +130,7 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		if s.move_input_magnitude>=dodge.dodge_movement_input_threshold:
 			roll_gait=(maxi(roll_gait,1) if shift else 0)
 		if dodge.begin(roll_direction,roll_gait,locked,anim.player,s.move_input_magnitude,s.horizontal_speed,s.combat_input,forward):
+			crouch.clear_handoff()
 			if crouch.active():
 				crouch.phase=crouch.Phase.CROUCHED
 				crouch.resize(crouch.crouch_capsule_height)

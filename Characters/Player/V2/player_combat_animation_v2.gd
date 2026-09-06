@@ -91,6 +91,16 @@ func build() -> AnimationNodeBlendSpace1D:
 
 func update(tree: AnimationTree,s,delta: float,tuning: Node=null) -> void:
 	var target: float=0.0 if s.combat_input.length()<0.01 else (2.0 if s.gait==1 else 1.0)
+	if tuning!=null and tuning.motor.crouch.standing_handoff():
+		var crouch=tuning.motor.crouch
+		target=(2.0 if crouch.current_shift else 1.0) if crouch.moving_requested() else 0.0
+		if crouch.handoff_this_tick:
+			# The outgoing crouch clip supplies the blend, not an Idle bridge.
+			gait_blend=target
+			_gait_target=target
+			_gait_start=target
+			_gait_time=0.0
+			move_blend=s.combat_input.normalized() if crouch.moving_requested() else Vector2(0,1)
 	raw_combat_move_input=s.combat_input
 	if target!=_gait_target:
 		_gait_start=gait_blend

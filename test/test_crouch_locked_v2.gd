@@ -26,13 +26,13 @@ func run() -> void:
 	lock.toggle()
 	check(lock.is_locked() and crouch.active(),"acquire lock without stand")
 	var space=tree.tree_root.get_node("CrouchLocked")
-	var locomotion_states=[&"CrouchIdle",&"CrouchWalk",&"CrouchRun",&"CrouchRunStop",&"CrouchLocked",&"CrouchLockedRun"]
+	var locomotion_states=[&"CrouchIdle",&"CrouchWalk",&"CrouchRun",&"CrouchLocked",&"CrouchLockedRun"]
 	for index in tree.tree_root.get_transition_count():
 		if tree.tree_root.get_transition_from(index) in locomotion_states and tree.tree_root.get_transition_to(index) in locomotion_states:
 			check(is_equal_approx(tree.tree_root.get_transition(index).xfade_time,crouch.crouch_locomotion_blend_time),"crouch locomotion crossfade duration")
 	crouch.direction_blend=Vector2.ZERO
 	await crouch_tick(true,Vector2(0,-1))
-	check(crouch.direction_blend.length()<=DT/crouch.crouch_locomotion_blend_time+.0001,"idle departure pose is rate limited")
+	check(crouch.direction_blend.length()<=DT/crouch.crouch_idle_to_move_blend+.0001,"idle departure pose is rate limited")
 	for item in [["Forward",Vector2(0,-1),"BOW_STANDING_WALK_FORWARD"],["Left",Vector2(-1,0),"BOW_STANDING_WALK_LEFT"],["Right",Vector2(1,0),"BOW_STANDING_WALK_RIGHT"],["Back",Vector2(0,1),"BOW_STANDING_WALK_BACK"]]:
 		var slot: int={"Forward":1,"Left":2,"Right":3,"Back":4}[item[0]]
 		check(space.get_blend_point_node(slot).animation==item[2],"exact directional clip "+item[0])
@@ -56,9 +56,9 @@ func run() -> void:
 		check(absf(body.animation_state.horizontal_speed-body.run_start_speed)<.02,"crouch Run inherits starting Run speed")
 	for frame in 60: await crouch_tick(true,Vector2(0,-1),true)
 	await crouch_tick(true)
-	check(animation.current_state==&"CrouchRunStop","forward Run release plays stop")
+	check(animation.current_state==&"CrouchLockedRun","Run release holds movement during grace")
 	for frame in 70: await crouch_tick(true)
-	check(animation.current_state==&"CrouchLocked","run stop returns to locked idle")
+	check(animation.current_state==&"CrouchLocked","true stop returns directly to locked idle")
 	await crouch_tick(true,Vector2(0,-1),true,false,true)
 	check(dodge.is_dodging and dodge.clip==dodge.STAND,"crouch Run still uses crouch walk roll")
 	for frame in 160: await crouch_tick(true)
@@ -82,7 +82,7 @@ func run() -> void:
 	for frame in 60: await crouch_tick(true,Vector2(0,-1),true)
 	check(animation.current_state==&"CrouchRun","Free Shift uses BOW forward Run")
 	await crouch_tick(true)
-	check(animation.current_state==&"CrouchRunStop","Free Run plays forward stop")
+	check(animation.current_state==&"CrouchRun","Free Run remains moving during grace")
 	for frame in 60: await crouch_tick(true,Vector2(1,0))
 	check(animation.current_state==&"CrouchWalk" and body.walk_direction_smoothing_active,"Free crouch uses sneak and Walk turning")
 	# Slope fixture, using the unchanged foot system.

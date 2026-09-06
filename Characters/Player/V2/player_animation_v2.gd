@@ -26,7 +26,6 @@ const CLIPS := {
 	"CrouchBack": &"BOW_STANDING_WALK_BACK",
 	"CrouchRun": &"BOW_STANDING_RUN_FORWARD", "CrouchRunLeft": &"BOW_STANDING_RUN_LEFT",
 	"CrouchRunRight": &"BOW_STANDING_RUN_RIGHT", "CrouchRunBack": &"BOW_STANDING_RUN_BACK",
-	"CrouchRunStop": &"BOW_STANDING_RUN_FORWARD_STOP",
 }
 @export_category("Gait Crossfades (seconds)")
 @export var idle_to_walk_blend: float = 0.2
@@ -134,7 +133,7 @@ func _prepare_library() -> bool:
 	for state: String in CLIPS:
 		var clip := player.get_animation(CLIPS[state])
 		var airborne := state in ["JumpStanding", "JumpMoving", "Fall", "Land"]
-		clip.loop_mode = Animation.LOOP_NONE if state in ["JumpStanding", "JumpMoving", "Land", "DodgeStand", "DodgeRun", "DodgeSprint", "DodgeBack", "CrouchEnter", "CrouchExit", "CrouchRunStop"] else Animation.LOOP_LINEAR
+		clip.loop_mode = Animation.LOOP_NONE if state in ["JumpStanding", "JumpMoving", "Land", "DodgeStand", "DodgeRun", "DodgeSprint", "DodgeBack", "CrouchEnter", "CrouchExit"] else Animation.LOOP_LINEAR
 		# This Blender rig uses local Z for vertical; local X/Y are horizontal.
 		for track in clip.get_track_count():
 			if clip.track_get_type(track) != Animation.TYPE_POSITION_3D or not String(clip.track_get_path(track)).ends_with(":mixamorig_Hips"):
@@ -188,7 +187,7 @@ func _build_tree() -> void:
 	var locomotion = grounded.build()
 	var machine := AnimationNodeStateMachine.new()
 	machine.add_node(&"Locomotion", locomotion)
-	var states: Array[String]=["Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack", "CrouchEnter", "CrouchExit", "CrouchIdle", "CrouchWalk", "CrouchLocked", "CrouchRun", "CrouchLockedRun", "CrouchRunStop"]
+	var states: Array[String]=["Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack", "CrouchEnter", "CrouchExit", "CrouchIdle", "CrouchWalk", "CrouchLocked", "CrouchRun", "CrouchLockedRun"]
 	for state in states:
 		if state=="Locomotion": continue
 		if state in ["CrouchLocked","CrouchLockedRun"]:
@@ -212,8 +211,10 @@ func _build_tree() -> void:
 			transition.xfade_time = land_blend_out if to == "Locomotion" else (land_blend_in if to == "Land" else (jump_to_fall_blend if to == "Fall" else jump_blend_in))
 			if to.begins_with("Crouch"): transition.xfade_time=motor.get_node("CrouchController").crouch_enter_blend_time
 			if from=="CrouchExit" or to=="CrouchExit": transition.xfade_time=motor.get_node("CrouchController").crouch_exit_blend_time
-			if from in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchRunStop","CrouchLocked","CrouchLockedRun"] and to in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchRunStop","CrouchLocked","CrouchLockedRun"]:
+			if from in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"] and to in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"]:
 				transition.xfade_time=motor.get_node("CrouchController").crouch_locomotion_blend_time
+			if (from=="CrouchEnter" and to in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"]) or (from=="CrouchExit" and to=="Locomotion"):
+				transition.xfade_time=motor.get_node("CrouchController").crouch_transition_handoff_blend
 			machine.add_transition(from, to, transition)
 	tree.root_node = tree.get_path_to(rig)
 	tree.anim_player = tree.get_path_to(player)
@@ -227,11 +228,10 @@ func _physics_process(delta: float) -> void:
 	if _playback == null:
 		return
 	var s = motor.animation_state
-	# Limit pose travel as well as smoothing it: a full idle/direction change
-	# must span the crouch locomotion blend, even when input changes instantly.
-	var crouch_blend: Vector2=motor.crouch.direction_blend
-	var crouch_target: Vector2=crouch_blend.lerp(s.combat_input,1.0-exp(-motor.crouch.crouch_direction_blend_speed*delta))
-	motor.crouch.direction_blend=crouch_blend.move_toward(crouch_target,delta/motor.crouch.crouch_locomotion_blend_time)
+	motor.crouch.update_direction_blend(delta)
+	if motor.crouch.handoff_this_tick and motor.crouch.handoff_phase==motor.crouch.Phase.ENTER:
+		var intent: Vector2=motor.crouch.current_crouch_input_direction
+		motor.crouch.direction_blend=intent/(absf(intent.x)+absf(intent.y)) if motor.crouch.animation_moving else Vector2.ZERO
 	tree.set("parameters/CrouchLocked/blend_position",motor.crouch.direction_blend)
 	tree.set("parameters/CrouchLockedRun/blend_position",motor.crouch.direction_blend)
 	# Recovery pose continues independently of movement authority. Air/jump
@@ -411,6 +411,10 @@ func _exit_tree() -> void:
 		visual_root.position = visual_root_base_position
 
 func _update_gait(s, delta: float) -> void:
+	if motor.crouch.standing_handoff():
+		# Current intent owns the destination; source crossfade supplies softness.
+		gait_blend=(2.0 if s.locked_on and motor.crouch.current_shift else 1.0) if motor.crouch.moving_requested() else 0.0
+		return
 	if s.locked_on: gait_blend=minf(gait_blend,2.0)
 	var target: float = float(s.gait + 1) if s.horizontal_speed > 0.10 or s.move_input_magnitude > 0.01 else 0.0
 	# The outgoing roll supplies the handoff blend, so its destination should
@@ -428,6 +432,21 @@ func _update_gait(s, delta: float) -> void:
 func _enter(next: StringName) -> void:
 	if current_state == next:
 		return
+	var crouch_controller=motor.crouch
+	if current_state==&"CrouchIdle" or next==&"CrouchIdle":
+		for index in tree.tree_root.get_transition_count():
+			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next and current_state in [&"CrouchIdle",&"CrouchWalk",&"CrouchRun"] and next in [&"CrouchIdle",&"CrouchWalk",&"CrouchRun"]:
+				tree.tree_root.get_transition(index).xfade_time=crouch_controller.crouch_move_to_idle_blend if next==&"CrouchIdle" else crouch_controller.crouch_idle_to_move_blend
+	var crouch_moves: Array[StringName]=[&"CrouchWalk",&"CrouchRun",&"CrouchLocked",&"CrouchLockedRun"]
+	var entering_move: bool=next in crouch_moves and current_state in [&"Locomotion",&"CrouchEnter",&"CrouchExit"]
+	var exiting_move: bool=next==&"Locomotion" and String(current_state).begins_with("Crouch")
+	if entering_move or exiting_move:
+		var blend: float=crouch_controller.crouch_transition_handoff_blend
+		if crouch_controller.moving_transition:
+			blend=crouch_controller.moving_crouch_enter_blend_time if entering_move else crouch_controller.moving_crouch_exit_blend_time
+		for index in tree.tree_root.get_transition_count():
+			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next:
+				tree.tree_root.get_transition(index).xfade_time=blend
 	if next in [&"DodgeStand", &"DodgeRun", &"DodgeBack"]:
 		var roll_node := tree.tree_root.get_node(next) as AnimationNodeAnimation
 		# Run and Sprint share action plumbing, but select distinct source clips.
@@ -475,6 +494,14 @@ func _enter(next: StringName) -> void:
 		# Locomotion/future action interruptions recover from the current depth.
 		_recover_start_offset = land_visual_offset
 		_recover_elapsed = 0.0
+	# Apply Idle timing last so short posture/action-return blends cannot
+	# override it. Action takeoff remains responsive and keeps its own timing.
+	var idle_destination: bool=next==&"CrouchIdle" or (next in [&"CrouchLocked",&"CrouchLockedRun"] and not crouch_controller.animation_moving)
+	var idle_source: bool=current_state==&"CrouchIdle" or (current_state in [&"CrouchLocked",&"CrouchLockedRun"] and not crouch_controller.animation_moving)
+	if idle_destination or (idle_source and String(next).begins_with("Crouch")):
+		for index in tree.tree_root.get_transition_count():
+			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next:
+				tree.tree_root.get_transition(index).xfade_time=crouch_controller.crouch_move_to_idle_blend if idle_destination else crouch_controller.crouch_idle_to_move_blend
 	current_state = next
 	_playback.travel(next)
 

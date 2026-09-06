@@ -108,6 +108,7 @@ func build() -> AnimationNodeStateMachine:
 	var entry := AnimationNodeStateMachineTransition.new()
 	entry.advance_mode = AnimationNodeStateMachineTransition.ADVANCE_MODE_AUTO
 	_machine.add_transition(&"Start", &"Loops", entry)
+	_machine.add_transition(&"Start", &"Locked", AnimationNodeStateMachineTransition.new())
 	for key in ["RunStop", "TurnLeft", "TurnRight", "WalkPivot", "RunPivot"]:
 		_machine.add_node(key, animation(ACTIONS[key]))
 	# Optional constant manual rate only; never fit playback to a pause timer.
@@ -133,6 +134,12 @@ func configure_lock_blends(enter_blend: float,exit_blend: float) -> void:
 func update(tree: AnimationTree, s, gait_blend: float, active: bool, visual: Node3D, delta: float=1.0/60.0, tuning: Node=null) -> void:
 	_tree = tree
 	_playback = tree.get("parameters/Locomotion/playback")
+	# A parent re-entry must resolve directly into the CURRENT mode, without
+	# evaluating the Free branch first and then travelling to Locked.
+	for index in _machine.get_transition_count():
+		if _machine.get_transition_from(index)==&"Start":
+			var destination: StringName=&"Locked" if s.locked_on else &"Loops"
+			_machine.get_transition(index).advance_mode=AnimationNodeStateMachineTransition.ADVANCE_MODE_AUTO if _machine.get_transition_to(index)==destination else AnimationNodeStateMachineTransition.ADVANCE_MODE_DISABLED
 	var moving: bool = s.move_input_magnitude > 0.01
 	var direction: Vector2 = s.move_local if s.horizontal_speed > 0.1 else Vector2(0,1)
 	# Clear Sprint contribution even while the old Free branch crossfades out.
