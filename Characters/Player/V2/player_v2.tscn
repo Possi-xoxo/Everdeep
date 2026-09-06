@@ -1,72 +1,94 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene format=3 uid="uid://c84pgp4k2ophv"]
 
-[ext_resource type="Script" path="res://Characters/Player/V2/player_v2.gd" id="1"]
-[ext_resource type="PackedScene" path="res://Characters/Player/Models/Blender Master Rig.glb" id="2"]
-[ext_resource type="Script" path="res://Characters/Player/V2/player_camera_v2.gd" id="3"]
-[ext_resource type="Script" path="res://Characters/Player/V2/player_animation_v2.gd" id="4"]
-[ext_resource type="Script" path="res://Characters/Player/V2/player_debug_v2.gd" id="5"]
-[ext_resource type="Script" path="res://Characters/Player/V2/player_step_solver_v2.gd" id="6"]
-[ext_resource type="Script" path="res://Characters/Player/V2/player_foot_grounding_v2.gd" id="7"]
-[ext_resource type="Script" path="res://Characters/Player/V2/player_foot_ik_v2.gd" id="8"]
+[ext_resource type="Script" uid="uid://c2sshy6b3lr1w" path="res://Characters/Player/V2/player_v2.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://2hr251gto04b" path="res://Characters/Player/Models/Blender Master Rig.glb" id="2"]
+[ext_resource type="Script" uid="uid://ho5m088k7761" path="res://Characters/Player/V2/player_camera_v2.gd" id="3"]
+[ext_resource type="Script" uid="uid://j3vhgb2d1q3x" path="res://Characters/Player/V2/player_animation_v2.gd" id="4"]
+[ext_resource type="Script" uid="uid://do2ujn5ef5w6k" path="res://Characters/Player/V2/player_debug_v2.gd" id="5"]
+[ext_resource type="Script" uid="uid://cytlaxaci1k68" path="res://Characters/Player/V2/player_step_solver_v2.gd" id="6"]
+[ext_resource type="Script" uid="uid://bwqxydplq2v7" path="res://Characters/Player/V2/player_foot_grounding_v2.gd" id="7"]
+[ext_resource type="Script" uid="uid://c5v4dyulaopy5" path="res://Characters/Player/V2/player_foot_ik_v2.gd" id="8"]
+
 [sub_resource type="CapsuleShape3D" id="Body"]
 radius = 0.45
 height = 1.8
+
 [sub_resource type="StyleBoxFlat" id="Panel"]
-bg_color = Color(0.025, 0.04, 0.06, 0.88)
 content_margin_left = 16.0
 content_margin_top = 12.0
 content_margin_right = 16.0
 content_margin_bottom = 12.0
+bg_color = Color(0.025, 0.04, 0.06, 0.88)
 
-[node name="PlayerV2" type="CharacterBody3D"]
+[node name="PlayerV2" type="CharacterBody3D" unique_id=341847072]
 floor_snap_length = 0.3
 script = ExtResource("1")
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-position = Vector3(0, 0.9, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=824605914]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("Body")
-[node name="VisualRoot" type="Node3D" parent="."]
-[node name="StepSolver" type="Node3D" parent="."]
+
+[node name="VisualRoot" type="Node3D" parent="." unique_id=1527323874]
+
+[node name="MasterRig" parent="VisualRoot" unique_id=634883973 instance=ExtResource("2")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
+
+[node name="StepSolver" type="Node3D" parent="." unique_id=645130797]
 script = ExtResource("6")
-[node name="MasterRig" parent="VisualRoot" instance=ExtResource("2")]
-rotation = Vector3(0, 3.14159265, 0)
-[node name="FootGrounding" type="Node3D" parent="."]
+
+[node name="FootGrounding" type="Node3D" parent="." unique_id=1280241277]
 script = ExtResource("7")
-[node name="LeftFootProbe" type="RayCast3D" parent="FootGrounding"]
+
+[node name="LeftFootProbe" type="RayCast3D" parent="FootGrounding" unique_id=136714305]
 enabled = false
-[node name="RightFootProbe" type="RayCast3D" parent="FootGrounding"]
+
+[node name="RightFootProbe" type="RayCast3D" parent="FootGrounding" unique_id=276223357]
 enabled = false
-[node name="LeftFootTarget" type="Marker3D" parent="FootGrounding"]
-[node name="RightFootTarget" type="Marker3D" parent="FootGrounding"]
-[node name="DebugGeometry" type="MeshInstance3D" parent="FootGrounding"]
+
+[node name="LeftFootTarget" type="Marker3D" parent="FootGrounding" unique_id=2077567594]
+
+[node name="RightFootTarget" type="Marker3D" parent="FootGrounding" unique_id=2102904426]
+
+[node name="DebugGeometry" type="MeshInstance3D" parent="FootGrounding" unique_id=2068494429]
 visible = false
-[node name="FootIKController" type="Node3D" parent="."]
+
+[node name="FootIKController" type="Node3D" parent="." unique_id=2033205413]
 script = ExtResource("8")
-[node name="CameraRig" type="Node3D" parent="."]
-position = Vector3(0, 1.55, 0)
+
+[node name="CameraRig" type="Node3D" parent="." unique_id=307406268]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.55, 0)
 script = ExtResource("3")
-[node name="YawPivot" type="Node3D" parent="CameraRig"]
-[node name="PitchPivot" type="Node3D" parent="CameraRig/YawPivot"]
-rotation = Vector3(-0.20944, 0, 0)
-[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig/YawPivot/PitchPivot"]
+
+[node name="YawPivot" type="Node3D" parent="CameraRig" unique_id=114537602]
+
+[node name="PitchPivot" type="Node3D" parent="CameraRig/YawPivot" unique_id=1748761470]
+transform = Transform3D(1, 0, 0, 0, 0.9781475, 0.20791216, 0, -0.20791216, 0.9781475, 0, 0, 0)
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig/YawPivot/PitchPivot" unique_id=810552391]
 spring_length = 4.5
 margin = 0.15
-collision_mask = 1
-[node name="Camera3D" type="Camera3D" parent="CameraRig/YawPivot/PitchPivot/SpringArm3D"]
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig/YawPivot/PitchPivot/SpringArm3D" unique_id=2051614287]
 current = true
 near = 0.08
-[node name="AnimationTree" type="AnimationTree" parent="."]
+
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=1631141205]
 process_physics_priority = 20
-[node name="AnimationController" type="Node" parent="."]
+
+[node name="AnimationController" type="Node" parent="." unique_id=1345752411]
 process_physics_priority = 10
 script = ExtResource("4")
-[node name="DebugCanvas" type="CanvasLayer" parent="."]
+
+[node name="DebugCanvas" type="CanvasLayer" parent="." unique_id=1841786380]
 script = ExtResource("5")
-[node name="Panel" type="PanelContainer" parent="DebugCanvas"]
+
+[node name="Panel" type="PanelContainer" parent="DebugCanvas" unique_id=135771941]
 offset_left = 16.0
 offset_top = 16.0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("Panel")
-[node name="Label" type="Label" parent="DebugCanvas/Panel"]
+
+[node name="Label" type="Label" parent="DebugCanvas/Panel" unique_id=1440654032]
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Player V2"

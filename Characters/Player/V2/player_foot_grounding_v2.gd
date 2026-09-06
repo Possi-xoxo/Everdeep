@@ -93,7 +93,11 @@ func _sample(data: FootSample, probe: RayCast3D, target: Marker3D, allowed: bool
 	data.distance=INF
 	data.bone_position=skeleton.global_transform*skeleton.get_bone_global_pose(data.bone_index).origin
 	probe.global_transform=Transform3D(Basis.IDENTITY,data.bone_position+Vector3.UP*foot_probe_origin_height)
-	probe.target_position=Vector3.DOWN*foot_probe_distance
+	var distance:=foot_probe_distance
+	var ik=motor.get_node_or_null("FootIKController")
+	if ik!=null and ik.is_grounded_idle():
+		distance=maxf(distance,foot_probe_origin_height+foot_sole_offset+ik.idle_max_terrain_height_delta+0.03)
+	probe.target_position=Vector3.DOWN*distance
 	probe.collision_mask=ground_collision_mask & motor.collision_mask
 	if not allowed:
 		data.reason="AIRBORNE" if enabled else "DISABLED"
@@ -155,7 +159,8 @@ func _draw_debug() -> void:
 		var origin: Vector3=data.bone_position+Vector3.UP*foot_probe_origin_height
 		var color := Color.CYAN if data==left else Color.MAGENTA
 		_cross(origin,color,0.025)
-		_line(origin,origin-Vector3.UP*foot_probe_distance,color if data.valid else Color.ORANGE_RED)
+		var probe: RayCast3D=left_probe if data==left else right_probe
+		_line(origin,origin+probe.target_position,color if data.valid else Color.ORANGE_RED)
 		if data.hit:
 			_cross(data.raw_ground_position,Color.YELLOW,0.025)
 			_line(data.raw_ground_position,data.raw_ground_position+data.raw_ground_normal*0.2,Color.YELLOW)

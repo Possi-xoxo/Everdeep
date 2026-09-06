@@ -6,6 +6,10 @@ extends Node3D
 @export_range(1.0, 8.0, 0.1) var step_up_speed: float = 5.0
 @export_range(0.06, 0.25, 0.01) var minimum_lift_duration: float = 0.06
 @export var debug_steps: bool = false
+@export_range(0.10,0.20,0.01) var candidate_lateral_offset: float = 0.15
+var sample_status: Array[String] = ["NOT_TESTED","NOT_TESTED","NOT_TESTED"]
+var chosen_candidate: String = "NONE"
+var support_valid: bool = false
 var active: bool = false
 var step_height: float = 0.0
 var step_target_y: float = 0.0
@@ -90,68 +94,114 @@ func prepare(delta: float, horizontal: Vector3, intent: Vector3, allowed: bool) 
 	var radius: float = collision.shape.radius
 	# Look ahead far enough to finish lifting before the leading capsule edge.
 	var reach := radius + horizontal.length() * (_lift_duration(max_step_height) + delta * 2.0) + 0.06
-	var low := _ray(base + Vector3.UP * 0.025, base + Vector3.UP * 0.025 + direction * reach)
+	sample_status.assign(["NOT_TESTED","NOT_TESTED","NOT_TESTED"])
+	chosen_candidate="NONE"
+	support_valid=false
+	var lateral:=direction.cross(Vector3.UP).normalized()*minf(candidate_lateral_offset,radius*0.45)
+	var rejection: String="NO_LOW_HIT"
+	# Center first, then lateral candidates. A center miss/rejection does not
+	# discard a legitimate corner detected by a side ray.
+	for i in 3:
+		var offset: Vector3=[Vector3.ZERO,-lateral,lateral][i]
+		var result:=_evaluate_candidate(delta,horizontal,direction,base,radius,reach,offset,i)
+		if result.is_empty():
+			if sample_status[i]=="HIT":
+				sample_status[i]+=" / "+reason
+				if rejection=="NO_LOW_HIT": rejection=reason
+			continue
+		step_target_y=result.goal.y
+		_goal=result.goal
+		chosen_candidate=["CENTER","LEFT","RIGHT"][i]
+		candidate=true
+		active=true
+		_direction=direction
+		_elapsed=0.0
+		_lift_time=0.0
+		_start_y=base.y
+		_duration=_lift_duration(step_target_y-base.y)
+		steps_started+=1
+		reason="VALID"
+		return true
+	reason=rejection
+	return active
+
+func _evaluate_candidate(delta: float, horizontal: Vector3, direction: Vector3, base: Vector3, radius: float, reach: float, offset: Vector3, sample: int) -> Dictionary:
+	var origin:=base+offset
+	var low := _ray(origin + Vector3.UP * 0.025, origin + Vector3.UP * 0.025 + direction * reach)
 	if low.is_empty():
+		sample_status[sample]="MISS"
 		reason = "NO_LOW_HIT"
-		return active
+		return {}
+	sample_status[sample]="HIT"
 	if low.normal.dot(Vector3.UP) >= cos(body.floor_max_angle):
 		reason = "ORDINARY_SLOPE"
-		return active
+		return {}
 	var point: Vector3 = low.position
 	var distance := (point-base).dot(direction)
-	var high := _ray(base + Vector3.UP * (max_step_height+0.012), base + Vector3.UP * (max_step_height+0.012) + direction * (distance+0.065))
+	var high := _ray(origin + Vector3.UP * (max_step_height+0.012), origin + Vector3.UP * (max_step_height+0.012) + direction * (distance+0.065))
 	if not high.is_empty():
 		reason = "UPPER_BLOCKED"
-		return active
+		return {}
 	var beyond := point + direction * 0.065
 	var top := _ray(Vector3(beyond.x,base.y+max_step_height+0.015,beyond.z),Vector3(beyond.x,base.y+min_step_height-0.005,beyond.z))
 	if top.is_empty():
 		reason = "NO_TOP_SURFACE"
-		return active
+		return {}
 	step_height = top.position.y-base.y
 	if step_height < min_step_height or step_height > max_step_height+0.002:
 		reason = "TOO_TALL" if step_height > max_step_height else "TOO_SMALL"
-		return active
+		return {}
 	top_walkable = top.normal.dot(Vector3.UP) >= cos(body.floor_max_angle)
 	if not top_walkable:
 		reason = "TOP_TOO_STEEP"
-		return active
+		return {}
 	# Ignore distant small curbs until their own lift lead-in is needed.
 	if distance > radius + horizontal.length() * (_lift_duration(step_height)+delta*2.0)+0.06:
 		reason = "APPROACHING"
-		return active
+		return {}
 	var target_y: float = top.position.y + 0.006
-	var goal := Vector3(beyond.x,target_y,beyond.z)
-	# Require usable lateral support rather than balancing on a thin edge.
-	var side: Vector3 = low.normal.cross(Vector3.UP).normalized() * radius * 0.5
-	for offset in [side,-side]:
-		var support := _ray(goal+offset+Vector3.UP*0.025,goal+offset-Vector3.UP*0.04)
-		if support.is_empty() or support.normal.dot(Vector3.UP)<cos(body.floor_max_angle):
-			reason = "NO_TOP_SUPPORT"
-			return active
+	# The destination stays on the actual movement centerline (no sideways
+	# steering toward a ray). Inset enough to test support in BOTH dimensions.
+	# First inset preserves short stair-tread clearance. The deeper fallback
+	# can support a narrow short-side entry without forcing its lateral rays
+	# to balance at the very front edge of the top.
+	for inset in [radius*0.45,radius*0.65]:
+		var goal: Vector3=base+direction*(distance+inset)
+		goal.y=target_y
+		support_valid=_supported_at(goal,direction,radius)
+		if not support_valid:
+			reason="NO_TOP_SUPPORT"
+			continue
+		if _clear_destination(base,goal): return {"goal":goal}
+	return {}
+
+func _clear_destination(base: Vector3, goal: Vector3) -> bool:
+	var target_y:=goal.y
 	var raised := base
 	raised.y = target_y
 	head_clearance = _free_at(raised) and _free_at(goal)
 	if not head_clearance or body.test_move(body.global_transform,Vector3.UP*(target_y-base.y)):
 		reason = "NO_BODY_CLEARANCE"
-		return active
+		return false
 	var raised_transform := body.global_transform
 	raised_transform.origin = raised
 	if body.test_move(raised_transform,goal-raised):
 		reason = "NO_BODY_CLEARANCE"
-		return active
-	step_target_y = target_y
-	_goal = goal
-	candidate = true
-	active = true
-	_direction = direction
-	_elapsed = 0.0
-	_lift_time = 0.0
-	_start_y = base.y
-	_duration = _lift_duration(step_target_y-base.y)
-	steps_started += 1
-	reason = "VALID"
+		return false
 	return true
+
+func _supported_at(goal: Vector3, direction: Vector3, radius: float) -> bool:
+	var center:=_ray(goal+Vector3.UP*0.025,goal-Vector3.UP*0.04)
+	if center.is_empty() or center.normal.dot(Vector3.UP)<cos(body.floor_max_angle): return false
+	var side:=direction.cross(Vector3.UP).normalized()
+	var supported:=0
+	for i in 8:
+		var angle:=TAU*i/8.0
+		var offset: Vector3=(direction*cos(angle)+side*sin(angle))*radius*0.6
+		var hit:=_ray(goal+offset+Vector3.UP*0.025,goal+offset-Vector3.UP*0.04)
+		if not hit.is_empty() and hit.normal.dot(Vector3.UP)>=cos(body.floor_max_angle): supported+=1
+	# Center plus at least 75% of the inner footprint: not a thin balancing rail.
+	return supported>=6
 
 func _lift_duration(height: float) -> float:
 	# Smoothstep has a peak derivative of 1.5; retain the exported speed cap.
@@ -197,4 +247,4 @@ func _process(_delta: float) -> void:
 	_debug_mesh.mesh = mesh
 
 func debug_text() -> String:
-	return "Step Candidate: %s\nHeight: %.3f m / Max: %.2f m\nTop Walkable: %s\nHead Clearance: %s\nStepping: %s\nReason: %s" % [candidate,step_height,max_step_height,top_walkable,head_clearance,active,reason]
+	return "Step Candidate: %s\nHeight: %.3f m / Max: %.2f m\nTop Walkable: %s\nHead Clearance: %s\nStepping: %s\nReason: %s\nCenter/Left/Right: %s / %s / %s\nChosen: %s / Footprint Support: %s" % [candidate,step_height,max_step_height,top_walkable,head_clearance,active,reason,sample_status[0],sample_status[1],sample_status[2],chosen_candidate,support_valid]

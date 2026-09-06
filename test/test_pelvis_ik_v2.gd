@@ -35,7 +35,7 @@ func run() -> void:
 		ik.pelvis_enabled=true
 		await freeze_at(fixture)
 		print("PELVIS_FIXTURE ",fixture," offset=",pelvis.current_offset," lower foot error=",before," -> ",absf(ik.legs[1].solved.y-ik.feet.right.ankle_target_transform.origin.y)," support=",pelvis.support)
-		check(pelvis.current_offset<=0 and pelvis.current_offset>=-0.20,"bounded downward only")
+		check(pelvis.current_offset<=0 and pelvis.current_offset>=-ik.pelvis_drop_limit(),"bounded downward only")
 		check(body.position.is_equal_approx(fixture),"no physical displacement")
 		var saved: float=pelvis.current_offset
 		await freeze_at(fixture,180)

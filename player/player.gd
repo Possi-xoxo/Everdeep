@@ -27,7 +27,7 @@ signal sprint_started
 signal sprint_ended
 
 @export_category("Gait")
-@export_range(0.1, 20.0, 0.1) var walk_speed: float = 2.5
+@export_range(0.1, 20.0, 0.1) var walk_speed: float = 2
 @export_range(0.1, 20.0, 0.1) var run_speed: float = 4.0
 @export_range(0.1, 30.0, 0.1) var sprint_speed: float = 8.0
 @export_range(3.0, 5.0, 0.1) var sprint_activation_delay: float = 4.0

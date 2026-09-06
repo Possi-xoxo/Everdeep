@@ -1,3 +1,179 @@
+# V2 — Authorized 40 cm Idle Pelvis Budget (2026-09-06)
+
+Supersedes the reach limitation documented in the previous Idle refinement below. User authorized increasing the Idle pelvis cap from 20 to 40 cm and retrying those tests.
+
+New `FootIKController.idle_max_pelvis_drop=0.40 m` is separate from the unchanged moving `max_pelvis_drop=0.20 m`. `pelvis_drop_limit()` selects the appropriate target budget; debug displays the selected value. Idle weight remains 1.0, with 10/s exponential pelvis smoothing. Movement input immediately selects the original moving budget; the current offset recovers smoothly rather than snapping from 40 to 20 cm. Jump/Fall and the shared landing-sink budget remain intact.
+
+At the exact 40 cm boundary, applying the 40 cm FOOT correction cap to the original ankle before lowering Hips left a ~7.4 mm residual despite adequate reach. For forced Idle support only, that cap now applies to the remaining vertical correction from the pelvis-corrected ankle. It stays at 40 cm, and native chain reach still caps the result. Horizontal limits and moving-gait target calculations are unchanged.
+
+Repeated the previous frozen split-curb tests with the body at upper-surface height: both feet contact within **0.01 mm** numerical error at 10, 20, **25, 35 and 40 cm**. Actual pelvis drops are approximately 10.74, 20.74, 25.74, 35.74 and 40.00 cm respectively. Limb-length/knee checks pass; no bone stretching, CharacterBody displacement or collision changes. The 45 cm invalid-foot and both-valid over-limit cases remain safely excluded from forced support.
+
+All **15 V2 suites pass**. Added assertions for residual Idle correction <=40 cm, full contact through 40 cm, and smooth recovery plus lock release when starting to walk from a 40 cm split. The pelvis test's frozen-pose bound now checks the selected budget; moving traversal checks retain their original 20 cm bound. The 25 cm rendered pose was inspected: lower-foot hover is removed and the upper knee bends to accommodate the drop. Extreme terrain naturally produces a deeper crouch; manual playtesting of its appearance is still recommended.
+
+Changed this pass: `player_foot_ik_v2.gd`, `player_pelvis_ik_v2.gd`, `test_idle_contact_v2.gd`, `test_pelvis_ik_v2.gd`, and this document. Other Idle settings remain weight 1.0, max terrain delta 40 cm, max remaining vertical correction 40 cm. Idle confidence ignores sway; locks still release on invalid support, movement, airborne/actions or unsafe reach. Walk/Run/Sprint thresholds, StepSolver, motor, collision, Jump/Fall and 180-turn logic remain untouched. No commit or push performed.
+
+# V2 — Idle Foot Contact Refinement (2026-09-06)
+
+Idle-only support strengthening; the requested no-hover result is achieved for reachable poses, but is **not fully achieved at 25–40 cm with the body at the upper surface and the existing 20 cm pelvis-drop bound**. Reach protection is retained rather than stretching legs or silently increasing the pelvis limit.
+
+## Diagnosis
+
+The moving-foot heuristic was also used at rest. At a frozen 25 cm split, the lower animated ankle was ~25.7 cm above its terrain target; after the 16 cm weighted pelvis allowance, the height metric was ~9.7 cm, almost the top of the 5–10 cm confidence falloff. Lower-foot confidence collapsed to **0.0079**, also starving pelvis support. Its terrain error was **25.14 cm**, despite a valid ray. Idle sway velocities could independently weaken contact/release locks. Partial 0.95 IK, a global 20 cm vertical cap, and 0.8 pelvis influence added conservatism. The original 60 cm ray (including 20 cm elevated origin) also missed lower terrain in 35/40 cm high-body poses.
+
+## Idle settings and rules
+
+New Inspector category on FootIKController, **Idle Foot Contact**:
+
+- `idle_ik_override_enabled=true` (comparison/fallback switch).
+- `idle_foot_ik_weight=1.00`.
+- `idle_max_terrain_height_delta=0.40 m`.
+- `idle_max_foot_vertical_correction=0.40 m`.
+
+Idle detection uses physically grounded, not airborne/jump-start, movement input <=0.01, horizontal speed <=0.1 m/s, and ordinary Locomotion/Loops with no active reversal. The gameplay gait enum has Walk/Run/Sprint but no Idle; these rest conditions match the actual Idle semantics. First movement input disables the override immediately, without waiting for acceleration.
+
+For each valid Idle foot, raw support is **1.0**, independent of height/sway-speed heuristics, provided both valid terrain ankle targets differ by <=0.40 m (1 mm numerical tolerance). With only one valid target, that valid foot remains eligible; an invalid foot is never forced. When two valid targets exceed the limit, normal support/correction bounds apply. Existing confidence and IK interpolation are retained, including smooth transition from weight 1.0 to the lower moving-gait weights.
+
+Eligible Idle feet use the 40 cm vertical correction cap; moving feet retain 20 cm vertical and 15 cm horizontal caps. Ankle sole offset stays 8 cm. Native 99.5% chain reach and original limb lengths are untouched. Idle pelvis influence is 1.0 rather than 0.8 so it can use the **full existing 20 cm max drop**, still downward-only and exponentially smoothed at 10/s. Moving pelvis influence remains 0.8; landing sink budget and architecture are unchanged. Debug now shows effective pelvis weight.
+
+FootGrounding uses the same two rays, but Idle-only length is max(normal distance, origin height + sole offset + idle max delta + 3 cm), **0.71 m** with defaults. Walk/Run/Sprint retain the original **0.60 m** distance and all normal/validity checks. No extra queries. Debug ray lines reflect the actual cast length.
+
+Idle locks do not release merely for vertical/horizontal animation sway or low heuristic confidence. They still release on invalid/lost terrain, movement entry, Jump/Fall, higher-priority action, teleport, disabled IK, or safe correction/reach limits. Idle separation checks account for the existing pelvis offset; chain and horizontal limits still apply. Leaving Idle clears its anchor contribution immediately while ordinary confidence/influence resumes smoothly. No changes to moving plant thresholds or ordinary moving lock-acquisition/release rules.
+
+F8 adds Idle IK Override, per-foot Idle Forced Support, actual IK/contact error, terrain height delta and max delta.
+
+## Tests and measured limits
+
+Frozen Idle pose, body positioned at the upper surface, identical animation/terrain for each measurement:
+
+| Height difference | New lower-foot contact error | Result |
+| --- | --- | --- |
+| Flat / 10 cm | <0.01 mm | Contact |
+| 20 cm | <0.01 mm (previous ~27.2 mm) | Contact |
+| 25 cm | **36.47 mm** (previous ~251.44 mm) | Full support, pelvis at limit; remaining reach gap |
+| 35 cm | **136.00 mm** (previous lower ray invalid) | Detected and fully supported, safely reach-clamped |
+| 40 cm | **185.80 mm** (previous lower ray invalid) | Boundary detected, full support, safely reach-clamped |
+| 45 cm | Low ray invalid at full body height | Invalid foot excluded; valid upper foot supported |
+
+Upper-foot errors were below 0.01 mm in these frozen fixtures. Both-valid 45 cm split at a lower body position separately confirms that neither foot receives forced support beyond the delta limit. Full confidence does not manufacture additional leg length. Eliminating the remaining high-body 25/35/40 cm gaps requires a separately authorized larger Idle pelvis budget or another change outside the present constraints. No such change was made.
+
+`test_idle_contact_v2.gd` covers all listed heights, safe limb length/knee behavior, unchanged body transform, first-input release from 25 cm split Idle, smooth weight decay, normal moving correction/probe limits and immediate Jump release. Before/after rendered 25 cm poses were inspected: the large hover is substantially reduced, but the residual gap remains visible. This is not a claim of full manual movement-quality testing.
+
+All **15 V2 regression suites pass**. `test_foot_planting_v2.gd` now checks no interpolation overshoot from incoming Idle weight and the existing settled gait bound after 30 frames, rather than rejecting the explicitly requested smooth 1.0-to-moving-weight transition. `test_contact_refinement_v2.gd` disables the new override to continue isolating its original global-weight comparison; the new Idle suite covers the override. Other moving planting, Jump/Fall, turns, broad/narrow step, stair, motor and sensing tests remain intact.
+
+Files: modified `player_foot_ik_v2.gd`, `player_foot_planting_v2.gd`, `player_pelvis_ik_v2.gd`, `player_foot_grounding_v2.gd`, the two compatibility tests above, and this document; added `test_idle_contact_v2.gd` plus generated UID. No scene/geometry, CharacterBody, collision, movement-physics, StepSolver, Jump/Fall or 180-turn edits. StepSolver hash remains `E2659D3D736C987FD427BA6446E9223B15D502E970814ACA7DE8778BC861E23B`; scene/capsule hash remains `03B0356D25F0F015ACEF90E1A57B96F93D490A34FA42C6060DDF6A43695EE337`. No commit or push performed.
+
+# V2 Phase 3B.4 — Foot Planting (2026-09-06)
+
+Animation-aware per-foot support and bounded temporary world anchors, layered on the existing IK/pelvis implementation. This phase name is distinct from the earlier Git tag `0.3B.4`, which remains the pre-planting stable feet/pelvis checkpoint. The preceding narrow-step/contact refinement remains intact and uncommitted.
+
+## Files and ownership
+
+New `Characters/Player/V2/player_foot_planting_v2.gd` is a per-leg RefCounted state object owned by FootIKController. `player_foot_ik_v2.gd` exposes settings, updates planting from pre-IK animation, reuses confidence as leg support relevance, applies target locking before existing caps/reach solving, and extends F8 diagnostics. `player_pelvis_ik_v2.gd` now uses a planted anchor's height when locked; its existing `leg.swing` support input carries planting confidence. No pelvis architecture changes. New `test/test_foot_planting_v2.gd` exercises support phases, locks, edge loss, anchor changes, jumps, reversals and stairs.
+
+Order remains AnimationTree/authored pose -> existing presentation and foot probes -> per-foot confidence/anchor preparation -> pelvis modifier -> native left/right IK (with per-foot effective influence) -> authored ankle-basis preservation. Velocity history is sampled only from ANIMATED, pre-modifier feet. No solved-pose feedback or accumulated bone offsets.
+
+## Support confidence and velocity conventions
+
+Animated ankle position is transformed into VisualRoot-local meter coordinates; finite differences provide vertical and horizontal motion with CharacterBody translation, step lift, visual landing sink and root rotation removed. The raw horizontal speed is displayed. Actual stride measurements showed backward stance motion around 1.6 m/s in Walk, 4 m/s in Run and 5 m/s in Sprint, so testing raw speed against 0.4 m/s would incorrectly reject support feet.
+
+For movement, the horizontal swing metric is max(forward component along actual movement direction, 0, lateral speed). Backward stance motion is allowed; forward swing/lateral sweep is rejected. At rest, use raw relative horizontal speed. This uses root-relative animation motion, not world velocity alone, and introduces no authored clip markers or gait phase tables.
+
+Height metric = max(0, animated root-relative sole lift, world ankle-to-terrain gap minus available pelvis drop). The pelvis allowance is the existing max drop times pelvis weight (0.16 m by default), or zero when pelvis is disabled. It permits a still foot above the lower stair to remain support-worthy without mistaking an actual lifted stride foot for support. This is a heuristic, not measured mesh contact.
+
+Raw confidence = valid grounded state * height factor * absolute vertical-speed factor * horizontal-swing factor. Each factor is 1 below its threshold and smoothly falls to 0 at twice that threshold (`1-smoothstep(threshold, 2*threshold, value)`). Jump/airborne/invalid terrain produces zero. Dedicated non-loop presentation (including Land, RunStop and turns) caps raw confidence at 0.25 and disallows locks.
+
+| FootIKController / Foot Planting setting | Default |
+| --- | --- |
+| foot_planting_enabled | true (false restores prior heuristic for comparison) |
+| foot_lock_enabled | true |
+| plant_height_threshold | 0.05 m |
+| plant_max_vertical_speed | 0.30 m/s |
+| plant_max_horizontal_speed | 0.40 m/s, forward/lateral swing metric while moving |
+| plant_confidence_rise_speed | 15/s |
+| plant_confidence_fall_speed | 20/s |
+| foot_lock_threshold | 0.80 |
+| foot_unlock_threshold | 0.45 |
+| max_foot_lock_distance | 0.25 m |
+
+Confidence is exponentially smoothed with separate rise/fall rates. Desired per-foot IK influence = base gait weight * confidence when terrain/body state is usable, else zero. Existing 10/s in / 12/s out IK interpolation remains, so displayed final weight is smoothed rather than the instantaneous product. Target correction is also attenuated by support relevance, preserving animation dominance in swing. Gait ceilings remain Idle/Walk 0.95, Run 0.80, Sprint 0.65. No movement or gait rules changed.
+
+## Temporary lock behavior and limits
+
+Acquire only when both smoothed and raw confidence reach 0.80, there is no meaningful upward/forward swing, and presentation is ordinary Locomotion/Loops. Capture the terrain ankle target and collider transform once. Anchor X/Z stays fixed; Y also remains on the OLD surface if the animated probe starts seeing the next stair. Target approach/release uses exponential blend 15/20 per second; native IK influence/correction/reach caps still apply. A locked marker does NOT imply an exactly immobile solved foot at partial IK influence.
+
+Unlock below confidence 0.45, on upward speed >0.30 m/s, forward/lateral swing >0.40 m/s, invalid terrain, Jump/Fall, non-loop actions, zero/disabled IK, lost anchor support, excessive separation or chain reach. Maximum separation is 0.25 m, additionally constrained by the unchanged 0.15 m horizontal correction cap and 99.5% limb-reach bound. A reach-limited foot releases rather than stretching. Only one acquisition per support phase: after release, raw confidence must fall below 0.2 before rearming. This prevents repeated locking against the distance limit during the same stance. Teleports >0.75 m reset history/anchors/confidence; toggling planting resets its state.
+
+Existing foot probes follow the animated ankle and cannot prove whether the OLD anchor still has support. Therefore a single additional short downward ray is used per currently locked foot (at most two additional rays per pose), with the same terrain mask, self-exclusion and walkable-normal requirement. It verifies the old collider/height. No extra casts when unlocked. Removing the anchor's collision releases it even when the animated ray still sees valid terrain elsewhere. World locks are limited to stationary StaticBody3D terrain: moving transforms and AnimatableBody3D are not pinned. Moving-platform-relative planting is not implemented.
+
+Invalid/airborne/action anchors stop supplying world-space target corrections immediately; existing IK influence/current-pose-relative release still fades smoothly. Land first rebuilds light confidence/IK without locks, then ordinary locomotion can reacquire naturally. Walk180/Run180 and stationary turns cannot fight a retained lock. Existing landing sink budget, turn timing/carry, physics and input remain untouched.
+
+Pelvis uses the same confidence/effective-foot-weight relevance, and a locked foot contributes its old anchor height rather than the newly observed stair. Swing feet therefore contribute much less to pelvis height; there is no new pelvis solver or extra body transform layer.
+
+## Debug and verification
+
+F8 includes per-foot confidence, actual IK weight, lock/blend state, release reason, terrain height gap, vertical speed, raw root-relative horizontal speed and directional swing speed. Probe error measures the solved foot against the current animated-ray target; contact error uses the remembered anchor while locked. These intentionally differ when the source Idle sways or a probe crosses a stair edge. Runtime solver-error diagnostics remain available. Orange = raw terrain, cyan = smoothed terrain, white persistent cross = locked ankle target, green = solved ankle, magenta = pelvis correction.
+
+All **14 V2 suites pass**, including the previous thirteen and the new planting suite. No existing test assertions were weakened. New coverage:
+
+- Idle: both confidences 1.00, effective IK 0.95, one lock acquisition per foot over the initial settle/180-frame sample (no chatter).
+- Walk: measured mean IK in high-support samples ~0.70 vs ~0.14 in clear swing samples; swing feet remain lifted. Across ten consecutive anchored sample intervals, authored world-horizontal travel 0.423 m vs solved 0.305 m (~28% reduction). This is a short-lock measurement, not a whole-stride skating guarantee.
+- Run: ~0.28 support / 0.077 swing influence in the sampled dynamic sequence; only brief locks.
+- Sprint: ~0.18 support / 0.056 swing; animation remains dominant and support windows are short. Some initial locked frames reflect the transition out of Idle.
+- 15/20 cm stairs: physical traversal completes unchanged, with 25/16 locked foot-frames in the Walk fixture and stable knees/segment lengths. All existing stair/gait/ascent/descent regressions also pass.
+- Split curb: upper foot plants; moving its animated probe onto another surface leaves the old supported anchor and its target height unchanged. Temporarily removing only that test surface's collision releases the anchor immediately, then the test restores collision.
+- Walk off platform: 8 single-valid-foot frames and 26 airborne frames in the fixture; invalid feet and all airborne feet have no lock.
+- Jump clears locks immediately, IK fades to zero, Land rebuilds support without instant anchoring. Both Walk180 and Run180 explicitly verified lock-free while active; gameplay pivot regressions pass.
+
+Idle and Walk rendered poses/debug displays were inspected. These are not a claim of exhaustive manual motion-quality testing. Source Idle waist/pendulum sway remains unchanged. Partial IK and short horizontal/reach budgets deliberately leave some sliding and extreme split-curb reach error. Before 3B.5, playtest normal Walk and 15/20 cm stairs at these defaults; tune confidence timing/thresholds first if support feels late, and keep Run/Sprint conservative. Do not increase lock range or remove reach protection to hide source stride mismatch. Authored contact markers, stride warping, footstep events, toe roll, root motion and other IK systems remain deferred.
+
+StepSolver SHA256 at start/end: `E2659D3D736C987FD427BA6446E9223B15D502E970814ACA7DE8778BC861E23B`. Motor: `25DF4FCC8BB900DA93961D3FFC2D795CA5C0A8A7DABF29741E189A74CCF19868`. Player scene/capsule: `03B0356D25F0F015ACEF90E1A57B96F93D490A34FA42C6060DDF6A43695EE337`. No edits to StepSolver, CharacterBody, collision, movement values, jump/fall controllers or traversal geometry in this phase. No commit/push requested or performed.
+
+# V2 — IK Contact + Narrow Step Refinement (2026-09-06)
+
+Targeted refinement after the stable Git/GitHub tag **0.3B.4**, not a redesign or a new foot-planting phase.
+
+## Contact diagnosis and final settings
+
+Compared identical frozen animation poses on flat ground and split 15/20 cm curbs with global foot weights 0.80, 0.95 and 1.00, and vertical caps 0.20/0.25 m. The reachable upper foot's residual error is mainly partial solver influence. The lower foot also hits the 99.5% chain-reach bound after the existing limited pelvis drop. Raising the vertical cap to 0.25 m changed the 20 cm curb's lower-foot error by less than 0.03 mm at weight 0.8; it is not the useful tuning lever here. Frozen results exclude temporal target-smoothing lag. No evidence justified changing the sole offset or pelvis range. Full 1.0 weight removed reachable-target error but could not remove reach-limited error; 0.95 was retained as the more modest adjustment.
+
+`FootIKController.foot_ik_weight`: **0.95** for Idle/Walk, also the global ceiling. New exposed `run_foot_ik_weight=0.80`, `sprint_foot_ik_weight=0.65`, capped by that ceiling. All are further multiplied by existing swing relevance and blended with the UNCHANGED 10/s in, 12/s out rates. Invalid/airborne fade code, current-pose-relative target release, and swing attenuation at 4–18 cm animated sole lift are untouched. No locking or lateral dragging introduced. Pelvis architecture/settings are unchanged; its existing effective-foot-weight support ratio naturally gives reduced relevance to lower Run/Sprint influences.
+
+UNCHANGED: vertical correction cap **0.20 m**, horizontal cap **0.15 m**, sole offset **0.08 m**, position smoothing **20/s**, normal smoothing **15/s**, pelvis max drop **0.20 m**, pelvis weight **0.80**, pelvis smoothing **10/s**, and native chain reach **99.5%**. Terrain-normal ankle rotation remains OFF, as before.
+
+Final-pose diagnostics now record `leg.terrain_error` (solved ankle to the ORIGINAL valid terrain ankle target, not the reach-clamped solver destination) and `leg.solver_error` (solved ankle to solver destination). Invalid terrain error is NAN and displays N/A. F8 displays both, distinguishing reach/target limits from solver influence. Both are ankle-space distances; mesh sole contact still warrants visual inspection.
+
+| Frozen fixture | Left terrain error: old -> new | Right terrain error: old -> new |
+| --- | --- | --- |
+| Flat idle | 0.34 -> 0.08 mm | 0.32 -> 0.08 mm |
+| Split 15 cm curb | 29.88 -> 7.75 mm | 13.50 -> 11.33 mm |
+| Split 20 cm curb | 39.35 -> 10.22 mm | 29.35 -> 27.17 mm |
+
+Mean over these six foot samples: **18.79 -> 9.44 mm** (about 50% reduction). This is a frozen-fixture mean, NOT a promise of sub-centimeter contact throughout every gait. Rendered 15 cm split-curb before/after was inspected: upper-foot penetration decreases, lower foot remains near the floor, without additional pelvis movement. Remaining lower-foot gap on the extreme split fixture is deliberately bounded by reach; do not stretch the skeleton or bury the sole to eliminate it.
+
+## Step diagnosis and detection
+
+Old detector: one forward center ray and two lateral support rays aligned to the hit face. This made support classification approach-dependent: a 40 cm-wide ledge failed from the short side, diagonal corner entries failed, while a 15 cm-thin rail could incorrectly pass from its long side.
+
+Retained the existing ray-based face/high/top validation instead of introducing a new shape-cast subsystem. Three horizontal origins: center, left and right **0.15 m** from center (0.30 m overall candidate footprint; exposed `candidate_lateral_offset`, capped relative to capsule radius). Direction is still actual horizontal movement, not facing. Center is preferred; its miss/rejection does not discard valid side candidates. Equal-offset side candidates have deterministic left/right tie order. A regression verifies RIGHT acquisition while CENTER is still rejected as APPROACHING.
+
+Each candidate retains the same 0.35 m max height, minimum height, walkable normal, upper-obstruction ray, actual capsule overlap, vertical sweep and raised forward sweep checks. No obstacle-height increase. Destination stays on the movement centerline: no sideways relocation or steering toward a lateral ray.
+
+Support validation is now two-dimensional: center ray plus 8 rays on an inner footprint circle of radius **0.6 * capsule radius = 0.27 m** (diameter 0.54 m). Center and at least **6/8** ring samples must have nearby walkable top support (25 mm above / 40 mm below candidate base). This is a lightweight support heuristic, not an exact mesh-area computation. It rejects the unsafe 15/25 cm rails in this lab. Capsule overlap and sweep validation still determine actual body clearance.
+
+Try destination inset **0.45 * radius = 0.2025 m**, then **0.65 * radius = 0.2925 m** beyond the detected face. The first preserves clearance against the next 60 cm stair tread/riser; the fallback lets a narrow short-side approach acquire support beyond the leading corner. Both are validated, not blindly advanced. Existing active-lift timing, cached support recheck, finish/snap, collision-based lift, and movement ownership remain unchanged.
+
+F4 shows per-sample HIT/MISS/rejection (NOT_TESTED when an earlier candidate wins), selected candidate, height and footprint support status. Existing ray visualization includes the new casts.
+
+## Regression and playtest fixtures
+
+New labeled east-wing fixtures in `test/step_traversal_zone_v2.gd`: supported 0.40 x 4 m curb at (100,18), diagonal 3 x 3 m corner at (110,18), unsafe 0.15 x 4 m rail at (120,18); all 0.20 m tall. Old lab geometry and coordinates are preserved.
+
+`test_narrow_step_v2.gd` verifies actual grounded arrival on top, not just step activation. All Walk/Run/Sprint cases pass: short and long side of the supported ledge, mirrored diagonal corners, and rejection from both sides of the unsafe rail. Running the same fixtures against the 0.3B.4 solver confirmed the old short-side/corner failures and unsafe long-side acceptance. Side-candidate fallback has its own isolated regression.
+
+`test_contact_refinement_v2.gd` verifies measured contact improvement, exact grounded gait influence, preserved limb lengths/knee stability, and lifted swing-foot release for all three gaits. All **13 V2 suites pass**, including the previous eleven suites. Broad curbs 5–35 cm still pass across all gaits; 40–50 cm fail. 10/15/20 cm staircases retain speed, bounded lift, no landing events and no Fall/Land flicker. Wall, low ceiling, steep top, and original unsafe narrow edge still reject. Existing 30/120 Hz traversal regressions pass.
+
+Motor, jump/fall controller, grounded/gait controller, pelvis modifier and foot-grounding sensor hashes match 0.3B.4. No CharacterBody scene/capsule edits were made in this pass; existing editor-reserialized scene metadata was preserved (capsule remains radius 0.45 m, height 1.8 m, center Y 0.9 m). Live main-scene smoke check passed, apart from the environment's certificate-store warning. Editor-layout warnings about the old missing Character Test.glb remain unrelated. No claim of exhaustive manual playtesting; rendered contact comparison and automated physics/animation checks were performed. User playtesting of the new labeled ledge and corners is recommended before the next checkpoint. No commit or push performed for this refinement.
+
 # V2 Phase 3B.3 — Pelvis Compensation (2026-09-05)
 
 Adds `player_pelvis_ik_v2.gd`, a SkeletonModifier3D instantiated by FootIKController. Runtime verification: **mixamorig_Hips, index 0, parent -1 (skeleton root)**. Both UpLeg chains descend directly from this bone. Lookup uses the name, not a hard-coded index. Only world-vertical translation is converted through the inverse skeleton basis into bone-global pose space; no Hips/spine rotation, scale, CharacterBody, capsule, or VisualRoot writes.
