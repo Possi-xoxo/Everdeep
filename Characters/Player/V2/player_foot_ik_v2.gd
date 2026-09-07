@@ -136,7 +136,8 @@ func prepare_targets(delta: float) -> void:
 		var pose:=_world(leg.bones[2])
 		leg.animated=pose.origin
 		leg.animated_basis=pose.basis
-		var usable: bool=enabled and data.valid and motor.animation_state.is_grounded and not motor.animation_state.jump_started and not motor.dodge.is_dodging
+		var usable: bool=enabled and data.valid and motor.physical_ground_contact() and not motor.animation_state.jump_started and not motor.dodge.is_dodging
+		usable=usable and not motor.traversal.mantle.pose_owned()
 		var correction:=Vector3.ZERO
 		var swing:=1.0
 		if usable:

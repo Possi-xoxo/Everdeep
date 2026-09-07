@@ -3,14 +3,15 @@ extends Node3D
 const Candidate = preload("res://interaction/mantle_geometry_candidate.gd")
 @export_group("Mantle Detection")
 @export var mantle_enabled: bool = true
-@export_range(.4,1.5,.01) var mantle_min_height: float = .70
-@export_range(.7,2.5,.01) var mantle_max_height: float = 1.40
+@export_range(.4,3.0,.01) var mantle_min_height: float = 1.75
+@export_range(.7,3.0,.01) var mantle_max_height: float = 2.20
 @export_range(.5,1.0,.01) var mantle_forward_check_distance: float = .75
 @export_range(.5,1.2,.01) var mantle_max_reach_distance: float = .90
 @export_range(0,.6,.01) var mantle_max_wall_normal_up_dot: float = .25
 @export_range(0,60,1) var mantle_max_top_slope_angle: float = 40.0
 @export_range(.4,.8,.01) var mantle_min_top_depth: float = .55
-@export_range(.3,.7,.01) var mantle_top_setback: float = .50
+## Legacy reference only; GroundSupportProbe and Mantle Exit now own setback.
+var mantle_top_setback: float = .50
 @export var mantle_candidate_priority: float = 0.0
 @export var mantle_debug: bool = false
 var result: Dictionary = {"valid":false,"reject_reason":"NO_FRONT_OBSTACLE"}
@@ -65,14 +66,23 @@ func detect_ledge_geometry() -> Dictionary:
 	var front: Dictionary={}
 	# Center first, then small lateral offsets. Deterministic order avoids
 	# switching faces due to tiny score changes near corners.
-	for lateral in [0.0,-.15,.15]:
+	var half_cone: float=motor.traversal.mantle.mantle_interaction_cone_angle*.5
+	var nearest: float=INF
+	for fraction in [0.0,-.25,.25,-.5,.5,-.75,.75,-1.0,1.0]:
+		var direction:=forward.rotated(Vector3.UP,deg_to_rad(half_cone*fraction))
 		for height in [.20,.65,1.05]:
-			var origin: Vector3=base+Vector3.UP*height+right*lateral
-			var hit:=_ray(origin,origin+forward*mantle_forward_check_distance)
-			if not hit.is_empty():
-				front=hit
-				break
-		if not front.is_empty(): break
+			var origin: Vector3=base+Vector3.UP*height
+			var hit:=_ray(origin,origin+direction*mantle_forward_check_distance)
+			if hit.is_empty() or absf(hit.normal.y)>mantle_max_wall_normal_up_dot: continue
+			var inward_normal:=Vector3(-hit.normal.x,0,-hit.normal.z).normalized()
+			if forward.dot(inward_normal)<cos(deg_to_rad(half_cone))-.00001: continue
+			# Project to the face along its normal, avoiding a lateral alignment jump.
+			var point: Vector3=origin+inward_normal*((hit.position-origin).dot(hit.normal)/inward_normal.dot(hit.normal))
+			var distance: float=origin.distance_to(point)
+			if distance<nearest-.001:
+				nearest=distance
+				front=hit.duplicate()
+				front.position=point
 	if front.is_empty(): return data
 	data["front_hit"]=true
 	data["obstacle_position"]=front.position
@@ -93,7 +103,7 @@ func detect_ledge_geometry() -> Dictionary:
 	var top:=_ray(top_origin,Vector3(top_origin.x,base.y+.02,top_origin.z))
 	if top.is_empty():
 		var high_origin:=base+Vector3.UP*(mantle_max_height+.02)
-		var high:=_ray(high_origin,high_origin+forward*mantle_forward_check_distance)
+		var high:=_ray(high_origin,high_origin+inward*mantle_forward_check_distance)
 		return _reject(data,"TOO_HIGH" if not high.is_empty() else "NO_TOP_SURFACE")
 	data["top_found"]=true
 	data["top_position"]=top.position
@@ -107,8 +117,8 @@ func detect_ledge_geometry() -> Dictionary:
 	var slope_limit: float=minf(mantle_max_top_slope_angle,rad_to_deg(motor.floor_max_angle))
 	if slope>slope_limit: return _reject(data,"TOP_TOO_STEEP")
 	if top.collider!=front.collider: return _reject(data,"NO_TOP_SURFACE")
-	var radius: float=motor.crouch.standing_capsule_radius
-	var setback: float=maxf(mantle_top_setback,radius+.03)
+	var radius: float=motor.ground_support.ground_support_radius
+	var setback: float=maxf(motor.traversal.mantle.mantle_landing_edge_setback,motor.ground_support.minimum_landing_setback())
 	var required_depth: float=maxf(mantle_min_top_depth,setback+radius+.03)
 	data["required_top_depth"]=required_depth
 	data["top_depth"]=0.0
@@ -128,7 +138,7 @@ func detect_ledge_geometry() -> Dictionary:
 	if center.is_empty() or center.collider!=front.collider: return _reject(data,"TOP_TOO_SHALLOW")
 	landing.y=center.position.y+.015
 	data["landing_position"]=landing
-	data["player_alignment_position"]=Vector3(front.position.x,base.y,front.position.z)-inward*(radius+.05)
+	data["player_alignment_position"]=Vector3(front.position.x,base.y,front.position.z)-inward*(motor.crouch.standing_capsule_radius+.05)
 	data["player_alignment_facing"]=inward
 	data["target_position"]=landing
 	data["target_normal"]=top.normal

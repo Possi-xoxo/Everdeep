@@ -78,7 +78,7 @@ func sample_pose(delta: float) -> void:
 	if not _ready_to_sample:
 		return
 	var state = motor.animation_state
-	var allowed: bool = enabled and state.is_grounded and not state.is_airborne and not state.jump_started
+	var allowed: bool = enabled and motor.physical_ground_contact() and not state.jump_started
 	_sample(left,left_probe,left_target,allowed,delta)
 	_sample(right,right_probe,right_target,allowed,delta)
 	foot_height_delta=left.raw_ground_position.y-right.raw_ground_position.y if left.valid and right.valid else NAN

@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://test/crouch_test_zone_v2.gd" id="6"]
 [ext_resource type="PackedScene" path="res://test/traversal_test_interactable.tscn" id="7"]
 [ext_resource type="Script" path="res://test/mantle_test_zone_v2.gd" id="8"]
+[ext_resource type="Script" path="res://test/support_test_zone_v2.gd" id="9"]
 [sub_resource type="ProceduralSkyMaterial" id="SkyMaterial"]
 sky_top_color = Color(0.17, 0.27, 0.40, 1)
 sky_horizon_color = Color(0.55, 0.64, 0.71, 1)
@@ -18,6 +19,9 @@ ambient_light_color = Color(0.70, 0.80, 0.95, 1)
 ambient_light_energy = 0.65
 [node name="PlayerV2Lab" type="Node3D"]
 script = ExtResource("2")
+[node name="GroundSupportTestZone" type="Node3D" parent="."]
+script = ExtResource("9")
+
 [node name="MantleLedgeTestZone" type="Node3D" parent="."]
 script = ExtResource("8")
 [node name="TestMantle" parent="." instance=ExtResource("7")]

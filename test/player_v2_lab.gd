@@ -1,5 +1,6 @@
 extends Node3D
 ## Lab geometry only. The player scene is independently reusable.
+var ground_visual_offset: float = -0.01
 func _ready() -> void:
 	_box("Floor", Vector3(0, -0.25, 0), Vector3(64, 0.5, 90), Color(0.20, 0.25, 0.29))
 	_box("LowPlatform", Vector3(-9, 0.3, -12), Vector3(8, 0.6, 8), Color(0.28, 0.48, 0.43))
@@ -50,6 +51,8 @@ func _body(title: String, pos: Vector3, shape: Shape3D, mesh: Mesh, color: Color
 	body.add_child(collision)
 	var visual := MeshInstance3D.new()
 	visual.mesh = mesh
+	# Separate overlapping ground draws without moving the physics surface.
+	if title == "Floor": visual.position.y = ground_visual_offset
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED

@@ -1,6 +1,7 @@
 extends "res://test/player_v2_lab.gd"
 ## Standalone west-side sensing course; no changes to existing traversal lanes.
 func _ready() -> void:
+	ground_visual_offset = -0.005
 	_box("Floor",Vector3(-43,-.25,12),Vector3(24,.5,30),Color(.20,.25,.29))
 	_label("HAND SENSING / F11 DEBUG / WALK ONLY",Vector3(-40,.1,23))
 	_box("LeftWall",Vector3(-36,1,12),Vector3(.2,2,12),Color(.3,.45,.5))

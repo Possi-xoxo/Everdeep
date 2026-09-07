@@ -21,6 +21,7 @@ const CLIPS := {
 	"DodgeSprint": &"DOD_SPRINT_TO_ROLL",
 	"DodgeBack": &"DPD_DODING_BACK",
 	"CrouchEnter": &"CRC_STAND_TO_CROUCH", "CrouchExit": &"CRC_CROUCH_TO_STANDING",
+	"Mantle": &"TRV_SPRINT_TO_WALL_CLIMB_02",
 	"CrouchIdle": &"CRC_CROUCH_IDLE", "CrouchWalk": &"BOW_STANDING_WALK_FORWARD",
 	"CrouchLeft": &"BOW_STANDING_WALK_LEFT", "CrouchRight": &"BOW_STANDING_WALK_RIGHT",
 	"CrouchBack": &"BOW_STANDING_WALK_BACK",
@@ -146,6 +147,7 @@ func _prepare_library() -> bool:
 					value.z = reference.z
 				clip.track_set_key_value(track, key, value)
 	_trim_backstep()
+	motor.get_node("TraversalController/Mantle").prepare_clip(player.get_animation(CLIPS.Mantle))
 	return grounded.prepare(player)
 
 func _trim_backstep() -> void:
@@ -170,6 +172,10 @@ func _trim_backstep() -> void:
 func _clip(state: String) -> AnimationNodeAnimation:
 	var node := AnimationNodeAnimation.new()
 	node.animation = CLIPS[state]
+	if state=="Mantle":
+		node.use_custom_timeline=true
+		node.stretch_time_scale=true
+		node.timeline_length=player.get_animation(CLIPS.Mantle).length
 	if state in ["CrouchEnter","CrouchExit"]:
 		node.use_custom_timeline=true
 		node.stretch_time_scale=true
@@ -187,7 +193,7 @@ func _build_tree() -> void:
 	var locomotion = grounded.build()
 	var machine := AnimationNodeStateMachine.new()
 	machine.add_node(&"Locomotion", locomotion)
-	var states: Array[String]=["Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack", "CrouchEnter", "CrouchExit", "CrouchIdle", "CrouchWalk", "CrouchLocked", "CrouchRun", "CrouchLockedRun"]
+	var states: Array[String]=["Mantle", "Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack", "CrouchEnter", "CrouchExit", "CrouchIdle", "CrouchWalk", "CrouchLocked", "CrouchRun", "CrouchLockedRun"]
 	for state in states:
 		if state=="Locomotion": continue
 		if state in ["CrouchLocked","CrouchLockedRun"]:
@@ -209,6 +215,7 @@ func _build_tree() -> void:
 				continue
 			var transition := AnimationNodeStateMachineTransition.new()
 			transition.xfade_time = land_blend_out if to == "Locomotion" else (land_blend_in if to == "Land" else (jump_to_fall_blend if to == "Fall" else jump_blend_in))
+			if to=="Mantle": transition.xfade_time=.15
 			if to.begins_with("Crouch"): transition.xfade_time=motor.get_node("CrouchController").crouch_enter_blend_time
 			if from=="CrouchExit" or to=="CrouchExit": transition.xfade_time=motor.get_node("CrouchController").crouch_exit_blend_time
 			if from in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"] and to in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"]:
@@ -225,6 +232,19 @@ func _build_tree() -> void:
 
 func _physics_process(delta: float) -> void:
 	_pose_delta = delta
+	if motor.traversal.mantle.running:
+		_episode_visible=false
+		_intentional_jump_episode=false
+		fall_visual_committed=false
+		land_visual_offset=0
+		visual_root.position=visual_root_base_position
+		if motor.traversal.phase==motor.traversal.Phase.ACTIVE:
+			_enter(&"Mantle")
+			grounded.update(tree,motor.animation_state,0,false,visual_root,delta,self)
+			return
+		elif current_state==&"Mantle":
+			gait_blend=1.0 if motor.animation_state.move_input_magnitude>.01 else 0.0
+			_enter(&"Locomotion")
 	if _playback == null:
 		return
 	var s = motor.animation_state
@@ -433,6 +453,10 @@ func _enter(next: StringName) -> void:
 	if current_state == next:
 		return
 	var crouch_controller=motor.crouch
+	if current_state==&"Mantle" and next==&"Locomotion":
+		for index in tree.tree_root.get_transition_count():
+			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next:
+				tree.tree_root.get_transition(index).xfade_time=motor.traversal.mantle.mantle_exit_blend_time
 	if current_state==&"CrouchIdle" or next==&"CrouchIdle":
 		for index in tree.tree_root.get_transition_count():
 			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next and current_state in [&"CrouchIdle",&"CrouchWalk",&"CrouchRun"] and next in [&"CrouchIdle",&"CrouchWalk",&"CrouchRun"]:

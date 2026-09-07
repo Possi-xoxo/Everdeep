@@ -13,6 +13,8 @@ func block(label: String,pos: Vector3,size: Vector3) -> void:
 	var mesh:=BoxMesh.new()
 	mesh.size=size
 	visual.mesh=mesh
+	# Keep the collider at zero while avoiding the step-zone floor draw.
+	if label=="Floor": visual.position.y=-0.002
 	body.add_child(visual)
 func _ready() -> void:
 	position=Vector3(45,0,8)

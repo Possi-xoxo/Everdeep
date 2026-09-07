@@ -130,6 +130,7 @@ func eligibility(_allow_idle: bool = false) -> String:
 	if skeleton==null or left.bone<0 or right.bone<0: return "MISSING_RIG"
 	var s=motor.animation_state
 	if motor.crouch.active(): return "CROUCH"
+	if motor.traversal.mantle.running: return "MANTLE"
 	if s.locked_on: return "LOCKED"
 	if motor.dodge.is_dodging or motor.dodge.run_roll_recovery_visible: return "DODGE"
 	var animation=motor.get_node("AnimationController")

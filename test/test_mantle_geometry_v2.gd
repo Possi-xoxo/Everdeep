@@ -23,6 +23,10 @@ func run() -> void:
 	assist=body.roll_traversal
 	crouch=body.crouch
 	detector=body.traversal.get_node("LedgeDetector")
+	# Preserve the original detector boundary regression independently of the
+	# Phase 1B production defaults, covered by test_mantle_v2.
+	detector.mantle_min_height=.7
+	detector.mantle_max_height=1.4
 	body.set_physics_process(false)
 	animation.set_physics_process(false)
 	cam.set_process(false)
@@ -87,8 +91,7 @@ func run() -> void:
 	check(body.traversal.active_data.target_position==body.traversal.active_data.landing_position and body.traversal.active_data.target_normal==body.traversal.active_data.top_normal,"validated geometry survives generic adapter")
 	check(not lock.is_locked() and body.traversal.is_traversing,"mantle test clears lock")
 	check(body.position==before,"request does not reposition")
-	for frame in 60: await crouch_tick(true)
-	check(body.position.distance_to(before)<.02 and not body.traversal.is_traversing,"dummy completes without climb")
+	check(body.traversal.request_traversal_interrupt(body.traversal.Interrupt.DAMAGE),"entry releases ownership")
 	await crouch_tick(true,Vector2.ZERO,false,false,true)
 	body.context_interaction.scan()
 	check(not detector.result.valid and detector.volume_queries==0,"Dodge skips contextual volume queries")

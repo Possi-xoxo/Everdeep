@@ -16,6 +16,8 @@
 [ext_resource type="Script" path="res://Characters/Player/V2/player_traversal_v2.gd" id="14"]
 [ext_resource type="Script" path="res://Characters/Player/V2/player_context_interaction_v2.gd" id="15"]
 [ext_resource type="Script" path="res://Characters/Player/V2/player_ledge_detector_v2.gd" id="16"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_mantle_v2.gd" id="17"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_ground_support_v2.gd" id="18"]
 
 [sub_resource type="CapsuleShape3D" id="Body"]
 radius = 0.45
@@ -40,6 +42,9 @@ script = ExtResource("14")
 
 [node name="LedgeDetector" type="Node3D" parent="TraversalController"]
 script = ExtResource("16")
+
+[node name="Mantle" type="Node" parent="TraversalController"]
+script = ExtResource("17")
 
 [node name="ContextInteraction" type="Node3D" parent="."]
 script = ExtResource("15")
@@ -68,6 +73,9 @@ shape = SubResource("Body")
 
 [node name="MasterRig" parent="VisualRoot" unique_id=634883973 instance=ExtResource("2")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
+
+[node name="GroundSupportProbe" type="Node3D" parent="."]
+script = ExtResource("18")
 
 [node name="StepSolver" type="Node3D" parent="." unique_id=645130797]
 script = ExtResource("6")

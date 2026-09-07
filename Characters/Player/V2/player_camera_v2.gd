@@ -30,6 +30,11 @@ var _base_position := Vector3.ZERO
 var _smooth_origin := Vector3.ZERO
 var _lock_weight: float = 0.0
 var _was_locked: bool = false
+var mantle_camera_active: bool = false
+var mantle_camera_target := Vector3.ZERO
+var _mantle_origin := Vector3.ZERO
+var _mantle_start := Vector3.ZERO
+var _mantle_tracking: bool = false
 var _free_shape: Shape3D
 var _lock_shape := SphereShape3D.new()
 @onready var yaw: Node3D = $YawPivot
@@ -57,6 +62,27 @@ func _process(delta: float) -> void:
 	_lock_weight=move_toward(_lock_weight,1.0 if locked else 0.0,delta/maxf(duration,0.001))
 	var weight:=smoothstep(0,1,_lock_weight)
 	var free_origin: Vector3=motor.to_global(_base_position)
+	var mantle=motor.traversal.mantle
+	var tracking: bool=mantle.pose_owned()
+	if tracking and not _mantle_tracking:
+		_mantle_start=free_origin
+		_mantle_origin=global_position
+		mantle_camera_active=true
+	if mantle_camera_active:
+		if tracking:
+			var weight_top:=smoothstep(12,50,mantle.current_frame())
+			# World-space anchor independent of instantaneous capsule lift.
+			var top_anchor: Vector3=mantle.landing+Vector3.UP*(_base_position.y+mantle.mantle_camera_top_offset)
+			mantle_camera_target=_mantle_start.lerp(top_anchor,weight_top)
+		else:
+			mantle_camera_target=free_origin
+		var speed: float=mantle.mantle_camera_follow_speed if tracking else mantle.mantle_camera_return_speed
+		_mantle_origin=_mantle_origin.lerp(mantle_camera_target,1-exp(-speed*delta))
+		if not tracking and _mantle_origin.distance_to(free_origin)<.002:
+			mantle_camera_active=false
+		else:
+			free_origin=_mantle_origin
+	_mantle_tracking=tracking
 	var locked_origin: Vector3=motor.global_position+Vector3.UP*lock_camera_height
 	_smooth_origin=_smooth_origin.lerp(locked_origin,1-exp(-lock_camera_position_smoothing*delta))
 	global_position=free_origin.lerp(_smooth_origin,weight)

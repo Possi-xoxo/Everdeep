@@ -68,19 +68,26 @@ func _ready() -> void:
 	dodge.initialize(true)
 
 @onready var traversal = $TraversalController
+@onready var ground_support = $GroundSupportProbe
 @onready var context_interaction = $ContextInteraction
+
+func physical_ground_contact() -> bool:
+	return is_on_floor() or step_solver.active or roll_traversal.active
 
 func _physics_process(delta: float) -> void:
 	context_interaction.tick(Input.is_action_just_pressed("interact"))
-	if not traversal.is_traversing:
+	if not traversal.is_traversing or traversal.phase==traversal.Phase.EXIT:
 		if Input.is_action_just_pressed("lock_on"): lock_on.toggle()
 		if Input.is_action_just_pressed("crouch"): crouch.requested = not crouch.requested
 	step_motor(delta, Input.get_vector("move_left", "move_right", "move_forward", "move_backward"), Input.is_action_pressed("sprint"), Input.is_action_just_pressed("jump"), Input.is_action_just_pressed("dodge"), crouch.requested)
 
 ## Input boundary also supports deterministic play tests without emulating OS keys.
 func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pressed: bool = false, crouch_requested: bool = false) -> void:
+	if not ground_support.initialized: ground_support.refresh(0)
+	var was_mantling: bool=traversal.mantle.running
+	if was_mantling and traversal.mantle.step(delta,stick,jump,dodge_pressed): return
 	traversal.advance(delta)
-	if traversal.is_traversing:
+	if traversal.is_traversing and not (traversal.mantle.running and traversal.phase==traversal.Phase.EXIT):
 		# Phase 0 yields input authority only; braking, gravity and collisions
 		# still run through the normal motor. No traversal pose/translation yet.
 		stick=Vector2.ZERO
@@ -113,9 +120,9 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 	s.combat_input=Vector2(stick.x,-stick.y).limit_length(1.0) if locked else Vector2.ZERO
 	lock_on.combat_input=s.combat_input
 	var source_gait: int = s.gait
-	var grounded_before: bool = is_on_floor() or step_solver.active
+	var grounded_before: bool = ground_support.has_ground_support or step_solver.active or roll_traversal.active
 	s.was_grounded = s.is_grounded
-	s.jump_started = jump and grounded_before
+	s.jump_started = jump and (grounded_before or ground_support.coyote_remaining>0)
 	s.takeoff_speed = Vector2(velocity.x, velocity.z).length() if s.jump_started else s.takeoff_speed
 	s.move_input_magnitude = minf(stick.length(), 1.0)
 	var forward := -camera.global_basis.z
@@ -225,6 +232,7 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 	else:
 		smoothed_walk_direction=-visual.global_basis.z.normalized()
 	if s.jump_started:
+		ground_support.consume_jump()
 		velocity.y = jump_velocity
 	if dodge.is_dodging:
 		horizontal=dodge.motion()
@@ -272,6 +280,10 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 	var stepping: bool = step_solver.prepare(delta,horizontal,direction,step_allowed)
 	var roll_stepping: bool=roll_traversal.prepare_roll(delta,horizontal)
 	var saved_snap := floor_snap_length
+	var saved_stop := floor_stop_on_slope
+	if not grounded_before:
+		floor_snap_length=0
+		floor_stop_on_slope=false
 	if stepping:
 		step_solver.lift(delta)
 		floor_snap_length = 0.0
@@ -284,12 +296,14 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		if roll_traversal.active: velocity.y=0.0
 	move_and_slide()
 	floor_snap_length = saved_snap
+	floor_stop_on_slope = saved_stop
 	step_solver.finish()
 	roll_traversal.finish()
 	s.is_stepping_up = step_solver.active
 	s.step_height = step_solver.step_height
 	s.step_target_y = step_solver.step_target_y
-	s.is_grounded = is_on_floor() or step_solver.active
+	ground_support.refresh(delta,step_solver.active or roll_traversal.active)
+	s.is_grounded = ground_support.has_ground_support or step_solver.active or roll_traversal.active
 	s.is_airborne = not s.is_grounded
 	dodge.dodge_airborne=dodge.is_rolling() and s.is_airborne
 	if s.is_airborne:

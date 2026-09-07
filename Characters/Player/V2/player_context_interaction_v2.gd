@@ -52,7 +52,8 @@ func valid(candidate) -> bool:
 	var horizontal:=Vector3(offset.x,0,offset.z)
 	var forward: Vector3=-motor.visual.global_basis.z
 	forward.y=0
-	if horizontal.length()>.001 and forward.normalized().dot(horizontal.normalized())<cos(deg_to_rad(interaction_detection_angle*.5)): return false
+	var cone: float=motor.traversal.mantle.mantle_interaction_cone_angle if candidate==motor.traversal.get_node("LedgeDetector").candidate else interaction_detection_angle
+	if horizontal.length()>.001 and forward.normalized().dot(horizontal.normalized())<cos(deg_to_rad(cone*.5))-.00001: return false
 	if candidate.requires_line_of_sight:
 		var q:=PhysicsRayQueryParameters3D.create(origin,point,motor.collision_mask,[motor.get_rid()])
 		var hit:=get_world_3d().direct_space_state.intersect_ray(q)
@@ -101,7 +102,7 @@ func _process(_delta: float) -> void:
 func refresh_ui() -> void:
 	prompt.visible=is_instance_valid(selected) and not selected.is_queued_for_deletion() and selected.can_interact(motor) and not motor.traversal.is_traversing
 	prompt.text="E to "+selected.get_action_text() if prompt.visible else ""
-	debug_label.visible=interaction_debug or motor.traversal.traversal_debug
+	debug_label.visible=interaction_debug or motor.traversal.traversal_debug or motor.traversal.mantle.mantle_debug
 	if debug_label.visible:
 		debug_label.text="TRAVERSAL\nCandidate: %s\nType: %s / Mode: CONTEXTUAL\nDistance: %.2f / Action: %s\nAvailable: %s\n%s" % [selected.name if is_instance_valid(selected) else "None",Context.Type.keys()[selected.get_interaction_type()] if is_instance_valid(selected) else "NONE",motor.global_position.distance_to(selected.get_interaction_point()) if is_instance_valid(selected) else 0.0,selected.get_action_text() if is_instance_valid(selected) else "",is_instance_valid(selected),motor.traversal.debug_text()]
 	debug_mesh.visible=interaction_debug
