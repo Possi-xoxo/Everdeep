@@ -8,6 +8,22 @@ const ACTION: StringName=&"TRV_SPRINT_TO_WALL_CLIMB_02"
 @export_range(.25,.75,.01) var mantle_long_approach_distance: float = .55
 @export_range(.03,.08,.01) var mantle_alignment_position_tolerance: float = .05
 @export_range(3,8,.5) var mantle_alignment_angle_tolerance: float = 5.0
+@export_group("Climb Launch and Contact")
+@export_range(.50,1.0,.01) var moving_climb_launch_distance: float = .75
+@export_range(.50,1.0,.01) var stationary_climb_launch_distance: float = .65
+@export_range(.45,.65,.01) var wall_contact_distance: float = .50
+## Smoothstep from the selected entry source frame to WALL_REACH. Hands are
+## expected visually around frames 17-21; this is not a hand IK constraint.
+@export_range(12,24,1) var launch_contact_frame: int = 17
+@export_group("Mantle Polish")
+## Existing source-compensation reference, now explicit. Never skeleton scale.
+@export_range(1.75,3.0,.01) var reference_climb_height: float = 2.54
+@export_group("Mantle Height Retarget")
+@export_range(0,.2,.01) var reach_height_difference_weight: float = .05
+@export_range(.3,.9,.05) var hoist_height_difference_weight: float = .65
+@export_range(30,45,1) var height_difference_full_frame: int = 37
+var actual_climb_height: float = 0.0
+var vertical_retarget_offset: float = 0.0
 @export_group("Mantle Polish")
 @export_range(.80,1.00,.01) var mantle_playback_speed: float = .88
 @export_range(20,30,1) var mantle_hoist_start_frame: int = 25
@@ -54,6 +70,8 @@ var landing_support_samples: Array = []
 var top := Vector3.ZERO
 var candidate_height: float = 0.0
 var alignment := Vector3.ZERO
+var wall_contact := Vector3.ZERO
+var selected_launch_distance: float = .65
 var facing := Vector3.FORWARD
 var current_target := Vector3.ZERO
 var collision_blocked: bool = false
@@ -83,7 +101,7 @@ func _ready() -> void:
 	debug_mesh.global_transform=Transform3D.IDENTITY
 	var material:=StandardMaterial3D.new()
 	material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color=Color.ORANGE
+	material.vertex_color_use_as_albedo=true
 	material.no_depth_test=true
 	debug_mesh.material_override=material
 
@@ -105,7 +123,14 @@ func sync_phase() -> String:
 	return "APPROACH"
 
 func trajectory(p: float) -> Vector3:
-	return profile_position(p,start,landing)
+	# Preserve the old contact-to-hoist path and its vertical compensation.
+	# Only the opening horizontal position is displaced out toward launch.
+	var contact_start:=Vector3(wall_contact.x,start.y,wall_contact.z)
+	var value:=profile_position(p,contact_start,landing)
+	var weight:=smoothstep(float(playback_start_frame),float(maxi(playback_start_frame+1,launch_contact_frame)),p*clip_length*SOURCE_FPS)
+	var launch_offset:=start-contact_start
+	launch_offset.y=0
+	return value+launch_offset*(1.0-weight)
 
 func pre_hoist(p: float,from: Vector3,to: Vector3) -> Vector3:
 	var value:=from.lerp(to,clampf(mantle_forward_curve.sample(p),0,1))
@@ -119,7 +144,7 @@ func arc_points(from: Vector3,to: Vector3) -> Array[Vector3]:
 	control_b.y=control_a.y
 	return [first,control_a,control_b,to]
 
-func profile_position(p: float,from: Vector3,to: Vector3) -> Vector3:
+func reference_profile_position(p: float,from: Vector3,to: Vector3) -> Vector3:
 	var begin_p:=frame_progress(mantle_hoist_start_frame)
 	var end_p:=frame_progress(mantle_hoist_end_frame)
 	if p<begin_p: return pre_hoist(p,from,to)
@@ -127,6 +152,20 @@ func profile_position(p: float,from: Vector3,to: Vector3) -> Vector3:
 	var t:=smoothstep(0,1,inverse_lerp(begin_p,end_p,p))
 	var points:=arc_points(from,to)
 	return points[0].bezier_interpolate(points[1],points[2],points[3],t)
+
+func height_difference_weight(p: float) -> float:
+	var frame:=p*clip_length*SOURCE_FPS
+	if frame<=11: return 0.0
+	if frame<launch_contact_frame: return reach_height_difference_weight*smoothstep(11,launch_contact_frame,frame)
+	if frame<mantle_hoist_start_frame: return lerpf(reach_height_difference_weight,hoist_height_difference_weight,smoothstep(launch_contact_frame,mantle_hoist_start_frame,frame))
+	return lerpf(hoist_height_difference_weight,1.0,smoothstep(mantle_hoist_start_frame,height_difference_full_frame,frame))
+
+func profile_position(p: float,from: Vector3,to: Vector3) -> Vector3:
+	var value:=reference_profile_position(p,from,to)
+	var reference_to:=Vector3(to.x,from.y+reference_climb_height,to.z)
+	value.y=reference_profile_position(p,from,reference_to).y+(to.y-from.y-reference_climb_height)*height_difference_weight(p)
+	if p>=frame_progress(mantle_hoist_end_frame): return to
+	return value
 
 func volume_clear(point: Vector3) -> bool:
 	var q:=PhysicsShapeQueryParameters3D.new()
@@ -153,7 +192,14 @@ func validate(data: Dictionary) -> bool:
 	last_reject=""
 	if not data.get("valid",false) or not is_instance_valid(data.get("obstacle_source")): return false
 	if not motor.crouch.standing_clear(): last_reject="ENTRY_CLEARANCE"; return false
-	alignment=data.player_alignment_position
+	var speed:=Vector2(motor.velocity.x,motor.velocity.z).length()
+	entry_source="MOVING" if speed>=mantle_moving_entry_speed_threshold else "IDLE"
+	playback_start_frame=mantle_moving_start_frame if entry_source=="MOVING" else mantle_idle_start_frame
+	selected_launch_distance=maxf(wall_contact_distance,moving_climb_launch_distance if entry_source=="MOVING" else stationary_climb_launch_distance)
+	wall_contact=data.player_alignment_position
+	alignment=wall_contact-data.player_alignment_facing*(selected_launch_distance-wall_contact_distance)
+	data["launch_position"]=alignment
+	data["wall_contact_position"]=wall_contact
 	landing=data.landing_position
 	facing=data.player_alignment_facing
 	top=data.top_position
@@ -174,6 +220,8 @@ func validate(data: Dictionary) -> bool:
 		last_reject="EDGE_SUPPORT_MISSING"
 		return false
 	start=alignment
+	actual_climb_height=landing.y-alignment.y
+	vertical_retarget_offset=actual_climb_height-reference_climb_height
 	# Distance is already owned by the detector. Never add a closer entry gate.
 	if not segment_clear(motor.global_position,alignment): last_reject="ALIGNMENT_BLOCKED"; return false
 	# Do not pull across a pit at a constant height. This checks the existing
@@ -242,7 +290,7 @@ func prepare_clip(clip: Animation) -> void:
 		var value: Vector3=source_hips[k]
 		value.x=source_hips[0].x
 		value.y=source_hips[0].y
-		value.z+=100.0*profile_position(clip.track_get_key_time(source_track,k)/clip.length,Vector3.ZERO,Vector3(0,2.54,-1)).y
+		value.z+=100.0*reference_profile_position(clip.track_get_key_time(source_track,k)/clip.length,Vector3.ZERO,Vector3(0,reference_climb_height,-1)).y
 		clip.track_set_key_value(source_track,k,value)
 
 func safe_move(target: Vector3) -> bool:
@@ -344,9 +392,8 @@ func restore(reason: String) -> void:
 	if reason!="COMPLETED": a._enter(&"Locomotion")
 
 func polish_debug_text() -> String:
-	var points:=arc_points(start,landing)
 	var camera=motor.get_node("CameraRig")
-	return "MANTLE POLISH\nPlayback %.2f / Frame %.2f / %s\nArc Start %s\nControls %s / %s\nArc End %s\nArc Progress %.3f / Height %.2f / Bias %.2f\nCamera %s / Target %s / Error %.3fm" % [mantle_playback_speed,current_frame(),sync_phase(),points[0],points[1],points[2],points[3],smoothstep(mantle_hoist_start_frame,mantle_hoist_end_frame,current_frame()),mantle_hoist_arc_height,mantle_hoist_arc_forward_bias,"MANTLE" if camera.mantle_camera_active else "FREE",camera.mantle_camera_target,camera.global_position.distance_to(camera.mantle_camera_target)]
+	return "MANTLE POLISH\nPlayback %.2f / Frame %.2f / %s\nRetargeted hoist start %s / Target %s / End %s\nHoist Progress %.3f / Arc Height %.2f / Bias %.2f\nCamera %s / Target %s / Error %.3fm" % [mantle_playback_speed,current_frame(),sync_phase(),trajectory(frame_progress(mantle_hoist_start_frame)),current_target,landing,smoothstep(mantle_hoist_start_frame,mantle_hoist_end_frame,current_frame()),mantle_hoist_arc_height,mantle_hoist_arc_forward_bias,"MANTLE" if camera.mantle_camera_active else "FREE",camera.mantle_camera_target,camera.global_position.distance_to(camera.mantle_camera_target)]
 
 func exit_debug_text() -> String:
 	var a=motor.get_node("AnimationController")
@@ -354,18 +401,22 @@ func exit_debug_text() -> String:
 
 func debug_text() -> String:
 	var angle:=rad_to_deg(absf(wrapf(motor.visual.rotation.y-atan2(-facing.x,-facing.z),-PI,PI)))
-	return exit_debug_text()+"\n"+polish_debug_text()+"\n%s / %s / Start %d\nAlignment %.3fm / %.2f degrees\nInput At Exit %s / Blend %.2fs\nCollision Blocked %s / Reject %s" % [ACTION,entry_source,playback_start_frame,motor.global_position.distance_to(alignment),angle,input_at_exit,mantle_exit_blend_time,collision_blocked,last_reject]
+	var wall_distance: float=(motor.global_position-wall_contact).dot(-facing)+wall_contact_distance
+	var retarget_text: String="\nHeight actual %.3f / Reference %.3f / Delta %+.3f / Ratio %.3f / Phase weight %.3f" % [actual_climb_height,reference_climb_height,vertical_retarget_offset,actual_climb_height/reference_climb_height,height_difference_weight(progress)]
+	var hand_ik=motor.get_node_or_null("MantleHandIK")
+	if hand_ik!=null: retarget_text+="\n"+hand_ik.debug_text()
+	return exit_debug_text()+"\n"+polish_debug_text()+retarget_text+"\n%s / %s / Start %d\nAlignment %.3fm / %.2f degrees\nInput At Exit %s / Blend %.2fs\nCollision Blocked %s / Reject %s\nWall distance %.3fm / Launch %.2fm / Contact %.2fm\nLaunch frames %d-%d smoothstep / Phase %.3f" % [ACTION,entry_source,playback_start_frame,motor.global_position.distance_to(alignment),angle,input_at_exit,mantle_exit_blend_time,collision_blocked,last_reject,wall_distance,selected_launch_distance,wall_contact_distance,playback_start_frame,launch_contact_frame,progress]
 
 func _process(_delta: float) -> void:
 	debug_mesh.visible=(mantle_debug or owner_controller.traversal_debug) and running
 	if not debug_mesh.visible: return
 	var mesh:=ImmediateMesh.new()
 	mesh.surface_begin(Mesh.PRIMITIVE_LINES)
+	mesh.surface_set_color(Color.ORANGE)
 	for i in 40:
 		mesh.surface_add_vertex(trajectory(float(i)/40))
 		mesh.surface_add_vertex(trajectory(float(i+1)/40))
-	var points:=arc_points(start,landing)
-	for point in [start,alignment,top,ledge_edge,previous_landing,landing,current_target,motor.global_position,points[0],points[1],points[2],motor.get_node("CameraRig").mantle_camera_target]:
+	for point in [start,alignment,wall_contact,top,ledge_edge,previous_landing,landing,current_target,motor.global_position,trajectory(frame_progress(mantle_hoist_start_frame)),motor.get_node("CameraRig").mantle_camera_target]:
 		for axis in [Vector3.RIGHT,Vector3.UP,Vector3.BACK]:
 			mesh.surface_add_vertex(point-axis*.07)
 			mesh.surface_add_vertex(point+axis*.07)
@@ -375,5 +426,14 @@ func _process(_delta: float) -> void:
 	for sample in landing_support_samples:
 		mesh.surface_add_vertex(sample.from)
 		mesh.surface_add_vertex(sample.to)
+	# Cyan launch, magenta contact, green landing, white detected wall normal.
+	for marker in [[alignment,Color.CYAN],[wall_contact,Color.MAGENTA],[landing,Color.GREEN],[wall_point,Color.WHITE]]:
+		mesh.surface_set_color(marker[1])
+		var point: Vector3=marker[0]
+		mesh.surface_add_vertex(point)
+		mesh.surface_add_vertex(point+Vector3.UP*.5)
+	mesh.surface_set_color(Color.WHITE)
+	mesh.surface_add_vertex(wall_point)
+	mesh.surface_add_vertex(wall_point+wall_normal*.4)
 	mesh.surface_end()
 	debug_mesh.mesh=mesh

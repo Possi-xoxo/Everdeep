@@ -5,15 +5,24 @@ const Planting = preload("res://Characters/Player/V2/player_foot_planting_v2.gd"
 const ClimbContact = preload("res://Characters/Player/V2/player_mantle_foot_contact_v2.gd")
 @export_category("Climb Wall Foot Contact")
 @export var climb_foot_ik_enabled: bool = true
-@export_range(.01,.10,.005) var climb_foot_wall_offset: float = .04
-@export_range(.1,.6,.01) var climb_foot_projection_distance: float = .40
-@export_range(.05,.4,.01) var climb_foot_max_correction: float = .30
+## Wall surface clearance (existing export name retained).
+@export_range(.01,.10,.005) var climb_foot_wall_offset: float = .02
+@export_range(.05,.15,.01) var climb_foot_max_correction: float = .15
+@export_range(5,40,1) var wall_ik_blend_speed: float = 25
+@export_range(.005,.05,.005) var climb_penetration_full_weight_depth: float = .02
 @export_range(0,1,.05) var climb_foot_strength: float = 1.0
-@export_range(1,55,1) var climb_foot_blend_in_start: float = 12
-@export_range(1,55,1) var climb_foot_blend_in_end: float = 18
+@export_range(1,55,1) var climb_foot_blend_in_start: float = 10
+@export_range(1,55,1) var climb_foot_blend_in_end: float = 15
 @export_range(1,55,1) var climb_foot_blend_out_start: float = 30
 @export_range(1,55,1) var climb_foot_blend_out_end: float = 40
 @export var climb_foot_debug: bool = false
+@export_category("Climb Ledge Top Penetration")
+@export_range(.01,.03,.005) var top_surface_clearance: float = .02
+@export_range(.05,.15,.01) var max_top_foot_correction: float = .15
+@export_range(5,40,1) var top_ik_blend_speed: float = 25
+## Relative to existing hoist start/end (25-50): defaults correspond to 40-45.
+@export_range(0,1,.05) var top_foot_phase_start: float = .60
+@export_range(0,1,.05) var top_foot_phase_full: float = .80
 @export_category("Walk Knee Stabilization")
 @export var walk_knee_stabilization_enabled: bool = true
 @export_range(0.25,0.50,0.01) var knee_pole_forward_offset: float = 0.40
@@ -153,9 +162,11 @@ func prepare_targets(delta: float) -> void:
 		if leg.climb_profile:
 			leg.plant.update(self,data,pose,delta,false)
 			var contact: Dictionary=leg.climb_contact
-			leg.weight=lerpf(leg.weight,contact.weight,1-exp(-20.0*delta))
+			leg.weight=lerpf(leg.weight,contact.weight,1-exp(-contact.blend_speed*delta))
 			var offset: Vector3=contact.target-pose.origin if contact.valid else Vector3.ZERO
-			leg.correction=leg.correction.lerp(offset,1-exp(-20.0*delta))
+			leg.correction=leg.correction.lerp(offset,1-exp(-contact.blend_speed*delta))
+			var contact_cap: float=max_top_foot_correction if contact.mode=="LEDGE_TOP" else climb_foot_max_correction
+			leg.correction=leg.correction.limit_length(contact_cap if contact.valid else maxf(climb_foot_max_correction,max_top_foot_correction))
 			leg.desired_destination=pose.origin+leg.correction
 			leg.swing=0.0
 			leg.clamped=false
@@ -240,7 +251,9 @@ func place_targets() -> void:
 		if leg.plant.locked and hip.distance_to(leg.plant.locked_world_position)>reach*0.995:
 			leg.plant.release_lock("CHAIN_REACH")
 		if hip.distance_to(destination)>reach*0.995:
-			destination=hip+(destination-hip).normalized()*reach*0.995
+			# Climb fallback must not turn a normal-only offset into a different
+			# procedural pose as animation changes underneath the smoothed target.
+			destination=pose.origin if leg.get("climb_profile",false) else hip+(destination-hip).normalized()*reach*0.995
 			# A target cannot be both within correction bounds and reachable in
 			# every pose. Reduce influence instead of stretching the chain.
 			if (leg.get("climb_profile",false) and destination.distance_to(pose.origin)>climb_foot_max_correction) or (not leg.get("climb_profile",false) and (absf(destination.y-pose.origin.y)>vertical_correction_limit(leg) or Vector2(destination.x-pose.origin.x,destination.z-pose.origin.z).length()>max_foot_ik_horizontal_correction)):
@@ -320,7 +333,7 @@ func _capture_result() -> void:
 			var contact: Dictionary=leg.climb_contact
 			var color:=Color.LIME_GREEN if contact.valid else Color.RED
 			_line(leg.animated,leg.target.global_position,color)
-			_line(contact.hit,contact.hit+motor.traversal.mantle.wall_normal*.12,Color.CYAN)
+			_line(contact.hit,contact.hit+contact.normal*.12,Color.CYAN)
 			_line(leg.target.global_position,leg.target.global_position+Vector3.UP*leg.weight*.2,color)
 			for axis in [Vector3.RIGHT,Vector3.UP,Vector3.FORWARD]:
 				_line(leg.animated-axis*.025,leg.animated+axis*.025,Color.YELLOW)
@@ -374,7 +387,7 @@ func debug_text() -> String:
 		var leg=legs[i]
 		var data=feet.left if i==0 else feet.right
 		if leg.has("climb_contact"):
-			result+="\nClimb %s Valid: %s / Weight: %.2f" % [leg.side,leg.climb_contact.valid,leg.weight]
+			result+="\nClimb %s %s / Weight %.2f / Penetration %.3fm / Offset %.3fm / Limited %s" % [leg.side,leg.climb_contact.mode,leg.weight,leg.climb_contact.penetration,leg.correction.length(),leg.climb_contact.limited]
 		if foot_planting_enabled:
 			result+="\n%s FOOT PLANTING / Valid: %s / IK: %.2f\n%s" % [leg.side,data.valid,leg.weight,leg.plant.debug_text()]
 		else:

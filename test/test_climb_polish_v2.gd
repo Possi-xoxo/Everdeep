@@ -50,7 +50,7 @@ func run() -> void:
 					peak=maxf(peak,leg.weight)
 					correction=maxf(correction,leg.correction.length())
 					max_length_error=maxf(max_length_error,leg.length_error)
-					if leg.climb_contact.valid and leg.weight>.9:
+					if leg.climb_contact.valid and leg.climb_contact.mode=="WALL" and leg.weight>.9:
 						var toe_index: int=ik.skeleton.find_bone("mixamorig_"+leg.side+"ToeBase")
 						var toe: Vector3=ik._world(toe_index).origin
 						var solved_depth: float=minf((toe-mantle.wall_point).dot(mantle.wall_normal),(leg.solved-mantle.wall_point).dot(mantle.wall_normal))
@@ -59,13 +59,15 @@ func run() -> void:
 						penetration_after+=maxf(0,-solved_depth)
 					check(leg.correction.length()<=ik.climb_foot_max_correction+.001,"bounded visual correction")
 					check(leg.solved.is_finite(),"finite foot result")
-					if mantle.current_frame()>46: check(leg.weight<.03,"wall IK released before landing")
+					if mantle.current_frame()>46: check(leg.climb_contact.mode!="WALL","wall IK released; top prevention is allowed before landing")
 			if not mantle.running: break
 		print("CONTACT height=",height," valid samples=",contacts," peak=",peak," correction=",correction," length error=",max_length_error)
 		check(contacts>0 and peak>.2 and correction>.01,"native wall contact actually used")
 		check(max_length_error<.005,"native chain lengths preserved")
 		print("WALL penetration sums before=",penetration_before," after=",penetration_after)
-		check(penetration_after<penetration_before*.5,"wall penetration substantially reduced during contact")
+		# The penetration-only pass deliberately caps offsets at .15m rather
+		# than the old .30m wall-placement target. Deep clipping stays partial.
+		check(penetration_after<penetration_before,"wall penetration reduced within conservative safety cap")
 		check(body.traversal.last_end_reason=="COMPLETED","extended climb lands")
 		check(body.ground_support.has_ground_support,"footprint landing preserved")
 	await fixture(2.6)

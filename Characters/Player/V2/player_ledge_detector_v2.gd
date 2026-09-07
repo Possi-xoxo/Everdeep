@@ -138,7 +138,7 @@ func detect_ledge_geometry() -> Dictionary:
 	if center.is_empty() or center.collider!=front.collider: return _reject(data,"TOP_TOO_SHALLOW")
 	landing.y=center.position.y+.015
 	data["landing_position"]=landing
-	data["player_alignment_position"]=Vector3(front.position.x,base.y,front.position.z)-inward*(motor.crouch.standing_capsule_radius+.05)
+	data["player_alignment_position"]=Vector3(front.position.x,base.y,front.position.z)-inward*motor.traversal.mantle.wall_contact_distance
 	data["player_alignment_facing"]=inward
 	data["target_position"]=landing
 	data["target_normal"]=top.normal
