@@ -11,6 +11,10 @@ var selected_score: float = -INF
 var prompt: Label
 var debug_label: Label
 var debug_mesh: MeshInstance3D
+var _consumed_climb: String = ""
+var _awaiting_climb_exit: bool = false
+var _climb_exit_position := Vector3.ZERO
+var held_climb_intent: bool = false
 @onready var motor=get_parent()
 
 func _ready() -> void:
@@ -48,7 +52,11 @@ func valid(candidate) -> bool:
 	var point: Vector3=candidate.get_interaction_point()
 	var origin: Vector3=motor.global_position+Vector3.UP
 	var offset:=point-origin
-	if offset.length()>interaction_detection_range: return false
+	var detector=motor.traversal.get_node("LedgeDetector")
+	if candidate==detector.candidate:
+		if float(detector.result.get("distance",INF))>detector.mantle_acquisition_distance: return false
+		if not _held_rearm_allowed(): return false
+	elif offset.length()>interaction_detection_range: return false
 	var horizontal:=Vector3(offset.x,0,offset.z)
 	var forward: Vector3=-motor.visual.global_basis.z
 	forward.y=0
@@ -86,13 +94,46 @@ func activate_selected() -> bool:
 		refresh_ui()
 		return false
 	var accepted: bool=selected.begin_interaction(motor)
+	if accepted and selected==motor.traversal.get_node("LedgeDetector").candidate:
+		_consumed_climb=_climb_key()
+		_awaiting_climb_exit=true
 	if accepted: selected=null
 	refresh_ui()
 	return accepted
 
-func tick(pressed: bool=false) -> void:
+func _climb_key() -> String:
+	var data: Dictionary=motor.traversal.get_node("LedgeDetector").result
+	var source=data.get("obstacle_source")
+	if not data.get("valid",false) or not is_instance_valid(source): return ""
+	# Same collider may contain multiple ledges. Height/face identify the ledge,
+	# without rearming just because the ray slides sideways along the same face.
+	var normal: Vector3=data.obstacle_normal
+	return "%s/%.1f/%s" % [source.get_instance_id(),data.top_position.y,normal.snapped(Vector3.ONE*.1)]
+
+func _held_rearm_allowed() -> bool:
+	if not held_climb_intent or _consumed_climb.is_empty(): return true
+	if _awaiting_climb_exit or _climb_key()==_consumed_climb: return false
+	var traveled: Vector3=motor.global_position-_climb_exit_position
+	return Vector2(traveled.x,traveled.z).length()>=.5 and motor.animation_state.move_input_magnitude>.01
+
+func tick(pressed: bool=false, held: bool=false) -> void:
+	held_climb_intent=held or pressed
+	if not held_climb_intent:
+		_consumed_climb=""
+		_awaiting_climb_exit=false
+	if _awaiting_climb_exit and not motor.traversal.is_traversing:
+		_awaiting_climb_exit=false
+		_climb_exit_position=motor.global_position
 	scan()
-	if pressed: activate_selected()
+	if not held_climb_intent: return
+	if motor.traversal.is_traversing: return
+	var detector=motor.traversal.get_node("LedgeDetector")
+	if selected!=detector.candidate:
+		# Held intent never fires doors, generic interactions or other actions.
+		if pressed: activate_selected()
+		return
+	# Selected climb is already executable; successful acceptance consumes it.
+	activate_selected()
 
 func _process(_delta: float) -> void:
 	# UI also clears between physics ticks when a source is removed.
@@ -100,11 +141,13 @@ func _process(_delta: float) -> void:
 	refresh_ui()
 
 func refresh_ui() -> void:
-	prompt.visible=is_instance_valid(selected) and not selected.is_queued_for_deletion() and selected.can_interact(motor) and not motor.traversal.is_traversing
+	prompt.visible=valid(selected) and not motor.traversal.is_traversing
 	prompt.text="E to "+selected.get_action_text() if prompt.visible else ""
 	debug_label.visible=interaction_debug or motor.traversal.traversal_debug or motor.traversal.mantle.mantle_debug
 	if debug_label.visible:
 		debug_label.text="TRAVERSAL\nCandidate: %s\nType: %s / Mode: CONTEXTUAL\nDistance: %.2f / Action: %s\nAvailable: %s\n%s" % [selected.name if is_instance_valid(selected) else "None",Context.Type.keys()[selected.get_interaction_type()] if is_instance_valid(selected) else "NONE",motor.global_position.distance_to(selected.get_interaction_point()) if is_instance_valid(selected) else 0.0,selected.get_action_text() if is_instance_valid(selected) else "",is_instance_valid(selected),motor.traversal.debug_text()]
+	if debug_label.visible:
+		debug_label.text+="\nHeld climb: %s / Consumed ledge: %s" % [held_climb_intent,not _consumed_climb.is_empty()]
 	debug_mesh.visible=interaction_debug
 	if interaction_debug:
 		var mesh:=ImmediateMesh.new()

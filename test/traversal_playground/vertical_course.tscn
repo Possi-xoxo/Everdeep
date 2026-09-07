@@ -1,0 +1,262 @@
+[gd_scene load_steps=26 format=3]
+
+[sub_resource type="StandardMaterial3D" id="Material"]
+albedo_color = Color(0.32, 0.48, 0.7, 1)
+
+[sub_resource type="BoxShape3D" id="Shape0"]
+size = Vector3(6, 0.5, 6)
+[sub_resource type="BoxMesh" id="Mesh0"]
+size = Vector3(6, 0.5, 6)
+
+[sub_resource type="BoxShape3D" id="Shape1"]
+size = Vector3(4.8, 0.8, 4)
+[sub_resource type="BoxMesh" id="Mesh1"]
+size = Vector3(4.8, 0.8, 4)
+
+[sub_resource type="BoxShape3D" id="Shape2"]
+size = Vector3(4.8, 1.15, 4)
+[sub_resource type="BoxMesh" id="Mesh2"]
+size = Vector3(4.8, 1.15, 4)
+
+[sub_resource type="BoxShape3D" id="Shape3"]
+size = Vector3(4.8, 1.7999999999999998, 4)
+[sub_resource type="BoxMesh" id="Mesh3"]
+size = Vector3(4.8, 1.7999999999999998, 4)
+
+[sub_resource type="BoxShape3D" id="Shape4"]
+size = Vector3(4.8, 2.55, 4)
+[sub_resource type="BoxMesh" id="Mesh4"]
+size = Vector3(4.8, 2.55, 4)
+
+[sub_resource type="BoxShape3D" id="Shape5"]
+size = Vector3(4.8, 4.05, 4)
+[sub_resource type="BoxMesh" id="Mesh5"]
+size = Vector3(4.8, 4.05, 4)
+
+[sub_resource type="BoxShape3D" id="Shape6"]
+size = Vector3(4.8, 5.75, 4)
+[sub_resource type="BoxMesh" id="Mesh6"]
+size = Vector3(4.8, 5.75, 4)
+
+[sub_resource type="BoxShape3D" id="Shape7"]
+size = Vector3(1.2, 4.35, 1.4)
+[sub_resource type="BoxMesh" id="Mesh7"]
+size = Vector3(1.2, 4.35, 1.4)
+
+[sub_resource type="BoxShape3D" id="Shape8"]
+size = Vector3(4.8, 7.75, 4)
+[sub_resource type="BoxMesh" id="Mesh8"]
+size = Vector3(4.8, 7.75, 4)
+
+[sub_resource type="BoxShape3D" id="Shape9"]
+size = Vector3(4.8, 10.15, 4)
+[sub_resource type="BoxMesh" id="Mesh9"]
+size = Vector3(4.8, 10.15, 4)
+
+[sub_resource type="BoxShape3D" id="Shape10"]
+size = Vector3(4.8, 12.65, 4)
+[sub_resource type="BoxMesh" id="Mesh10"]
+size = Vector3(4.8, 12.65, 4)
+
+[sub_resource type="BoxShape3D" id="Shape11"]
+size = Vector3(4.8, 15.4, 4)
+[sub_resource type="BoxMesh" id="Mesh11"]
+size = Vector3(4.8, 15.4, 4)
+
+[node name="Vertical" type="Node3D"]
+[node name="Start" type="Marker3D" parent="."]
+position = Vector3(0, 0.08, -2)
+[node name="Geometry" type="Node3D" parent="."]
+[node name="Start" type="StaticBody3D" parent="Geometry"]
+position = Vector3(0, -0.25, -3)
+metadata/rise_m = 0.00
+metadata/gap_m = 0.00
+[node name="Collision" type="CollisionShape3D" parent="Geometry/Start"]
+shape = SubResource("Shape0")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Start"]
+mesh = SubResource("Mesh0")
+material_override = SubResource("Material")
+[node name="Stage_1_Rise_030" type="StaticBody3D" parent="Geometry"]
+position = Vector3(-0.6, -0.10000000000000003, -8)
+metadata/rise_m = 0.30
+metadata/gap_m = 0.00
+[node name="Collision" type="CollisionShape3D" parent="Geometry/Stage_1_Rise_030"]
+shape = SubResource("Shape1")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Stage_1_Rise_030"]
+mesh = SubResource("Mesh1")
+material_override = SubResource("Material")
+[node name="Stage_2_Rise_035" type="StaticBody3D" parent="Geometry"]
+position = Vector3(0.6, 0.07499999999999996, -12)
+metadata/rise_m = 0.35
+metadata/gap_m = 0.00
+[node name="Collision" type="CollisionShape3D" parent="Geometry/Stage_2_Rise_035"]
+shape = SubResource("Shape2")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Stage_2_Rise_035"]
+mesh = SubResource("Mesh2")
+material_override = SubResource("Material")
+[node name="Stage_3_Rise_065" type="StaticBody3D" parent="Geometry"]
+position = Vector3(-0.6, 0.3999999999999999, -16)
+metadata/rise_m = 0.65
+metadata/gap_m = 0.00
+[node name="Collision" type="CollisionShape3D" parent="Geometry/Stage_3_Rise_065"]
+shape = SubResource("Shape3")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Stage_3_Rise_065"]
+mesh = SubResource("Mesh3")
+material_override = SubResource("Material")
+[node name="Stage_4_Rise_075" type="StaticBody3D" parent="Geometry"]
+position = Vector3(0.6, 0.7749999999999999, -20)
+metadata/rise_m = 0.75
+metadata/gap_m = 0.00
+[node name="Collision" type="CollisionShape3D" parent="Geometry/Stage_4_Rise_075"]
+shape = SubResource("Shape4")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Stage_4_Rise_075"]
+mesh = SubResource("Mesh4")
+material_override = SubResource("Material")
+[node name="Stage_5_Rise_150" type="StaticBody3D" parent="Geometry"]
+position = Vector3(-0.6, 1.525, -24.5)
+metadata/rise_m = 1.50
+metadata/gap_m = 0.50
+[node name="Collision" type="CollisionShape3D" parent="Geometry/Stage_5_Rise_150"]
+shape = SubResource("Shape5")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Stage_5_Rise_150"]
+mesh = SubResource("Mesh5")
+material_override = SubResource("Material")
+[node name="Stage_6_Rise_170" type="StaticBody3D" parent="Geometry"]
+position = Vector3(0.6, 2.375, -28.5)
+metadata/rise_m = 1.70
+metadata/gap_m = 0.00
+[node name="Collision" type="CollisionShape3D" parent="Geometry/Stage_6_Rise_170"]
+shape = SubResource("Shape6")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Stage_6_Rise_170"]
+mesh = SubResource("Mesh6")
+material_override = SubResource("Material")
+[node name="Jump170_OptionalApproachStep_030" type="StaticBody3D" parent="Geometry"]
+position = Vector3(1.8, 1.6749999999999998, -25.8)
+metadata/rise_m = 0.30
+metadata/gap_m = 0.00
+[node name="Collision" type="CollisionShape3D" parent="Geometry/Jump170_OptionalApproachStep_030"]
+shape = SubResource("Shape7")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Jump170_OptionalApproachStep_030"]
+mesh = SubResource("Mesh7")
+material_override = SubResource("Material")
+[node name="Stage_7_Rise_200" type="StaticBody3D" parent="Geometry"]
+position = Vector3(-0.6, 3.375, -32.5)
+metadata/rise_m = 2.00
+metadata/gap_m = 0.00
+[node name="Collision" type="CollisionShape3D" parent="Geometry/Stage_7_Rise_200"]
+shape = SubResource("Shape8")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Stage_7_Rise_200"]
+mesh = SubResource("Mesh8")
+material_override = SubResource("Material")
+[node name="Stage_8_Rise_240" type="StaticBody3D" parent="Geometry"]
+position = Vector3(0.6, 4.575, -36.5)
+metadata/rise_m = 2.40
+metadata/gap_m = 0.00
+[node name="Collision" type="CollisionShape3D" parent="Geometry/Stage_8_Rise_240"]
+shape = SubResource("Shape9")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Stage_8_Rise_240"]
+mesh = SubResource("Mesh9")
+material_override = SubResource("Material")
+[node name="Stage_9_Rise_250" type="StaticBody3D" parent="Geometry"]
+position = Vector3(-0.6, 5.825, -40.5)
+metadata/rise_m = 2.50
+metadata/gap_m = 0.00
+[node name="Collision" type="CollisionShape3D" parent="Geometry/Stage_9_Rise_250"]
+shape = SubResource("Shape10")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Stage_9_Rise_250"]
+mesh = SubResource("Mesh10")
+material_override = SubResource("Material")
+[node name="TooHigh_275" type="StaticBody3D" parent="Geometry"]
+position = Vector3(0, 7.2, -44.5)
+metadata/rise_m = 2.75
+metadata/gap_m = 0.00
+[node name="Collision" type="CollisionShape3D" parent="Geometry/TooHigh_275"]
+shape = SubResource("Shape11")
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/TooHigh_275"]
+mesh = SubResource("Mesh11")
+material_override = SubResource("Material")
+[node name="Signs" type="Node3D" parent="."]
+[node name="Sign0" type="Label3D" parent="Signs"]
+position = Vector3(-0.6, 1.3, -9)
+text = "+0.30m / TOP 0.30m"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false
+[node name="Sign1" type="Label3D" parent="Signs"]
+position = Vector3(0.6, 1.65, -13)
+text = "+0.35m / TOP 0.65m"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false
+[node name="Sign2" type="Label3D" parent="Signs"]
+position = Vector3(-0.6, 2.3, -17)
+text = "+0.65m / TOP 1.30m"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false
+[node name="Sign3" type="Label3D" parent="Signs"]
+position = Vector3(0.6, 3.05, -21)
+text = "+0.75m / TOP 2.05m"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false
+[node name="Sign4" type="Label3D" parent="Signs"]
+position = Vector3(-0.6, 4.55, -25.5)
+text = "+1.50m / TOP 3.55m"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false
+[node name="Sign5" type="Label3D" parent="Signs"]
+position = Vector3(0.6, 6.25, -29.5)
+text = "+1.70m / TOP 5.25m"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false
+[node name="Sign6" type="Label3D" parent="Signs"]
+position = Vector3(1, 5.55, -26.5)
+text = "1.70m boundary / right step bypass"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false
+[node name="Sign7" type="Label3D" parent="Signs"]
+position = Vector3(-0.6, 8.25, -33.5)
+text = "+2.00m / TOP 7.25m"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false
+[node name="Sign8" type="Label3D" parent="Signs"]
+position = Vector3(0.6, 10.65, -37.5)
+text = "+2.40m / TOP 9.65m"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false
+[node name="Sign9" type="Label3D" parent="Signs"]
+position = Vector3(-0.6, 13.15, -41.5)
+text = "+2.50m / TOP 12.15m"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false
+[node name="Sign10" type="Label3D" parent="Signs"]
+position = Vector3(0, 16.15, -44.5)
+text = "+2.75m — UNSOLVED / FUTURE EXTENSION"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false
+[node name="Sign11" type="Label3D" parent="Signs"]
+position = Vector3(0, 2, -1)
+text = "VERTICAL — reach the highest supported point"
+font_size = 36
+pixel_size = 0.007
+billboard = 1
+no_depth_test = false

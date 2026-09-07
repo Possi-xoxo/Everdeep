@@ -179,7 +179,10 @@ func run() -> void:
 			check(body.velocity.y<=.01,"stair roll never stores launch velocity")
 			for leg in ik.legs: check(leg.solved.is_finite(),"stair roll IK finite")
 			if not dodge.is_rolling(): break
-		check(assist.steps_started>before and body.position.y>1.1,"existing stairs traversed with roll assist")
+		# Stand now waits until frame 21 and hands off at 55 with held input;
+		# it intentionally covers fewer stairs than the unchanged running roll.
+		check(assist.steps_started>before and body.position.y>(1.1 if running else .3),"stairs retain bounded roll assistance")
+		if not running: check(dodge.handoff_this_tick,"standing stair roll returns control on input")
 		print("ROLL_STAIRS run=",running," end=",body.position," assists=",assist.steps_started-before)
 	# Removing a validated top during lift must hand back to gravity immediately.
 	await reset_at()

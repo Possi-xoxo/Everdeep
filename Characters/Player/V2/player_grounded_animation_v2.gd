@@ -141,6 +141,18 @@ func update(tree: AnimationTree, s, gait_blend: float, active: bool, visual: Nod
 			var destination: StringName=&"Locked" if s.locked_on else &"Loops"
 			_machine.get_transition(index).advance_mode=AnimationNodeStateMachineTransition.ADVANCE_MODE_AUTO if _machine.get_transition_to(index)==destination else AnimationNodeStateMachineTransition.ADVANCE_MODE_DISABLED
 	var moving: bool = s.move_input_magnitude > 0.01
+	# Nested standing-idle returns: stops, pivots, turns and lock mode changes.
+	# Keep moving returns on their existing settings.
+	if tuning!=null:
+		for index in _machine.get_transition_count():
+			var from: StringName=_machine.get_transition_from(index)
+			var to: StringName=_machine.get_transition_to(index)
+			if from==&"Start" or to not in [&"Loops",&"Locked"]: continue
+			var duration: float=locomotion_return_blend
+			if to==&"Locked": duration=tuning.lock_animation_enter_blend
+			elif from==&"Locked": duration=tuning.lock_animation_exit_blend
+			if tuning.standing_idle_requested(): duration=maxf(duration,tuning.standing_idle_return_blend)
+			_machine.get_transition(index).xfade_time=duration
 	var direction: Vector2 = s.move_local if s.horizontal_speed > 0.1 else Vector2(0,1)
 	# Clear Sprint contribution even while the old Free branch crossfades out.
 	if s.locked_on: gait_blend=minf(gait_blend,2.0)

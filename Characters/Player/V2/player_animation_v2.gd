@@ -3,11 +3,14 @@ const State = preload("res://Characters/Player/V2/player_animation_state.gd")
 const Grounded = preload("res://Characters/Player/V2/player_grounded_animation_v2.gd")
 @export var grounded: Resource = Grounded.new()
 @export var debug_tree_playback: bool = false
+@export_category("Standing Idle Blending")
+## Minimum pose crossfade into standing Idle; does not delay motor authority.
+@export_range(.1,.6,.01) var standing_idle_return_blend: float = .30
 @export_category("Lock-On Animation Blending")
 @export_range(0,1,0.01) var lock_animation_enter_blend: float = 0.15
 @export_range(0,1,0.01) var lock_animation_exit_blend: float = 0.15
 @export_range(0,1,0.01) var lock_idle_to_move_blend: float = 0.15
-@export_range(0,1,0.01) var lock_move_to_idle_blend: float = 0.15
+@export_range(0,1,0.01) var lock_move_to_idle_blend: float = 0.30
 @export_range(0,1,0.01) var lock_walk_to_run_blend: float = 0.20
 @export_range(0,1,0.01) var lock_run_to_walk_blend: float = 0.20
 @export_range(1,30,0.5) var lock_direction_blend_speed: float = 15.0
@@ -34,7 +37,7 @@ const CLIPS := {
 @export var run_to_sprint_blend: float = 0.20
 @export var sprint_to_run_blend: float = 0.2
 @export var run_to_walk_blend: float = 0.2
-@export var walk_to_idle_blend: float = 0.2
+@export var walk_to_idle_blend: float = 0.30
 @export_category("Airborne")
 @export var standing_jump_speed_threshold: float = 0.30
 @export var jump_blend_in: float = 0.08
@@ -133,6 +136,8 @@ func _prepare_library() -> bool:
 			reference = idle.track_get_key_value(track, 0)
 	for state: String in CLIPS:
 		var clip := player.get_animation(CLIPS[state])
+		if state=="DodgeStand": motor.dodge.prepare_stand_leadin(clip)
+		if state=="DodgeBack": motor.dodge.prepare_backstep_recovery(clip)
 		var airborne := state in ["JumpStanding", "JumpMoving", "Fall", "Land"]
 		clip.loop_mode = Animation.LOOP_NONE if state in ["JumpStanding", "JumpMoving", "Land", "DodgeStand", "DodgeRun", "DodgeSprint", "DodgeBack", "CrouchEnter", "CrouchExit"] else Animation.LOOP_LINEAR
 		# This Blender rig uses local Z for vertical; local X/Y are horizontal.
@@ -238,6 +243,13 @@ func _physics_process(delta: float) -> void:
 		fall_visual_committed=false
 		land_visual_offset=0
 		visual_root.position=visual_root_base_position
+		if motor.traversal.phase==motor.traversal.Phase.ENTRY and motor.traversal.mantle.long_approach:
+			# Visual locomotion follows assisted speed; gameplay remains mantle-owned.
+			_enter(&"Locomotion")
+			var speed: float=motor.animation_state.horizontal_speed
+			gait_blend=clampf(speed/motor.walk_speed,0,1) if speed<=motor.walk_speed else 1.0+clampf((speed-motor.walk_speed)/(motor.run_start_speed-motor.walk_speed),0,1)
+			grounded.update(tree,motor.animation_state,gait_blend,true,visual_root,delta,self)
+			return
 		if motor.traversal.phase==motor.traversal.Phase.ACTIVE:
 			_enter(&"Mantle")
 			grounded.update(tree,motor.animation_state,0,false,visual_root,delta,self)
@@ -453,6 +465,12 @@ func _enter(next: StringName) -> void:
 	if current_state == next:
 		return
 	var crouch_controller=motor.crouch
+	# Restore the ordinary baseline before applying source-specific settings.
+	# An earlier idle return must not lengthen a later moving return on this edge.
+	if next==&"Locomotion":
+		for index in tree.tree_root.get_transition_count():
+			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next:
+				tree.tree_root.get_transition(index).xfade_time=land_blend_out
 	if current_state==&"Mantle" and next==&"Locomotion":
 		for index in tree.tree_root.get_transition_count():
 			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next:
@@ -478,7 +496,7 @@ func _enter(next: StringName) -> void:
 		roll_node.use_custom_timeline=true
 		roll_node.stretch_time_scale=true
 		roll_node.timeline_length=motor.dodge.timeline_length
-		roll_node.start_offset=0
+		roll_node.start_offset=motor.dodge.timeline_start_offset
 		land_visual_offset=0
 		_recover_start_offset=0
 		_episode_visible=false
@@ -489,6 +507,8 @@ func _enter(next: StringName) -> void:
 			if machine.get_transition_from(index)==current_state and machine.get_transition_to(index)==next:
 				var roll_blend: float=motor.dodge.sprint_roll_exit_blend if motor.dodge.clip==motor.dodge.SPRINT else motor.dodge.run_roll_exit_blend
 				machine.get_transition(index).xfade_time=roll_blend if current_state==&"DodgeRun" and next==&"Locomotion" else motor.dodge.dodge_recovery_time
+				if current_state==&"DodgeStand" and next==&"Locomotion": machine.get_transition(index).xfade_time=motor.dodge.stand_roll_exit_blend
+				if current_state==&"DodgeBack" and next==&"Locomotion": machine.get_transition(index).xfade_time=motor.dodge.backstep_exit_blend
 	if next == &"Land":
 		var s = motor.animation_state
 		# Select once at contact. A standing takeoff that moves in the air uses
@@ -526,8 +546,16 @@ func _enter(next: StringName) -> void:
 		for index in tree.tree_root.get_transition_count():
 			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next:
 				tree.tree_root.get_transition(index).xfade_time=crouch_controller.crouch_move_to_idle_blend if idle_destination else crouch_controller.crouch_idle_to_move_blend
+	if next==&"Locomotion" and standing_idle_requested():
+		for index in tree.tree_root.get_transition_count():
+			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next:
+				var edge: AnimationNodeStateMachineTransition=tree.tree_root.get_transition(index)
+				edge.xfade_time=maxf(edge.xfade_time,standing_idle_return_blend)
 	current_state = next
 	_playback.travel(next)
+
+func standing_idle_requested() -> bool:
+	return motor.animation_state.move_input_magnitude<=.01 and motor.animation_state.horizontal_speed<=.10
 
 func _select_land_profile(standing: bool) -> Dictionary:
 	if standing:

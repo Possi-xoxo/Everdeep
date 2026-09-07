@@ -2,6 +2,18 @@ extends Node3D
 const Orientation = preload("res://Characters/Player/V2/player_foot_ik_orientation_v2.gd")
 const Pelvis = preload("res://Characters/Player/V2/player_pelvis_ik_v2.gd")
 const Planting = preload("res://Characters/Player/V2/player_foot_planting_v2.gd")
+const ClimbContact = preload("res://Characters/Player/V2/player_mantle_foot_contact_v2.gd")
+@export_category("Climb Wall Foot Contact")
+@export var climb_foot_ik_enabled: bool = true
+@export_range(.01,.10,.005) var climb_foot_wall_offset: float = .04
+@export_range(.1,.6,.01) var climb_foot_projection_distance: float = .40
+@export_range(.05,.4,.01) var climb_foot_max_correction: float = .30
+@export_range(0,1,.05) var climb_foot_strength: float = 1.0
+@export_range(1,55,1) var climb_foot_blend_in_start: float = 12
+@export_range(1,55,1) var climb_foot_blend_in_end: float = 18
+@export_range(1,55,1) var climb_foot_blend_out_start: float = 30
+@export_range(1,55,1) var climb_foot_blend_out_end: float = 40
+@export var climb_foot_debug: bool = false
 @export_category("Walk Knee Stabilization")
 @export var walk_knee_stabilization_enabled: bool = true
 @export_range(0.25,0.50,0.01) var knee_pole_forward_offset: float = 0.40
@@ -136,6 +148,18 @@ func prepare_targets(delta: float) -> void:
 		var pose:=_world(leg.bones[2])
 		leg.animated=pose.origin
 		leg.animated_basis=pose.basis
+		leg.climb_contact=ClimbContact.project(self,leg,pose)
+		leg.climb_profile=motor.traversal.mantle.pose_owned()
+		if leg.climb_profile:
+			leg.plant.update(self,data,pose,delta,false)
+			var contact: Dictionary=leg.climb_contact
+			leg.weight=lerpf(leg.weight,contact.weight,1-exp(-20.0*delta))
+			var offset: Vector3=contact.target-pose.origin if contact.valid else Vector3.ZERO
+			leg.correction=leg.correction.lerp(offset,1-exp(-20.0*delta))
+			leg.desired_destination=pose.origin+leg.correction
+			leg.swing=0.0
+			leg.clamped=false
+			continue
 		var usable: bool=enabled and data.valid and motor.physical_ground_contact() and not motor.animation_state.jump_started and not motor.dodge.is_dodging
 		usable=usable and not motor.traversal.mantle.pose_owned()
 		var correction:=Vector3.ZERO
@@ -219,7 +243,7 @@ func place_targets() -> void:
 			destination=hip+(destination-hip).normalized()*reach*0.995
 			# A target cannot be both within correction bounds and reachable in
 			# every pose. Reduce influence instead of stretching the chain.
-			if absf(destination.y-pose.origin.y)>vertical_correction_limit(leg) or Vector2(destination.x-pose.origin.x,destination.z-pose.origin.z).length()>max_foot_ik_horizontal_correction:
+			if (leg.get("climb_profile",false) and destination.distance_to(pose.origin)>climb_foot_max_correction) or (not leg.get("climb_profile",false) and (absf(destination.y-pose.origin.y)>vertical_correction_limit(leg) or Vector2(destination.x-pose.origin.x,destination.z-pose.origin.z).length()>max_foot_ik_horizontal_correction)):
 				destination=pose.origin
 			leg.clamped=true
 		leg.correction=destination-pose.origin
@@ -287,11 +311,20 @@ func _capture_result() -> void:
 		pole-=axis*pole.dot(axis)
 		leg.knee_stable=bend.dot(pole)>=-0.0001
 		leg.length_error=maxf(absf(hip.distance_to(knee)-leg.upper_length),absf(knee.distance_to(leg.solved)-leg.lower_length))
-	_debug_node.visible=foot_ik_debug or knee_ik_debug
+	_debug_node.visible=foot_ik_debug or knee_ik_debug or climb_foot_debug
 	if not _debug_node.visible: return
 	_mesh.clear_surfaces()
 	_mesh.surface_begin(Mesh.PRIMITIVE_LINES,_material)
 	for leg in legs:
+		if climb_foot_debug and leg.has("climb_contact"):
+			var contact: Dictionary=leg.climb_contact
+			var color:=Color.LIME_GREEN if contact.valid else Color.RED
+			_line(leg.animated,leg.target.global_position,color)
+			_line(contact.hit,contact.hit+motor.traversal.mantle.wall_normal*.12,Color.CYAN)
+			_line(leg.target.global_position,leg.target.global_position+Vector3.UP*leg.weight*.2,color)
+			for axis in [Vector3.RIGHT,Vector3.UP,Vector3.FORWARD]:
+				_line(leg.animated-axis*.025,leg.animated+axis*.025,Color.YELLOW)
+				_line(leg.target.global_position-axis*.025,leg.target.global_position+axis*.025,color)
 		if knee_ik_debug:
 			var color:=Color.CORNFLOWER_BLUE if leg.side=="Left" else Color.HOT_PINK
 			_line(leg.solved_hip,leg.solved_knee,color)
@@ -324,6 +357,10 @@ func _line(a: Vector3,b: Vector3,color: Color) -> void:
 
 func _exit_tree() -> void:
 	if is_instance_valid(skeleton):
+		# A scene-local reset may remove the player before deferred deletion.
+		# Stop pose callbacks before restoring the skeleton's callback mode.
+		if skeleton.skeleton_updated.is_connected(_capture_result): skeleton.skeleton_updated.disconnect(_capture_result)
+		if is_instance_valid(tree) and tree.mixer_applied.is_connected(_after_pose): tree.mixer_applied.disconnect(_after_pose)
 		skeleton.modifier_callback_mode_process=_previous_callback
 		for leg in legs:
 			if is_instance_valid(leg.solver): leg.solver.queue_free()
@@ -336,6 +373,8 @@ func debug_text() -> String:
 	for i in legs.size():
 		var leg=legs[i]
 		var data=feet.left if i==0 else feet.right
+		if leg.has("climb_contact"):
+			result+="\nClimb %s Valid: %s / Weight: %.2f" % [leg.side,leg.climb_contact.valid,leg.weight]
 		if foot_planting_enabled:
 			result+="\n%s FOOT PLANTING / Valid: %s / IK: %.2f\n%s" % [leg.side,data.valid,leg.weight,leg.plant.debug_text()]
 		else:

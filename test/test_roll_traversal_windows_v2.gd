@@ -26,13 +26,14 @@ func run() -> void:
 				dodge.stand_roll_playback_speed=rate
 				await roll_tick(Vector2(0,-1),running,false,true)
 				# Feed the same evaluated-time input used by mixer_applied.
-				dodge.evaluate(frame/(30*rate))
+				dodge.evaluate(frame/(30*rate)-dodge.timeline_start_offset)
 				var horizontal: Vector3=dodge.motion()
 				var expected: bool=frame>=window.x and frame<=window.y
 				check(assist.traversal_window_open()==expected,"exact source-frame window at varied playback rate")
-				check(assist.prepare_roll(DT,horizontal)==expected,"valid ledge accepted only inside action window")
-				if expected:
-					dodge.evaluate((window.y+1)/(30*rate))
+				var can_move: bool=horizontal.length()>.01
+				check(assist.prepare_roll(DT,horizontal)==(expected and can_move),"valid ledge accepted only inside moving action window")
+				if expected and can_move:
+					dodge.evaluate((window.y+1)/(30*rate)-dodge.timeline_start_offset)
 					check(assist.prepare_roll(DT,Vector3.ZERO),"accepted bounded lift may finish outside initiation window")
 	# Exercise actual playback rather than only boundary input samples.
 	for running in [false,true]:

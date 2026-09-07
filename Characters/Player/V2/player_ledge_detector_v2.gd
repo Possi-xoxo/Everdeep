@@ -3,10 +3,10 @@ extends Node3D
 const Candidate = preload("res://interaction/mantle_geometry_candidate.gd")
 @export_group("Mantle Detection")
 @export var mantle_enabled: bool = true
+## Executable prompt range, including the validated assisted approach.
+@export_range(1.0,4.0,.1) var mantle_acquisition_distance: float = 2.5
 @export_range(.4,3.0,.01) var mantle_min_height: float = 1.75
-@export_range(.7,3.0,.01) var mantle_max_height: float = 2.20
-@export_range(.5,1.0,.01) var mantle_forward_check_distance: float = .75
-@export_range(.5,1.2,.01) var mantle_max_reach_distance: float = .90
+@export_range(.7,3.0,.01) var mantle_max_height: float = 2.50
 @export_range(0,.6,.01) var mantle_max_wall_normal_up_dot: float = .25
 @export_range(0,60,1) var mantle_max_top_slope_angle: float = 40.0
 @export_range(.4,.8,.01) var mantle_min_top_depth: float = .55
@@ -72,7 +72,7 @@ func detect_ledge_geometry() -> Dictionary:
 		var direction:=forward.rotated(Vector3.UP,deg_to_rad(half_cone*fraction))
 		for height in [.20,.65,1.05]:
 			var origin: Vector3=base+Vector3.UP*height
-			var hit:=_ray(origin,origin+direction*mantle_forward_check_distance)
+			var hit:=_ray(origin,origin+direction*mantle_acquisition_distance)
 			if hit.is_empty() or absf(hit.normal.y)>mantle_max_wall_normal_up_dot: continue
 			var inward_normal:=Vector3(-hit.normal.x,0,-hit.normal.z).normalized()
 			if forward.dot(inward_normal)<cos(deg_to_rad(half_cone))-.00001: continue
@@ -91,7 +91,7 @@ func detect_ledge_geometry() -> Dictionary:
 	var horizontal: Vector3=front.position-base
 	horizontal.y=0
 	data["distance"]=horizontal.length()
-	if horizontal.length()>mantle_max_reach_distance: return _reject(data,"TOO_FAR")
+	if horizontal.length()>mantle_acquisition_distance: return _reject(data,"TOO_FAR")
 	if absf(front.normal.dot(Vector3.UP))>mantle_max_wall_normal_up_dot: return _reject(data,"BAD_FACE_NORMAL")
 	var inward: Vector3=-front.normal
 	inward.y=0
@@ -103,7 +103,7 @@ func detect_ledge_geometry() -> Dictionary:
 	var top:=_ray(top_origin,Vector3(top_origin.x,base.y+.02,top_origin.z))
 	if top.is_empty():
 		var high_origin:=base+Vector3.UP*(mantle_max_height+.02)
-		var high:=_ray(high_origin,high_origin+inward*mantle_forward_check_distance)
+		var high:=_ray(high_origin,high_origin+inward*mantle_acquisition_distance)
 		return _reject(data,"TOO_HIGH" if not high.is_empty() else "NO_TOP_SURFACE")
 	data["top_found"]=true
 	data["top_position"]=top.position
@@ -161,6 +161,11 @@ func refresh_contextual_candidate() -> void:
 		rays.clear()
 		volume_queries=0
 		result={"valid":false,"reject_reason":"STATE_BLOCKED" if mantle_enabled else "DISABLED"}
+	# A visible candidate includes full approach + mantle trajectory preflight,
+	# not just a promising face. Activation repeats it for last-moment safety.
+	if result.valid and not get_parent().mantle.validate(result):
+		result.valid=false
+		result.reject_reason=get_parent().mantle.last_reject
 	candidate.available=result.valid
 	candidate.priority=mantle_candidate_priority
 
@@ -179,7 +184,12 @@ func _process(_delta: float) -> void:
 	if not enabled: return
 	debug_label.text="MANTLE DETECTOR\nFront Hit: %s / Distance: %.2f\nHeight: %.2f / Range: %.2f–%.2f\nTop Found: %s / Slope: %.1f\nVerified Depth: %.2f / Required: %.2f\nStanding Clearance: %s\nCandidate Valid: %s\nReject: %s" % [result.get("front_hit",false),result.get("distance",0),result.get("ledge_height",0),mantle_min_height,mantle_max_height,result.get("top_found",false),result.get("top_slope",0),result.get("top_depth",0),result.get("required_top_depth",mantle_min_top_depth),result.get("standing_clearance",false),result.valid,result.reject_reason]
 	var mesh:=ImmediateMesh.new()
+	debug_label.text+="\nExecutable prompt range %.2fm / Full preflight: %s" % [mantle_acquisition_distance,result.valid]
 	mesh.surface_begin(Mesh.PRIMITIVE_LINES)
+	var origin: Vector3=motor.global_position+Vector3.UP
+	var forward: Vector3=-motor.visual.global_basis.z
+	_line(mesh,origin,origin+forward*mantle_acquisition_distance,Color.CYAN)
+	if result.has("player_alignment_position"): _line(mesh,motor.global_position,result.player_alignment_position,Color.ORANGE)
 	for ray in rays: _line(mesh,ray[0],ray[1],Color.YELLOW)
 	for key in ["obstacle_position","top_search_origin","top_position","landing_position","player_alignment_position"]:
 		if result.has(key): _cross(mesh,result[key],Color.GREEN if result.valid else Color.RED)

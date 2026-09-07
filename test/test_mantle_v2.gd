@@ -18,13 +18,13 @@ func run() -> void:
 	cam.set_process(false)
 	tree.callback_mode_process=AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	box(Vector3(200,-.25,0),Vector3(80,.5,80))
-	for height in [1.5,1.65,1.75,2.0,2.1,2.2,2.25,2.4,2.6]:
+	for height in [1.5,1.65,1.75,2.0,2.1,2.2,2.25,2.4,2.5,2.6]:
 		await fixture(height)
 		# Reset teleports from the previous top: allow its landing state to finish.
 		for frame in 90: await crouch_tick(false)
 		body.context_interaction.scan()
 		print("HEIGHT ",height," valid=",detector.result.valid," reject=",detector.result.reject_reason)
-		var expected: bool=height>=1.75 and height<=2.2
+		var expected: bool=height>=1.75 and height<=detector.mantle_max_height
 		check(detector.result.valid==expected,"new height range "+str(height))
 		if not expected: continue
 		var accepted: bool=body.context_interaction.activate_selected()

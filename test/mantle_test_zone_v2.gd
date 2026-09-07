@@ -31,11 +31,11 @@ func _ready() -> void:
 	position=Vector3(-40,0,-12)
 	block("Floor",Vector3(0,-.25,0),Vector3(36,.5,26))
 	block("ClimbFloor",Vector3(0,-.25,-20),Vector3(50,.5,18))
-	for i in 9:
-		var h: float=[1.5,1.65,1.75,2.0,2.1,2.2,2.25,2.4,2.6][i]
+	for i in 10:
+		var h: float=[1.5,1.65,1.75,2.0,2.1,2.2,2.25,2.4,2.5,2.6][i]
 		var pos:=Vector3(i*5-20,h*.5,-20)
 		block("ClimbHeight_"+str(i),pos,Vector3(3,h,3))
-		add_sign("%.2fm — %s"%[h,"CLIMB" if h>=1.75 and h<=2.2 else "REJECT / MAX TUNABLE"],pos+Vector3(0,h*.5+.5,1.6))
+		add_sign("%.2fm — %s"%[h,"CLIMB" if h>=1.75 and h<=2.5 else "REJECT / MAX TUNABLE"],pos+Vector3(0,h*.5+.5,1.6))
 	var heights: Array[float]=[.4,.6,.7,.8,.9,1.0,1.1,1.2,1.3,1.4,1.5,1.7]
 	for i in heights.size():
 		var h: float=heights[i]

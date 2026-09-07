@@ -75,7 +75,7 @@ func physical_ground_contact() -> bool:
 	return is_on_floor() or step_solver.active or roll_traversal.active
 
 func _physics_process(delta: float) -> void:
-	context_interaction.tick(Input.is_action_just_pressed("interact"))
+	context_interaction.tick(Input.is_action_just_pressed("interact"),Input.is_action_pressed("interact"))
 	if not traversal.is_traversing or traversal.phase==traversal.Phase.EXIT:
 		if Input.is_action_just_pressed("lock_on"): lock_on.toggle()
 		if Input.is_action_just_pressed("crouch"): crouch.requested = not crouch.requested
@@ -96,7 +96,7 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 		dodge_pressed=false
 		crouch_requested=crouch.requested
 	var dodge_was_active: bool=dodge.is_dodging
-	dodge.advance_timers(delta,roll_traversal.active)
+	dodge.advance_timers(delta,roll_traversal.active,stick)
 	var was_crouched: bool=crouch.active()
 	crouch.update(crouch_requested,delta,stick,shift)
 	crouch.motion_request(stick,shift,delta)
@@ -160,26 +160,16 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 			turn_arc_active=false
 			if turn_180!=null: turn_180.cancel()
 	if dodge.is_dodging: s.jump_started=false
+	# Only a real RUN -> jump spends grounded buildup. Sprint/edge loss do not.
+	if s.jump_started and source_gait==State.Gait.RUN:
+		_run_time=0.0
+		if turn_180!=null: turn_180.entry_buildup=0.0
 	if not locked or s.jump_started or dodge.is_dodging:
 		lock_on.cancel_roll_realign()
 	elif dodge_was_active:
 		lock_on.begin_roll_realign()
-	if dodge.is_dodging:
-		# Freeze existing Free buildup while eligible; releasing input resets it.
-		if locked or not shift or stick.is_zero_approx(): _run_time=0
-	elif locked:
-		_run_time=0.0
-		s.gait=State.Gait.RUN if shift else State.Gait.WALK
-	elif not shift:
-		_run_time = 0.0
-		s.gait = State.Gait.WALK
-	elif grounded_before and s.move_input_magnitude <= 0.01 and Vector2(velocity.x, velocity.z).length() < 0.1:
-		_run_time = 0.0
-		s.gait = State.Gait.RUN
-	elif s.move_input_magnitude > 0.01:
-		_run_time = minf(_run_time + delta, sprint_buildup_duration)
-		s.gait = State.Gait.SPRINT if _run_time >= sprint_buildup_duration else State.Gait.RUN
-	if not locked and turn_180 != null and turn_180.active and turn_180.running and shift:
+	_update_sprint_buildup(delta,shift,locked,grounded_before and not s.jump_started)
+	if not locked and turn_180 != null and turn_180.active and turn_180.running and shift and s.move_input_magnitude>.01:
 		_run_time = turn_180.entry_buildup
 		s.gait = turn_180.source_gait
 	s.run_buildup_ratio = clampf(_run_time / maxf(sprint_buildup_duration, 0.001), 0.0, 1.0)
@@ -322,6 +312,23 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 	# Idle camera orbit is not a facing request. Explicit pivot ownership remains
 	# separate; returning input still uses the current camera-relative direction.
 	s.facing_delta = wrapf(atan2(-direction.x, -direction.z) - visual.global_rotation.y, -PI, PI) if s.move_input_magnitude > 0.01 else 0.0
+
+## One authoritative timer: ground locomotion earns progress; air only holds it.
+## Existing action-entry resets (run roll, crouch, lock-on, mantle) remain owners.
+func _update_sprint_buildup(delta: float, shift: bool, locked: bool, can_accumulate: bool) -> void:
+	var s=animation_state
+	if locked or not shift or s.move_input_magnitude<=.01:
+		_run_time=0.0
+		if turn_180!=null and turn_180.active and turn_180.running:
+			# The committed turn keeps its animation/momentum, not cancelled intent.
+			turn_180.entry_buildup=0.0
+			turn_180.source_gait=State.Gait.RUN
+	elif can_accumulate and not dodge.is_dodging:
+		_run_time=minf(_run_time+delta,sprint_buildup_duration)
+	# Ordinary jump/fall cannot earn sprint or resurrect a cancelled intent.
+	# Sprint rolls retain their existing gait ownership; running rolls reset on entry.
+	if not dodge.is_dodging:
+		s.gait=State.Gait.WALK if not shift else (State.Gait.SPRINT if not locked and _run_time>=sprint_buildup_duration else State.Gait.RUN)
 
 func _turn_arc_direction(desired: Vector3, speed: float, grounded: bool, delta: float) -> Vector3:
 	var s = animation_state

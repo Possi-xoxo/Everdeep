@@ -3,6 +3,9 @@ extends Node
 const ACTION: StringName=&"TRV_SPRINT_TO_WALL_CLIMB_02"
 @export_group("Mantle")
 @export_range(.10,.25,.01) var mantle_alignment_duration: float = .12
+## Smoothstep peak speed; distance sets duration rather than rejecting entry.
+@export_range(2.0,8.0,.1) var mantle_approach_speed: float = 4.5
+@export_range(.25,.75,.01) var mantle_long_approach_distance: float = .55
 @export_range(.03,.08,.01) var mantle_alignment_position_tolerance: float = .05
 @export_range(3,8,.5) var mantle_alignment_angle_tolerance: float = 5.0
 @export_group("Mantle Polish")
@@ -34,6 +37,11 @@ var input_at_exit := Vector2.ZERO
 var running: bool = false
 var progress: float = 0.0
 var alignment_elapsed: float = 0.0
+var effective_alignment_duration: float = .12
+var long_approach: bool = false
+var wall_point := Vector3.ZERO
+var wall_normal := Vector3.BACK
+var landing_plane_normal := Vector3.UP
 var exit_elapsed: float = 0.0
 var stalled_elapsed: float = 0.0
 var start := Vector3.ZERO
@@ -166,8 +174,16 @@ func validate(data: Dictionary) -> bool:
 		last_reject="EDGE_SUPPORT_MISSING"
 		return false
 	start=alignment
-	if motor.global_position.distance_to(alignment)>.35: last_reject="ALIGNMENT_TOO_FAR"; return false
+	# Distance is already owned by the detector. Never add a closer entry gate.
 	if not segment_clear(motor.global_position,alignment): last_reject="ALIGNMENT_BLOCKED"; return false
+	# Do not pull across a pit at a constant height. This checks the existing
+	# support footprint without changing its rules or coyote state.
+	var approach_from: Vector3=motor.global_position
+	var samples:=maxi(1,ceili(approach_from.distance_to(alignment)/.10))
+	for i in range(1,samples+1):
+		if not motor.ground_support.evaluate(approach_from.lerp(alignment,float(i)/samples),support_basis).supported:
+			last_reject="APPROACH_UNSUPPORTED"
+			return false
 	var previous:=start
 	for i in range(1,81):
 		var target:=trajectory(float(i)/80)
@@ -189,8 +205,14 @@ func begin(data: Dictionary) -> void:
 	stalled_elapsed=0
 	collision_blocked=false
 	source=data.obstacle_source
+	wall_point=data.obstacle_position
+	wall_normal=data.obstacle_normal.normalized()
+	landing_plane_normal=data.top_normal
 	source_transform=source.global_transform
 	start=motor.global_position
+	var distance:=start.distance_to(alignment)
+	long_approach=distance>mantle_long_approach_distance
+	effective_alignment_duration=maxf(.25,1.5*distance/mantle_approach_speed) if long_approach else maxf(mantle_alignment_duration,minf(.25,distance/2.0))
 	entry_yaw=motor.visual.rotation.y
 	original_crouch=motor.crouch.requested
 	motor.crouch.clear_handoff()
@@ -244,6 +266,10 @@ func step(delta: float,stick: Vector2,jump: bool,dodge_pressed: bool) -> bool:
 		owner_controller.finish("SOURCE_LOST_OR_MOVED")
 		return false
 	if not volume_clear(landing): owner_controller.finish("DESTINATION_BLOCKED"); return false
+	var landing_basis:=Basis(Vector3.UP,atan2(-facing.x,-facing.z))
+	if not motor.ground_support.evaluate(landing,landing_basis,source,landing_plane_normal).supported:
+		owner_controller.finish("NO_LANDING_SUPPORT")
+		return false
 	var a=motor.get_node("AnimationController")
 	var s=motor.animation_state
 	s.jump_started=false
@@ -258,11 +284,21 @@ func step(delta: float,stick: Vector2,jump: bool,dodge_pressed: bool) -> bool:
 	motor.velocity=Vector3.ZERO
 	if owner_controller.phase==owner_controller.Phase.ENTRY:
 		alignment_elapsed+=delta
-		var weight:=smoothstep(0,1,alignment_elapsed/mantle_alignment_duration)
-		if not safe_move(start.lerp(alignment,weight)): owner_controller.finish("ALIGNMENT_BLOCKED"); return false
+		var weight:=smoothstep(0,1,alignment_elapsed/effective_alignment_duration)
+		var next_position:=start.lerp(alignment,weight)
+		var support_basis:=Basis(Vector3.UP,atan2(-facing.x,-facing.z))
+		if not motor.ground_support.evaluate(next_position,support_basis).supported: owner_controller.finish("APPROACH_UNSUPPORTED"); return false
+		var previous_position: Vector3=motor.global_position
+		if not safe_move(next_position): owner_controller.finish("ALIGNMENT_BLOCKED"); return false
+		if long_approach:
+			s.horizontal_speed=motor.global_position.distance_to(previous_position)/maxf(delta,.001)
+			s.move_input_magnitude=clampf(s.horizontal_speed/motor.walk_speed,0,1)
+			s.move_direction_world=facing
+			s.move_local=Vector2(0,1)
+			s.gait=1 if s.horizontal_speed>motor.walk_speed else 0
 		var yaw:=atan2(-facing.x,-facing.z)
 		motor.visual.rotation.y=lerp_angle(entry_yaw,yaw,weight)
-		if alignment_elapsed>=mantle_alignment_duration:
+		if alignment_elapsed>=effective_alignment_duration:
 			if motor.global_position.distance_to(alignment)>mantle_alignment_position_tolerance or absf(wrapf(motor.visual.rotation.y-yaw,-PI,PI))>deg_to_rad(mantle_alignment_angle_tolerance):
 				owner_controller.finish("ALIGNMENT_FAILED")
 				return false
