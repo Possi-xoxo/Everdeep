@@ -26,7 +26,10 @@ var captured_source: Node3D
 var captured_alignment := Vector3.ZERO
 var debug_mesh: MeshInstance3D
 @onready var motor=get_parent()
-@onready var mantle=motor.get_node("TraversalController/Mantle")
+var mantle: Node:
+	get:
+		var hang=motor.get_node("TraversalController/BracedHang")
+		return hang if hang.pose_owned() else motor.get_node("TraversalController/Mantle")
 
 func _ready() -> void:
 	call_deferred("_bind")
@@ -99,7 +102,8 @@ func _capture_grips() -> void:
 		arm.pole_direction=Vector3.ZERO
 
 func prepare_targets(delta: float) -> void:
-	var active: bool=enabled and mantle.pose_owned() and mantle.owner_controller.phase==mantle.owner_controller.Phase.ACTIVE and is_instance_valid(mantle.source)
+	var releasing: bool=mantle==motor.traversal.hang and motor.traversal.hang.release_active
+	var active: bool=enabled and mantle.pose_owned() and (mantle.owner_controller.phase==mantle.owner_controller.Phase.ACTIVE or releasing) and is_instance_valid(mantle.source)
 	if not active:
 		captured=false
 		for arm in arms:
@@ -169,7 +173,7 @@ func capture_result() -> void:
 			arm.length_error=maxf(absf(world(arm.bones[0]).origin.distance_to(world(arm.bones[1]).origin)-arm.upper_length),absf(world(arm.bones[1]).origin.distance_to(arm.solved)-arm.lower_length))
 
 func debug_text() -> String:
-	var result: String="MANTLE HANDS (17-23 in / 24-37 clamp / 37-44 out)"
+	var result: String="HANG HANDS (settle in / idle clamp / climb 45-70% out)" if motor.traversal.hang.running else "MANTLE HANDS (17-23 in / 24-37 clamp / 37-44 out)"
 	for arm in arms: result+="\n%s grip %s / Weight %.2f / Error %.3fm / Limited %s" % [arm.side,arm.grip,arm.weight,arm.error,arm.limited]
 	return result
 

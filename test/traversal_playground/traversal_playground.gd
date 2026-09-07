@@ -40,6 +40,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_1: request_reset(&"Vertical")
 		KEY_2: request_reset(&"Speed")
 		KEY_3: request_reset(&"Mixed")
+		KEY_4: request_reset(&"Hang")
 		_: return
 	get_viewport().set_input_as_handled()
 

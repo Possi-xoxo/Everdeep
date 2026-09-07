@@ -1,0 +1,769 @@
+[gd_scene load_steps=112 format=3]
+[sub_resource type="StandardMaterial3D" id="Mat"]
+albedo_color = Color(0.28, 0.5, 0.75, 1)
+[sub_resource type="BoxShape3D" id="S1"]
+size = Vector3(48, 0.5, 56)
+[sub_resource type="BoxMesh" id="M1"]
+size = Vector3(48, 0.5, 56)
+[sub_resource type="BoxShape3D" id="S2"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M2"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S3"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M3"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S4"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M4"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S5"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M5"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S6"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M6"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S7"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M7"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S8"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M8"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S9"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M9"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S10"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M10"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S11"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M11"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S12"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M12"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S13"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M13"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S14"]
+size = Vector3(2, 3, 2)
+[sub_resource type="BoxMesh" id="M14"]
+size = Vector3(2, 3, 2)
+[sub_resource type="BoxShape3D" id="S15"]
+size = Vector3(2, 0.2, 8.54400374531753)
+[sub_resource type="BoxMesh" id="M15"]
+size = Vector3(2, 0.2, 8.54400374531753)
+[sub_resource type="BoxShape3D" id="S16"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M16"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S17"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M17"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S18"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M18"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S19"]
+size = Vector3(2, 3, 2)
+[sub_resource type="BoxMesh" id="M19"]
+size = Vector3(2, 3, 2)
+[sub_resource type="BoxShape3D" id="S20"]
+size = Vector3(2, 0.2, 8.54400374531753)
+[sub_resource type="BoxMesh" id="M20"]
+size = Vector3(2, 0.2, 8.54400374531753)
+[sub_resource type="BoxShape3D" id="S21"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M21"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S22"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M22"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S23"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M23"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S24"]
+size = Vector3(2, 3, 2)
+[sub_resource type="BoxMesh" id="M24"]
+size = Vector3(2, 3, 2)
+[sub_resource type="BoxShape3D" id="S25"]
+size = Vector3(2, 0.2, 8.54400374531753)
+[sub_resource type="BoxMesh" id="M25"]
+size = Vector3(2, 0.2, 8.54400374531753)
+[sub_resource type="BoxShape3D" id="S26"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M26"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S27"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M27"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S28"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M28"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S29"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M29"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S30"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M30"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S31"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M31"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S32"]
+size = Vector3(2, 5, 2)
+[sub_resource type="BoxMesh" id="M32"]
+size = Vector3(2, 5, 2)
+[sub_resource type="BoxShape3D" id="S33"]
+size = Vector3(2, 0.2, 9.433981132056603)
+[sub_resource type="BoxMesh" id="M33"]
+size = Vector3(2, 0.2, 9.433981132056603)
+[sub_resource type="BoxShape3D" id="S34"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M34"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S35"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M35"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S36"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M36"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S37"]
+size = Vector3(4, 1.85, 3)
+[sub_resource type="BoxMesh" id="M37"]
+size = Vector3(4, 1.85, 3)
+[sub_resource type="BoxShape3D" id="S38"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M38"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S39"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M39"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S40"]
+size = Vector3(4, 2.4, 3)
+[sub_resource type="BoxMesh" id="M40"]
+size = Vector3(4, 2.4, 3)
+[sub_resource type="BoxShape3D" id="S41"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M41"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S42"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M42"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S43"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M43"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S44"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M44"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S45"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M45"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S46"]
+size = Vector3(4, 0.25, 3)
+[sub_resource type="BoxMesh" id="M46"]
+size = Vector3(4, 0.25, 3)
+[sub_resource type="BoxShape3D" id="S47"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M47"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S48"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M48"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S49"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M49"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S50"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M50"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S51"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M51"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S52"]
+size = Vector3(4, 0.25, 1.4)
+[sub_resource type="BoxMesh" id="M52"]
+size = Vector3(4, 0.25, 1.4)
+[sub_resource type="BoxShape3D" id="S53"]
+size = Vector3(4, 1.65, 3)
+[sub_resource type="BoxMesh" id="M53"]
+size = Vector3(4, 1.65, 3)
+[sub_resource type="BoxShape3D" id="S54"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M54"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxShape3D" id="S55"]
+size = Vector3(0.12, 0.02, 1)
+[sub_resource type="BoxMesh" id="M55"]
+size = Vector3(0.12, 0.02, 1)
+[node name="AcquisitionLanes" type="Node3D"]
+[node name="Floor" type="StaticBody3D" parent="."]
+position = Vector3(0, -0.25, -25)
+[node name="Collision" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("S1")
+[node name="Mesh" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("M1")
+material_override = SubResource("Mat")
+[node name="RiseStraight" type="StaticBody3D" parent="."]
+position = Vector3(-16, 1.125, -12)
+[node name="Collision" type="CollisionShape3D" parent="RiseStraight"]
+shape = SubResource("S2")
+[node name="Mesh" type="MeshInstance3D" parent="RiseStraight"]
+mesh = SubResource("M2")
+material_override = SubResource("Mat")
+[node name="RiseStraightLabel" type="Label3D" parent="."]
+position = Vector3(-16, 3.45, -12)
+text = "RISING STRAIGHT | Jump late toward edge"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="RiseStraightApproachL" type="Marker3D" parent="."]
+position = Vector3(-17.8, 0.03, -8)
+[node name="RiseStraightMarkL" type="StaticBody3D" parent="."]
+position = Vector3(-17.8, 0.012, -8)
+[node name="Collision" type="CollisionShape3D" parent="RiseStraightMarkL"]
+shape = SubResource("S3")
+[node name="Mesh" type="MeshInstance3D" parent="RiseStraightMarkL"]
+mesh = SubResource("M3")
+material_override = SubResource("Mat")
+[node name="RiseStraightApproachR" type="Marker3D" parent="."]
+position = Vector3(-14.2, 0.03, -8)
+[node name="RiseStraightMarkR" type="StaticBody3D" parent="."]
+position = Vector3(-14.2, 0.012, -8)
+[node name="Collision" type="CollisionShape3D" parent="RiseStraightMarkR"]
+shape = SubResource("S4")
+[node name="Mesh" type="MeshInstance3D" parent="RiseStraightMarkR"]
+mesh = SubResource("M4")
+material_override = SubResource("Mat")
+[node name="RiseLeft" type="StaticBody3D" parent="."]
+position = Vector3(-8, 1.125, -12)
+[node name="Collision" type="CollisionShape3D" parent="RiseLeft"]
+shape = SubResource("S5")
+[node name="Mesh" type="MeshInstance3D" parent="RiseLeft"]
+mesh = SubResource("M5")
+material_override = SubResource("Mat")
+[node name="RiseLeftLabel" type="Label3D" parent="."]
+position = Vector3(-8, 3.45, -12)
+text = "RISING DIAGONAL LEFT | approach from right marker"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="RiseLeftApproachL" type="Marker3D" parent="."]
+position = Vector3(-9.8, 0.03, -8)
+[node name="RiseLeftMarkL" type="StaticBody3D" parent="."]
+position = Vector3(-9.8, 0.012, -8)
+[node name="Collision" type="CollisionShape3D" parent="RiseLeftMarkL"]
+shape = SubResource("S6")
+[node name="Mesh" type="MeshInstance3D" parent="RiseLeftMarkL"]
+mesh = SubResource("M6")
+material_override = SubResource("Mat")
+[node name="RiseLeftApproachR" type="Marker3D" parent="."]
+position = Vector3(-6.2, 0.03, -8)
+[node name="RiseLeftMarkR" type="StaticBody3D" parent="."]
+position = Vector3(-6.2, 0.012, -8)
+[node name="Collision" type="CollisionShape3D" parent="RiseLeftMarkR"]
+shape = SubResource("S7")
+[node name="Mesh" type="MeshInstance3D" parent="RiseLeftMarkR"]
+mesh = SubResource("M7")
+material_override = SubResource("Mat")
+[node name="RiseRight" type="StaticBody3D" parent="."]
+position = Vector3(0, 1.125, -12)
+[node name="Collision" type="CollisionShape3D" parent="RiseRight"]
+shape = SubResource("S8")
+[node name="Mesh" type="MeshInstance3D" parent="RiseRight"]
+mesh = SubResource("M8")
+material_override = SubResource("Mat")
+[node name="RiseRightLabel" type="Label3D" parent="."]
+position = Vector3(0, 3.45, -12)
+text = "RISING DIAGONAL RIGHT | approach from left marker"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="RiseRightApproachL" type="Marker3D" parent="."]
+position = Vector3(-1.8, 0.03, -8)
+[node name="RiseRightMarkL" type="StaticBody3D" parent="."]
+position = Vector3(-1.8, 0.012, -8)
+[node name="Collision" type="CollisionShape3D" parent="RiseRightMarkL"]
+shape = SubResource("S9")
+[node name="Mesh" type="MeshInstance3D" parent="RiseRightMarkL"]
+mesh = SubResource("M9")
+material_override = SubResource("Mat")
+[node name="RiseRightApproachR" type="Marker3D" parent="."]
+position = Vector3(1.8, 0.03, -8)
+[node name="RiseRightMarkR" type="StaticBody3D" parent="."]
+position = Vector3(1.8, 0.012, -8)
+[node name="Collision" type="CollisionShape3D" parent="RiseRightMarkR"]
+shape = SubResource("S10")
+[node name="Mesh" type="MeshInstance3D" parent="RiseRightMarkR"]
+mesh = SubResource("M10")
+material_override = SubResource("Mat")
+[node name="FallStraight" type="StaticBody3D" parent="."]
+position = Vector3(8, 1.125, -12)
+[node name="Collision" type="CollisionShape3D" parent="FallStraight"]
+shape = SubResource("S11")
+[node name="Mesh" type="MeshInstance3D" parent="FallStraight"]
+mesh = SubResource("M11")
+material_override = SubResource("Mat")
+[node name="FallStraightLabel" type="Label3D" parent="."]
+position = Vector3(8, 3.45, -12)
+text = "FALL STRAIGHT | walk/run off ramp platform"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="FallStraightApproachL" type="Marker3D" parent="."]
+position = Vector3(6.2, 0.03, -8)
+[node name="FallStraightMarkL" type="StaticBody3D" parent="."]
+position = Vector3(6.2, 0.012, -8)
+[node name="Collision" type="CollisionShape3D" parent="FallStraightMarkL"]
+shape = SubResource("S12")
+[node name="Mesh" type="MeshInstance3D" parent="FallStraightMarkL"]
+mesh = SubResource("M12")
+material_override = SubResource("Mat")
+[node name="FallStraightApproachR" type="Marker3D" parent="."]
+position = Vector3(9.8, 0.03, -8)
+[node name="FallStraightMarkR" type="StaticBody3D" parent="."]
+position = Vector3(9.8, 0.012, -8)
+[node name="Collision" type="CollisionShape3D" parent="FallStraightMarkR"]
+shape = SubResource("S13")
+[node name="Mesh" type="MeshInstance3D" parent="FallStraightMarkR"]
+mesh = SubResource("M13")
+material_override = SubResource("Mat")
+[node name="FallStraightLaunch" type="StaticBody3D" parent="."]
+position = Vector3(8, 1.5, -6)
+[node name="Collision" type="CollisionShape3D" parent="FallStraightLaunch"]
+shape = SubResource("S14")
+[node name="Mesh" type="MeshInstance3D" parent="FallStraightLaunch"]
+mesh = SubResource("M14")
+material_override = SubResource("Mat")
+[node name="FallStraightRamp" type="StaticBody3D" parent="."]
+position = Vector3(8, 1.4, -1)
+rotation = Vector3(0.35877067027057225, 0, 0)
+[node name="Collision" type="CollisionShape3D" parent="FallStraightRamp"]
+shape = SubResource("S15")
+[node name="Mesh" type="MeshInstance3D" parent="FallStraightRamp"]
+mesh = SubResource("M15")
+material_override = SubResource("Mat")
+[node name="FallLeft" type="StaticBody3D" parent="."]
+position = Vector3(16, 1.125, -12)
+[node name="Collision" type="CollisionShape3D" parent="FallLeft"]
+shape = SubResource("S16")
+[node name="Mesh" type="MeshInstance3D" parent="FallLeft"]
+mesh = SubResource("M16")
+material_override = SubResource("Mat")
+[node name="FallLeftLabel" type="Label3D" parent="."]
+position = Vector3(16, 3.45, -12)
+text = "FALL DIAGONAL LEFT | leave platform toward left"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="FallLeftApproachL" type="Marker3D" parent="."]
+position = Vector3(14.2, 0.03, -8)
+[node name="FallLeftMarkL" type="StaticBody3D" parent="."]
+position = Vector3(14.2, 0.012, -8)
+[node name="Collision" type="CollisionShape3D" parent="FallLeftMarkL"]
+shape = SubResource("S17")
+[node name="Mesh" type="MeshInstance3D" parent="FallLeftMarkL"]
+mesh = SubResource("M17")
+material_override = SubResource("Mat")
+[node name="FallLeftApproachR" type="Marker3D" parent="."]
+position = Vector3(17.8, 0.03, -8)
+[node name="FallLeftMarkR" type="StaticBody3D" parent="."]
+position = Vector3(17.8, 0.012, -8)
+[node name="Collision" type="CollisionShape3D" parent="FallLeftMarkR"]
+shape = SubResource("S18")
+[node name="Mesh" type="MeshInstance3D" parent="FallLeftMarkR"]
+mesh = SubResource("M18")
+material_override = SubResource("Mat")
+[node name="FallLeftLaunch" type="StaticBody3D" parent="."]
+position = Vector3(16, 1.5, -6)
+[node name="Collision" type="CollisionShape3D" parent="FallLeftLaunch"]
+shape = SubResource("S19")
+[node name="Mesh" type="MeshInstance3D" parent="FallLeftLaunch"]
+mesh = SubResource("M19")
+material_override = SubResource("Mat")
+[node name="FallLeftRamp" type="StaticBody3D" parent="."]
+position = Vector3(16, 1.4, -1)
+rotation = Vector3(0.35877067027057225, 0, 0)
+[node name="Collision" type="CollisionShape3D" parent="FallLeftRamp"]
+shape = SubResource("S20")
+[node name="Mesh" type="MeshInstance3D" parent="FallLeftRamp"]
+mesh = SubResource("M20")
+material_override = SubResource("Mat")
+[node name="FallRight" type="StaticBody3D" parent="."]
+position = Vector3(-16, 1.125, -29)
+[node name="Collision" type="CollisionShape3D" parent="FallRight"]
+shape = SubResource("S21")
+[node name="Mesh" type="MeshInstance3D" parent="FallRight"]
+mesh = SubResource("M21")
+material_override = SubResource("Mat")
+[node name="FallRightLabel" type="Label3D" parent="."]
+position = Vector3(-16, 3.45, -29)
+text = "FALL DIAGONAL RIGHT | leave platform toward right"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="FallRightApproachL" type="Marker3D" parent="."]
+position = Vector3(-17.8, 0.03, -25)
+[node name="FallRightMarkL" type="StaticBody3D" parent="."]
+position = Vector3(-17.8, 0.012, -25)
+[node name="Collision" type="CollisionShape3D" parent="FallRightMarkL"]
+shape = SubResource("S22")
+[node name="Mesh" type="MeshInstance3D" parent="FallRightMarkL"]
+mesh = SubResource("M22")
+material_override = SubResource("Mat")
+[node name="FallRightApproachR" type="Marker3D" parent="."]
+position = Vector3(-14.2, 0.03, -25)
+[node name="FallRightMarkR" type="StaticBody3D" parent="."]
+position = Vector3(-14.2, 0.012, -25)
+[node name="Collision" type="CollisionShape3D" parent="FallRightMarkR"]
+shape = SubResource("S23")
+[node name="Mesh" type="MeshInstance3D" parent="FallRightMarkR"]
+mesh = SubResource("M23")
+material_override = SubResource("Mat")
+[node name="FallRightLaunch" type="StaticBody3D" parent="."]
+position = Vector3(-16, 1.5, -23)
+[node name="Collision" type="CollisionShape3D" parent="FallRightLaunch"]
+shape = SubResource("S24")
+[node name="Mesh" type="MeshInstance3D" parent="FallRightLaunch"]
+mesh = SubResource("M24")
+material_override = SubResource("Mat")
+[node name="FallRightRamp" type="StaticBody3D" parent="."]
+position = Vector3(-16, 1.4, -18)
+rotation = Vector3(0.35877067027057225, 0, 0)
+[node name="Collision" type="CollisionShape3D" parent="FallRightRamp"]
+shape = SubResource("S25")
+[node name="Mesh" type="MeshInstance3D" parent="FallRightRamp"]
+mesh = SubResource("M25")
+material_override = SubResource("Mat")
+[node name="FacingEdge" type="StaticBody3D" parent="."]
+position = Vector3(-8, 1.125, -29)
+[node name="Collision" type="CollisionShape3D" parent="FacingEdge"]
+shape = SubResource("S26")
+[node name="Mesh" type="MeshInstance3D" parent="FacingEdge"]
+mesh = SubResource("M26")
+material_override = SubResource("Mat")
+[node name="FacingEdgeLabel" type="Label3D" parent="."]
+position = Vector3(-8, 3.45, -29)
+text = "FACING EDGE | velocity toward wall; facing up to 100 deg"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="FacingEdgeApproachL" type="Marker3D" parent="."]
+position = Vector3(-9.8, 0.03, -25)
+[node name="FacingEdgeMarkL" type="StaticBody3D" parent="."]
+position = Vector3(-9.8, 0.012, -25)
+[node name="Collision" type="CollisionShape3D" parent="FacingEdgeMarkL"]
+shape = SubResource("S27")
+[node name="Mesh" type="MeshInstance3D" parent="FacingEdgeMarkL"]
+mesh = SubResource("M27")
+material_override = SubResource("Mat")
+[node name="FacingEdgeApproachR" type="Marker3D" parent="."]
+position = Vector3(-6.2, 0.03, -25)
+[node name="FacingEdgeMarkR" type="StaticBody3D" parent="."]
+position = Vector3(-6.2, 0.012, -25)
+[node name="Collision" type="CollisionShape3D" parent="FacingEdgeMarkR"]
+shape = SubResource("S28")
+[node name="Mesh" type="MeshInstance3D" parent="FacingEdgeMarkR"]
+mesh = SubResource("M28")
+material_override = SubResource("Mat")
+[node name="FastFall" type="StaticBody3D" parent="."]
+position = Vector3(0, 1.125, -29)
+[node name="Collision" type="CollisionShape3D" parent="FastFall"]
+shape = SubResource("S29")
+[node name="Mesh" type="MeshInstance3D" parent="FastFall"]
+mesh = SubResource("M29")
+material_override = SubResource("Mat")
+[node name="FastFallLabel" type="Label3D" parent="."]
+position = Vector3(0, 3.45, -29)
+text = "FAST FALL | run from high ramp toward edge"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="FastFallApproachL" type="Marker3D" parent="."]
+position = Vector3(-1.8, 0.03, -25)
+[node name="FastFallMarkL" type="StaticBody3D" parent="."]
+position = Vector3(-1.8, 0.012, -25)
+[node name="Collision" type="CollisionShape3D" parent="FastFallMarkL"]
+shape = SubResource("S30")
+[node name="Mesh" type="MeshInstance3D" parent="FastFallMarkL"]
+mesh = SubResource("M30")
+material_override = SubResource("Mat")
+[node name="FastFallApproachR" type="Marker3D" parent="."]
+position = Vector3(1.8, 0.03, -25)
+[node name="FastFallMarkR" type="StaticBody3D" parent="."]
+position = Vector3(1.8, 0.012, -25)
+[node name="Collision" type="CollisionShape3D" parent="FastFallMarkR"]
+shape = SubResource("S31")
+[node name="Mesh" type="MeshInstance3D" parent="FastFallMarkR"]
+mesh = SubResource("M31")
+material_override = SubResource("Mat")
+[node name="FastFallLaunch" type="StaticBody3D" parent="."]
+position = Vector3(0, 2.5, -23)
+[node name="Collision" type="CollisionShape3D" parent="FastFallLaunch"]
+shape = SubResource("S32")
+[node name="Mesh" type="MeshInstance3D" parent="FastFallLaunch"]
+mesh = SubResource("M32")
+material_override = SubResource("Mat")
+[node name="FastFallRamp" type="StaticBody3D" parent="."]
+position = Vector3(0, 2.4, -18)
+rotation = Vector3(0.5585993153435624, 0, 0)
+[node name="Collision" type="CollisionShape3D" parent="FastFallRamp"]
+shape = SubResource("S33")
+[node name="Mesh" type="MeshInstance3D" parent="FastFallRamp"]
+mesh = SubResource("M33")
+material_override = SubResource("Mat")
+[node name="FastRise" type="StaticBody3D" parent="."]
+position = Vector3(8, 1.125, -29)
+[node name="Collision" type="CollisionShape3D" parent="FastRise"]
+shape = SubResource("S34")
+[node name="Mesh" type="MeshInstance3D" parent="FastRise"]
+mesh = SubResource("M34")
+material_override = SubResource("Mat")
+[node name="FastRiseLabel" type="Label3D" parent="."]
+position = Vector3(8, 3.45, -29)
+text = "FAST RISE | jump late beside wall"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="FastRiseApproachL" type="Marker3D" parent="."]
+position = Vector3(6.2, 0.03, -25)
+[node name="FastRiseMarkL" type="StaticBody3D" parent="."]
+position = Vector3(6.2, 0.012, -25)
+[node name="Collision" type="CollisionShape3D" parent="FastRiseMarkL"]
+shape = SubResource("S35")
+[node name="Mesh" type="MeshInstance3D" parent="FastRiseMarkL"]
+mesh = SubResource("M35")
+material_override = SubResource("Mat")
+[node name="FastRiseApproachR" type="Marker3D" parent="."]
+position = Vector3(9.8, 0.03, -25)
+[node name="FastRiseMarkR" type="StaticBody3D" parent="."]
+position = Vector3(9.8, 0.012, -25)
+[node name="Collision" type="CollisionShape3D" parent="FastRiseMarkR"]
+shape = SubResource("S36")
+[node name="Mesh" type="MeshInstance3D" parent="FastRiseMarkR"]
+mesh = SubResource("M36")
+material_override = SubResource("Mat")
+[node name="AboveThreshold" type="StaticBody3D" parent="."]
+position = Vector3(16, 0.925, -29)
+[node name="Collision" type="CollisionShape3D" parent="AboveThreshold"]
+shape = SubResource("S37")
+[node name="Mesh" type="MeshInstance3D" parent="AboveThreshold"]
+mesh = SubResource("M37")
+material_override = SubResource("Mat")
+[node name="AboveThresholdLabel" type="Label3D" parent="."]
+position = Vector3(16, 3.05, -29)
+text = "1.85 m | above jump threshold | airborne catch"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="AboveThresholdApproachL" type="Marker3D" parent="."]
+position = Vector3(14.2, 0.03, -25)
+[node name="AboveThresholdMarkL" type="StaticBody3D" parent="."]
+position = Vector3(14.2, 0.012, -25)
+[node name="Collision" type="CollisionShape3D" parent="AboveThresholdMarkL"]
+shape = SubResource("S38")
+[node name="Mesh" type="MeshInstance3D" parent="AboveThresholdMarkL"]
+mesh = SubResource("M38")
+material_override = SubResource("Mat")
+[node name="AboveThresholdApproachR" type="Marker3D" parent="."]
+position = Vector3(17.8, 0.03, -25)
+[node name="AboveThresholdMarkR" type="StaticBody3D" parent="."]
+position = Vector3(17.8, 0.012, -25)
+[node name="Collision" type="CollisionShape3D" parent="AboveThresholdMarkR"]
+shape = SubResource("S39")
+[node name="Mesh" type="MeshInstance3D" parent="AboveThresholdMarkR"]
+mesh = SubResource("M39")
+material_override = SubResource("Mat")
+[node name="Overlap" type="StaticBody3D" parent="."]
+position = Vector3(-16, 1.2, -46)
+[node name="Collision" type="CollisionShape3D" parent="Overlap"]
+shape = SubResource("S40")
+[node name="Mesh" type="MeshInstance3D" parent="Overlap"]
+mesh = SubResource("M40")
+material_override = SubResource("Mat")
+[node name="OverlapLabel" type="Label3D" parent="."]
+position = Vector3(-16, 3.5999999999999996, -46)
+text = "2.40 m | E climb grounded / auto catch airborne"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="OverlapApproachL" type="Marker3D" parent="."]
+position = Vector3(-17.8, 0.03, -42)
+[node name="OverlapMarkL" type="StaticBody3D" parent="."]
+position = Vector3(-17.8, 0.012, -42)
+[node name="Collision" type="CollisionShape3D" parent="OverlapMarkL"]
+shape = SubResource("S41")
+[node name="Mesh" type="MeshInstance3D" parent="OverlapMarkL"]
+mesh = SubResource("M41")
+material_override = SubResource("Mat")
+[node name="OverlapApproachR" type="Marker3D" parent="."]
+position = Vector3(-14.2, 0.03, -42)
+[node name="OverlapMarkR" type="StaticBody3D" parent="."]
+position = Vector3(-14.2, 0.012, -42)
+[node name="Collision" type="CollisionShape3D" parent="OverlapMarkR"]
+shape = SubResource("S42")
+[node name="Mesh" type="MeshInstance3D" parent="OverlapMarkR"]
+mesh = SubResource("M42")
+material_override = SubResource("Mat")
+[node name="Away" type="StaticBody3D" parent="."]
+position = Vector3(-8, 1.125, -46)
+[node name="Collision" type="CollisionShape3D" parent="Away"]
+shape = SubResource("S43")
+[node name="Mesh" type="MeshInstance3D" parent="Away"]
+mesh = SubResource("M43")
+material_override = SubResource("Mat")
+[node name="AwayLabel" type="Label3D" parent="."]
+position = Vector3(-8, 3.45, -46)
+text = "AWAY / BEHIND | travel away or face backward: reject"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="AwayApproachL" type="Marker3D" parent="."]
+position = Vector3(-9.8, 0.03, -42)
+[node name="AwayMarkL" type="StaticBody3D" parent="."]
+position = Vector3(-9.8, 0.012, -42)
+[node name="Collision" type="CollisionShape3D" parent="AwayMarkL"]
+shape = SubResource("S44")
+[node name="Mesh" type="MeshInstance3D" parent="AwayMarkL"]
+mesh = SubResource("M44")
+material_override = SubResource("Mat")
+[node name="AwayApproachR" type="Marker3D" parent="."]
+position = Vector3(-6.2, 0.03, -42)
+[node name="AwayMarkR" type="StaticBody3D" parent="."]
+position = Vector3(-6.2, 0.012, -42)
+[node name="Collision" type="CollisionShape3D" parent="AwayMarkR"]
+shape = SubResource("S45")
+[node name="Mesh" type="MeshInstance3D" parent="AwayMarkR"]
+mesh = SubResource("M45")
+material_override = SubResource("Mat")
+[node name="NoBrace" type="StaticBody3D" parent="."]
+position = Vector3(0, 2.125, -46)
+[node name="Collision" type="CollisionShape3D" parent="NoBrace"]
+shape = SubResource("S46")
+[node name="Mesh" type="MeshInstance3D" parent="NoBrace"]
+mesh = SubResource("M46")
+material_override = SubResource("Mat")
+[node name="NoBraceLabel" type="Label3D" parent="."]
+position = Vector3(0, 3.45, -46)
+text = "NO BRACE | floating lip must reject"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="NoBraceApproachL" type="Marker3D" parent="."]
+position = Vector3(-1.8, 0.03, -42)
+[node name="NoBraceMarkL" type="StaticBody3D" parent="."]
+position = Vector3(-1.8, 0.012, -42)
+[node name="Collision" type="CollisionShape3D" parent="NoBraceMarkL"]
+shape = SubResource("S47")
+[node name="Mesh" type="MeshInstance3D" parent="NoBraceMarkL"]
+mesh = SubResource("M47")
+material_override = SubResource("Mat")
+[node name="NoBraceApproachR" type="Marker3D" parent="."]
+position = Vector3(1.8, 0.03, -42)
+[node name="NoBraceMarkR" type="StaticBody3D" parent="."]
+position = Vector3(1.8, 0.012, -42)
+[node name="Collision" type="CollisionShape3D" parent="NoBraceMarkR"]
+shape = SubResource("S48")
+[node name="Mesh" type="MeshInstance3D" parent="NoBraceMarkR"]
+mesh = SubResource("M48")
+material_override = SubResource("Mat")
+[node name="Blocked" type="StaticBody3D" parent="."]
+position = Vector3(8, 1.125, -46)
+[node name="Collision" type="CollisionShape3D" parent="Blocked"]
+shape = SubResource("S49")
+[node name="Mesh" type="MeshInstance3D" parent="Blocked"]
+mesh = SubResource("M49")
+material_override = SubResource("Mat")
+[node name="BlockedLabel" type="Label3D" parent="."]
+position = Vector3(8, 3.45, -46)
+text = "HEAD BLOCKED | overhang must reject"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="BlockedApproachL" type="Marker3D" parent="."]
+position = Vector3(6.2, 0.03, -42)
+[node name="BlockedMarkL" type="StaticBody3D" parent="."]
+position = Vector3(6.2, 0.012, -42)
+[node name="Collision" type="CollisionShape3D" parent="BlockedMarkL"]
+shape = SubResource("S50")
+[node name="Mesh" type="MeshInstance3D" parent="BlockedMarkL"]
+mesh = SubResource("M50")
+material_override = SubResource("Mat")
+[node name="BlockedApproachR" type="Marker3D" parent="."]
+position = Vector3(9.8, 0.03, -42)
+[node name="BlockedMarkR" type="StaticBody3D" parent="."]
+position = Vector3(9.8, 0.012, -42)
+[node name="Collision" type="CollisionShape3D" parent="BlockedMarkR"]
+shape = SubResource("S51")
+[node name="Mesh" type="MeshInstance3D" parent="BlockedMarkR"]
+mesh = SubResource("M51")
+material_override = SubResource("Mat")
+[node name="BlockedRoof" type="StaticBody3D" parent="."]
+position = Vector3(8, 2.25, -43.9)
+[node name="Collision" type="CollisionShape3D" parent="BlockedRoof"]
+shape = SubResource("S52")
+[node name="Mesh" type="MeshInstance3D" parent="BlockedRoof"]
+mesh = SubResource("M52")
+material_override = SubResource("Mat")
+[node name="BelowThreshold" type="StaticBody3D" parent="."]
+position = Vector3(16, 0.825, -46)
+[node name="Collision" type="CollisionShape3D" parent="BelowThreshold"]
+shape = SubResource("S53")
+[node name="Mesh" type="MeshInstance3D" parent="BelowThreshold"]
+mesh = SubResource("M53")
+material_override = SubResource("Mat")
+[node name="BelowThresholdLabel" type="Label3D" parent="."]
+position = Vector3(16, 2.8499999999999996, -46)
+text = "1.65 m | below jump threshold: no automatic hang"
+font_size = 28
+pixel_size = 0.006
+billboard = 1
+[node name="BelowThresholdApproachL" type="Marker3D" parent="."]
+position = Vector3(14.2, 0.03, -42)
+[node name="BelowThresholdMarkL" type="StaticBody3D" parent="."]
+position = Vector3(14.2, 0.012, -42)
+[node name="Collision" type="CollisionShape3D" parent="BelowThresholdMarkL"]
+shape = SubResource("S54")
+[node name="Mesh" type="MeshInstance3D" parent="BelowThresholdMarkL"]
+mesh = SubResource("M54")
+material_override = SubResource("Mat")
+[node name="BelowThresholdApproachR" type="Marker3D" parent="."]
+position = Vector3(17.8, 0.03, -42)
+[node name="BelowThresholdMarkR" type="StaticBody3D" parent="."]
+position = Vector3(17.8, 0.012, -42)
+[node name="Collision" type="CollisionShape3D" parent="BelowThresholdMarkR"]
+shape = SubResource("S55")
+[node name="Mesh" type="MeshInstance3D" parent="BelowThresholdMarkR"]
+mesh = SubResource("M55")
+material_override = SubResource("Mat")
+[node name="Legend" type="Label3D" parent="."]
+position = Vector3(0, 2, 1)
+text = "ACQUISITION LANES | Ctrl+F3: detection visuals\nYellow reach | Orange prediction | Blue velocity | Magenta input\nGreen accepted | Cyan valid | Red rejected | W up / S drop"
+font_size = 32
+pixel_size = 0.006
+billboard = 1

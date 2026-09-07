@@ -158,7 +158,7 @@ func prepare_targets(delta: float) -> void:
 		leg.animated=pose.origin
 		leg.animated_basis=pose.basis
 		leg.climb_contact=ClimbContact.project(self,leg,pose)
-		leg.climb_profile=motor.traversal.mantle.pose_owned()
+		leg.climb_profile=motor.traversal.mantle.pose_owned() or motor.traversal.hang.is_attached()
 		if leg.climb_profile:
 			leg.plant.update(self,data,pose,delta,false)
 			var contact: Dictionary=leg.climb_contact
@@ -269,6 +269,11 @@ func place_targets() -> void:
 		leg.pole.global_position=knee+bend.normalized()*0.6
 		_stabilize_knee(leg,hip,knee,destination)
 		leg.solver.influence=leg.weight
+		if motor.traversal.hang.is_attached():
+			# Hang uses position-space blending (like its hand clamp). Partial
+			# joint-rotation influence can arc a toe into the wall on entry.
+			leg.target.global_position=pose.origin.lerp(destination,leg.weight)
+			leg.solver.influence=1.0 if leg.weight>.001 else 0.0
 
 func _stabilize_knee(leg: Dictionary,hip: Vector3,knee: Vector3,destination: Vector3) -> void:
 	var data=feet.left if leg.side=="Left" else feet.right
@@ -310,6 +315,9 @@ func _stabilize_knee(leg: Dictionary,hip: Vector3,knee: Vector3,destination: Vec
 func _capture_result() -> void:
 	for leg in legs:
 		leg.solved=_world(leg.bones[2]).origin
+		# Capture during the modifier pass; Godot restores authored bones afterward.
+		var toe_index: int=skeleton.find_bone("mixamorig_"+leg.side+"ToeBase")
+		leg.solved_toe=_world(toe_index).origin if toe_index>=0 else leg.solved
 		var data=feet.left if leg.side=="Left" else feet.right
 		leg.terrain_error=leg.solved.distance_to(data.ankle_target_transform.origin) if data.valid else NAN
 		leg.solver_error=leg.solved.distance_to(leg.target.global_position)

@@ -75,6 +75,9 @@ func physical_ground_contact() -> bool:
 	return is_on_floor() or step_solver.active or roll_traversal.active
 
 func _physics_process(delta: float) -> void:
+	if traversal.hang.running:
+		if Input.is_action_just_pressed("move_forward"): traversal.hang.request_up()
+		elif Input.is_action_just_pressed("move_backward"): traversal.hang.request_release()
 	context_interaction.tick(Input.is_action_just_pressed("interact"),Input.is_action_pressed("interact"))
 	if not traversal.is_traversing or traversal.phase==traversal.Phase.EXIT:
 		if Input.is_action_just_pressed("lock_on"): lock_on.toggle()
@@ -84,10 +87,16 @@ func _physics_process(delta: float) -> void:
 ## Input boundary also supports deterministic play tests without emulating OS keys.
 func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pressed: bool = false, crouch_requested: bool = false) -> void:
 	if not ground_support.initialized: ground_support.refresh(0)
+	if traversal.hang.running:
+		if traversal.hang.step(delta): return
+		crouch_requested=crouch.requested
+	elif traversal.hang.try_catch(delta):
+		traversal.hang.step(delta)
+		return
 	var was_mantling: bool=traversal.mantle.running
 	if was_mantling and traversal.mantle.step(delta,stick,jump,dodge_pressed): return
 	traversal.advance(delta)
-	if traversal.is_traversing and not (traversal.mantle.running and traversal.phase==traversal.Phase.EXIT):
+	if traversal.is_traversing and not ((traversal.mantle.running or traversal.hang.running) and traversal.phase==traversal.Phase.EXIT):
 		# Phase 0 yields input authority only; braking, gravity and collisions
 		# still run through the normal motor. No traversal pose/translation yet.
 		stick=Vector2.ZERO

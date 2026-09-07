@@ -1,8 +1,9 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 [ext_resource type="Script" path="res://test/traversal_playground/traversal_playground.gd" id="1"]
 [ext_resource type="PackedScene" path="res://test/traversal_playground/vertical_course.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://test/traversal_playground/speed_course.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://test/traversal_playground/mixed_course.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://test/traversal_playground/hang_course.tscn" id="5"]
 [sub_resource type="BoxShape3D" id="HubShape"]
 size = Vector3(18, 0.5, 18)
 [sub_resource type="BoxMesh" id="HubMesh"]
@@ -28,7 +29,7 @@ mesh = SubResource("HubMesh")
 material_override = SubResource("HubMaterial")
 [node name="Instructions" type="Label3D" parent="."]
 position = Vector3(0, 2.5, -5)
-text = "TRAVERSAL PLAYGROUND\n1 Vertical / 2 Speed / 3 Mixed\nR Restart current course / Home Hub\nWASD Move / Shift Run-Sprint / Space Jump / Alt Roll / E Climb\nGaps have no safety floor — falling resets the course"
+text = "TRAVERSAL PLAYGROUND\n1 Vertical / 2 Speed / 3 Mixed / 4 Braced Hang\nR Restart current course / Home Hub\nWASD Move / Shift Run-Sprint / Space Jump / Alt Roll / E Climb\nGaps have no safety floor — falling resets the course"
 font_size = 40
 pixel_size = 0.007
 billboard = 1
@@ -43,6 +44,9 @@ position = Vector3(-9, 0, 0)
 rotation_degrees = Vector3(0, 90, 0)
 [node name="Environment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment")
+[node name="Hang" parent="Courses" instance=ExtResource("5")]
+position = Vector3(0, 0, 9)
+rotation_degrees = Vector3(0, 180, 0)
 [node name="Sun" type="DirectionalLight3D" parent="."]
 rotation_degrees = Vector3(-55, -25, 0)
 light_energy = 1.5

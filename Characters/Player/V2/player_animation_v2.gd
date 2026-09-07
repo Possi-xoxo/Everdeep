@@ -25,6 +25,8 @@ const CLIPS := {
 	"DodgeBack": &"DPD_DODING_BACK",
 	"CrouchEnter": &"CRC_STAND_TO_CROUCH", "CrouchExit": &"CRC_CROUCH_TO_STANDING",
 	"Mantle": &"TRV_SPRINT_TO_WALL_CLIMB_02",
+	"HangCatch": &"TRV_JUMPING_TO_BRACED_HANG", "HangIdle": &"TRV_BRACED_HANG_IDLE", "HangUp": &"TRV_BRACED_HANG_TO_CROUCH",
+	"HangRelease": &"TRV_BRACED_HANG_DROP_AND_LAND",
 	"CrouchIdle": &"CRC_CROUCH_IDLE", "CrouchWalk": &"BOW_STANDING_WALK_FORWARD",
 	"CrouchLeft": &"BOW_STANDING_WALK_LEFT", "CrouchRight": &"BOW_STANDING_WALK_RIGHT",
 	"CrouchBack": &"BOW_STANDING_WALK_BACK",
@@ -136,6 +138,7 @@ func _prepare_library() -> bool:
 			reference = idle.track_get_key_value(track, 0)
 	for state: String in CLIPS:
 		var clip := player.get_animation(CLIPS[state])
+		if state.begins_with("Hang"): continue
 		if state=="DodgeStand": motor.dodge.prepare_stand_leadin(clip)
 		if state=="DodgeBack": motor.dodge.prepare_backstep_recovery(clip)
 		var airborne := state in ["JumpStanding", "JumpMoving", "Fall", "Land"]
@@ -152,6 +155,7 @@ func _prepare_library() -> bool:
 					value.z = reference.z
 				clip.track_set_key_value(track, key, value)
 	_trim_backstep()
+	motor.get_node("TraversalController/BracedHang").prepare_clips(player,reference)
 	motor.get_node("TraversalController/Mantle").prepare_clip(player.get_animation(CLIPS.Mantle))
 	return grounded.prepare(player)
 
@@ -198,7 +202,7 @@ func _build_tree() -> void:
 	var locomotion = grounded.build()
 	var machine := AnimationNodeStateMachine.new()
 	machine.add_node(&"Locomotion", locomotion)
-	var states: Array[String]=["Mantle", "Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack", "CrouchEnter", "CrouchExit", "CrouchIdle", "CrouchWalk", "CrouchLocked", "CrouchRun", "CrouchLockedRun"]
+	var states: Array[String]=["HangCatch", "HangIdle", "HangUp", "HangRelease", "Mantle", "Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack", "CrouchEnter", "CrouchExit", "CrouchIdle", "CrouchWalk", "CrouchLocked", "CrouchRun", "CrouchLockedRun"]
 	for state in states:
 		if state=="Locomotion": continue
 		if state in ["CrouchLocked","CrouchLockedRun"]:
@@ -221,6 +225,7 @@ func _build_tree() -> void:
 			var transition := AnimationNodeStateMachineTransition.new()
 			transition.xfade_time = land_blend_out if to == "Locomotion" else (land_blend_in if to == "Land" else (jump_to_fall_blend if to == "Fall" else jump_blend_in))
 			if to=="Mantle": transition.xfade_time=.15
+			if to.begins_with("Hang"): transition.xfade_time=.12
 			if to.begins_with("Crouch"): transition.xfade_time=motor.get_node("CrouchController").crouch_enter_blend_time
 			if from=="CrouchExit" or to=="CrouchExit": transition.xfade_time=motor.get_node("CrouchController").crouch_exit_blend_time
 			if from in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"] and to in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"]:
@@ -237,6 +242,26 @@ func _build_tree() -> void:
 
 func _physics_process(delta: float) -> void:
 	_pose_delta = delta
+	if motor.traversal.hang.is_attached():
+		_episode_visible=false
+		_intentional_jump_episode=false
+		fall_visual_committed=false
+		land_visual_offset=0
+		visual_root.position=visual_root_base_position
+		var h=motor.traversal.hang
+		_enter(&"HangUp" if h.hang_phase==h.HangPhase.TO_CROUCH else (&"HangIdle" if h.hang_phase==h.HangPhase.IDLE else &"HangCatch"))
+		return
+	if motor.traversal.hang.running and current_state==&"HangUp":
+		gait_blend=float(motor.animation_state.gait+1) if motor.animation_state.move_input_magnitude>.01 else 0.0
+		_enter(motor.crouch.animation_node() if motor.crouch.active() else &"Locomotion")
+	if motor.traversal.hang.release_active:
+		if motor.animation_state.is_grounded or motor.animation_state.jump_started:
+			motor.traversal.hang.end_release_visual()
+		else:
+			_episode_visible=true
+			fall_visual_committed=true
+			_enter(&"HangRelease")
+			return
 	if motor.traversal.mantle.running:
 		_episode_visible=false
 		_intentional_jump_episode=false
@@ -551,6 +576,10 @@ func _enter(next: StringName) -> void:
 			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next:
 				var edge: AnimationNodeStateMachineTransition=tree.tree_root.get_transition(index)
 				edge.xfade_time=maxf(edge.xfade_time,standing_idle_return_blend)
+	if current_state==&"HangUp" and (next==&"Locomotion" or String(next).begins_with("Crouch")):
+		for index in tree.tree_root.get_transition_count():
+			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next:
+				tree.tree_root.get_transition(index).xfade_time=motor.traversal.mantle.mantle_exit_blend_time
 	current_state = next
 	_playback.travel(next)
 

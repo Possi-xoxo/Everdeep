@@ -19,6 +19,7 @@ var elapsed: float = 0.0
 var last_end_reason: String = ""
 @onready var motor=get_parent()
 @onready var mantle=$Mantle
+@onready var hang=$BracedHang
 
 func can_begin(requires_grounded: bool=true) -> bool:
 	if is_traversing or motor.dodge.is_dodging or motor.dodge.run_roll_recovery_visible: return false
@@ -42,6 +43,8 @@ func _begin(data: Dictionary,mode: int) -> bool:
 	var source=data.get("source")
 	if mode==Context.Mode.CONTEXTUAL and (not is_instance_valid(source) or not source.can_interact(motor)): return false
 	var real_mantle: bool=mode==Context.Mode.CONTEXTUAL and type==Context.Type.MANTLE and data.has("landing_position")
+	var real_hang: bool=mode==Context.Mode.AUTOMATIC and data.get("braced_hang",false)
+	if real_hang and not hang.validate(data): return false
 	if real_mantle and not mantle.validate(data): return false
 	active_data=data.duplicate()
 	active_data["mode"]=mode
@@ -55,13 +58,14 @@ func _begin(data: Dictionary,mode: int) -> bool:
 	motor.turn_180.cancel()
 	_set_phase(Phase.ENTRY)
 	if real_mantle: mantle.begin(data)
+	if real_hang: hang.begin(data)
 	traversal_started.emit(active_data)
 	if traversal_debug: print("Traversal started: ",Context.Type.keys()[type])
 	return true
 
 func advance(delta: float) -> void:
 	if not is_traversing: return
-	if mantle.running: return # Actual evaluated animation owns the mantle clock.
+	if mantle.running or hang.running: return # Action profile owns the clock.
 	if active_data.has("source") and (not is_instance_valid(active_data.source) or active_data.source.is_queued_for_deletion()):
 		finish("SOURCE_LOST")
 		return
@@ -88,6 +92,7 @@ func request_traversal_interrupt(reason: int) -> bool:
 func finish(reason: String="COMPLETED") -> void:
 	if not is_traversing: return
 	mantle.restore(reason)
+	hang.restore(reason)
 	is_traversing=false
 	active_traversal_type=Context.Type.NONE
 	active_data={}
@@ -96,4 +101,4 @@ func finish(reason: String="COMPLETED") -> void:
 	traversal_finished.emit(reason)
 
 func debug_text() -> String:
-	return "Active Traversal: %s\nPhase: %s\nInterruptible: %s / Window: %s\nLast End: %s" % [Context.Type.keys()[active_traversal_type],Phase.keys()[phase],traversal_interruptible,traversal_interrupt_window_open,last_end_reason] + ("\n"+mantle.debug_text() if mantle.running else "")
+	return "Active Traversal: %s\nPhase: %s\nInterruptible: %s / Window: %s\nLast End: %s" % [Context.Type.keys()[active_traversal_type],Phase.keys()[phase],traversal_interruptible,traversal_interrupt_window_open,last_end_reason] + ("\n"+mantle.debug_text() if mantle.running else "") + ("\n"+hang.debug_text() if hang.running or hang.release_active or hang.hang_debug else "")

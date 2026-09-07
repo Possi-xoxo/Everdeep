@@ -18,6 +18,7 @@ var has_ground_support: bool = false
 var support_just_lost: bool = false
 var coyote_remaining: float = 0.0
 var initialized: bool = false
+var last_supported_height: float = NAN
 var jumping: bool = false
 var solver_support: bool = false
 var samples: Array = []
@@ -85,6 +86,7 @@ func refresh(delta: float, confirmed_solver: bool=false) -> void:
 	if motor.velocity.y<=0: jumping=false
 	# Proximity alone cannot land a falling body before physical contact.
 	has_ground_support=data.supported and not jumping and (motor.is_on_floor() or confirmed_solver)
+	if has_ground_support: last_supported_height=point.y
 	solver_support=confirmed_solver
 	support_state=SupportState.UNSUPPORTED if not has_ground_support else (SupportState.FULL_SUPPORT if support_fraction+.00001>=full_support_fraction else SupportState.EDGE_SUPPORT)
 	coyote_remaining=maxf(0,coyote_remaining-delta)

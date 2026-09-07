@@ -1,0 +1,34 @@
+[gd_scene load_steps=6 format=3]
+[sub_resource type="StandardMaterial3D" id="Material"]
+albedo_color = Color(0.22, 0.58, 0.49, 1)
+[sub_resource type="BoxShape3D" id="S0"]
+size = Vector3(6, 0.5, 6)
+[sub_resource type="BoxMesh" id="M0"]
+size = Vector3(6, 0.5, 6)
+[sub_resource type="BoxShape3D" id="S1"]
+size = Vector3(4, 2.7, 3)
+[sub_resource type="BoxMesh" id="M1"]
+size = Vector3(4, 2.7, 3)
+[node name="HangDetour" type="Node3D"]
+[node name="Start" type="Marker3D" parent="."]
+position = Vector3(0, 0.08, -2)
+[node name="Approach" type="StaticBody3D" parent="."]
+position = Vector3(0, -0.25, 0)
+[node name="Collision" type="CollisionShape3D" parent="Approach"]
+shape = SubResource("S0")
+[node name="Mesh" type="MeshInstance3D" parent="Approach"]
+mesh = SubResource("M0")
+material_override = SubResource("Material")
+[node name="HangWall" type="StaticBody3D" parent="."]
+position = Vector3(0, 1.35, -4.5)
+[node name="Collision" type="CollisionShape3D" parent="HangWall"]
+shape = SubResource("S1")
+[node name="Mesh" type="MeshInstance3D" parent="HangWall"]
+mesh = SubResource("M1")
+material_override = SubResource("Material")
+[node name="Sign0" type="Label3D" parent="."]
+position = Vector3(0, 4.2, -4)
+text = "OPTIONAL BRACED HANG\nAfter settle: W — Climb Up / S — Release\nLand below and retry / R resets course"
+font_size = 32
+pixel_size = 0.006
+billboard = 1

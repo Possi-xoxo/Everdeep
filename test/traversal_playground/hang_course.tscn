@@ -1,0 +1,264 @@
+[gd_scene load_steps=33 format=3]
+[ext_resource type="PackedScene" path="res://test/traversal_playground/hang_acquisition_lanes.tscn" id="Acquisition"]
+[sub_resource type="StandardMaterial3D" id="Material"]
+albedo_color = Color(0.22, 0.58, 0.49, 1)
+[sub_resource type="BoxShape3D" id="S0"]
+size = Vector3(48, 0.5, 46)
+[sub_resource type="BoxMesh" id="M0"]
+size = Vector3(48, 0.5, 46)
+[sub_resource type="BoxShape3D" id="S1"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M1"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S2"]
+size = Vector3(4, 3.25, 3)
+[sub_resource type="BoxMesh" id="M2"]
+size = Vector3(4, 3.25, 3)
+[sub_resource type="BoxShape3D" id="S3"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M3"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S4"]
+size = Vector3(4, 2.75, 3)
+[sub_resource type="BoxMesh" id="M4"]
+size = Vector3(4, 2.75, 3)
+[sub_resource type="BoxShape3D" id="S5"]
+size = Vector3(4, 2.75, 3)
+[sub_resource type="BoxMesh" id="M5"]
+size = Vector3(4, 2.75, 3)
+[sub_resource type="BoxShape3D" id="S6"]
+size = Vector3(4, 2.75, 3)
+[sub_resource type="BoxMesh" id="M6"]
+size = Vector3(4, 2.75, 3)
+[sub_resource type="BoxShape3D" id="S7"]
+size = Vector3(4, 0.25, 3)
+[sub_resource type="BoxMesh" id="M7"]
+size = Vector3(4, 0.25, 3)
+[sub_resource type="BoxShape3D" id="S8"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M8"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S9"]
+size = Vector3(4, 2.75, 3)
+[sub_resource type="BoxMesh" id="M9"]
+size = Vector3(4, 2.75, 3)
+[sub_resource type="BoxShape3D" id="S10"]
+size = Vector3(4, 3.25, 3)
+[sub_resource type="BoxMesh" id="M10"]
+size = Vector3(4, 3.25, 3)
+[sub_resource type="BoxShape3D" id="S11"]
+size = Vector3(4, 2.75, 3)
+[sub_resource type="BoxMesh" id="M11"]
+size = Vector3(4, 2.75, 3)
+[sub_resource type="BoxShape3D" id="S12"]
+size = Vector3(4, 2.5, 3)
+[sub_resource type="BoxMesh" id="M12"]
+size = Vector3(4, 2.5, 3)
+[sub_resource type="BoxShape3D" id="S13"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxMesh" id="M13"]
+size = Vector3(4, 2.25, 3)
+[sub_resource type="BoxShape3D" id="S14"]
+size = Vector3(4, 4.5, 3)
+[sub_resource type="BoxMesh" id="M14"]
+size = Vector3(4, 4.5, 3)
+[node name="HangCourse" type="Node3D"]
+[node name="AcquisitionLanes" parent="." instance=ExtResource("Acquisition")]
+position = Vector3(0, 0, -49)
+[node name="Start" type="Marker3D" parent="."]
+position = Vector3(0, 0.08, -2)
+[node name="Hang_Floor" type="StaticBody3D" parent="."]
+position = Vector3(0, -0.25, -23)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Floor"]
+shape = SubResource("S0")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Floor"]
+mesh = SubResource("M0")
+material_override = SubResource("Material")
+[node name="Hang_Basic" type="StaticBody3D" parent="."]
+position = Vector3(-16, 1.125, -13)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Basic"]
+shape = SubResource("S1")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Basic"]
+mesh = SubResource("M1")
+material_override = SubResource("Material")
+[node name="Hang_Apex" type="StaticBody3D" parent="."]
+position = Vector3(-8, 1.625, -13)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Apex"]
+shape = SubResource("S2")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Apex"]
+mesh = SubResource("M2")
+material_override = SubResource("Material")
+[node name="Hang_Falling" type="StaticBody3D" parent="."]
+position = Vector3(0, 1.125, -13)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Falling"]
+shape = SubResource("S3")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Falling"]
+mesh = SubResource("M3")
+material_override = SubResource("Material")
+[node name="Hang_Diagonal" type="StaticBody3D" parent="."]
+position = Vector3(8, 1.375, -13)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Diagonal"]
+shape = SubResource("S4")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Diagonal"]
+mesh = SubResource("M4")
+material_override = SubResource("Material")
+[node name="Hang_ConeEdge" type="StaticBody3D" parent="."]
+position = Vector3(16, 1.375, -13)
+[node name="Collision" type="CollisionShape3D" parent="Hang_ConeEdge"]
+shape = SubResource("S5")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_ConeEdge"]
+mesh = SubResource("M5")
+material_override = SubResource("Material")
+[node name="Hang_Invalid_Backside" type="StaticBody3D" parent="."]
+position = Vector3(-16, 1.375, -26)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Invalid_Backside"]
+shape = SubResource("S6")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Invalid_Backside"]
+mesh = SubResource("M6")
+material_override = SubResource("Material")
+[node name="Hang_Invalid_NoBrace" type="StaticBody3D" parent="."]
+position = Vector3(-8, 2.625, -26)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Invalid_NoBrace"]
+shape = SubResource("S7")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Invalid_NoBrace"]
+mesh = SubResource("M7")
+material_override = SubResource("Material")
+[node name="Hang_Low" type="StaticBody3D" parent="."]
+position = Vector3(0, 1.125, -26)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Low"]
+shape = SubResource("S8")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Low"]
+mesh = SubResource("M8")
+material_override = SubResource("Material")
+[node name="Hang_Medium" type="StaticBody3D" parent="."]
+position = Vector3(8, 1.375, -26)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Medium"]
+shape = SubResource("S9")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Medium"]
+mesh = SubResource("M9")
+material_override = SubResource("Material")
+[node name="Hang_High" type="StaticBody3D" parent="."]
+position = Vector3(16, 1.625, -26)
+[node name="Collision" type="CollisionShape3D" parent="Hang_High"]
+shape = SubResource("S10")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_High"]
+mesh = SubResource("M10")
+material_override = SubResource("Material")
+[node name="Hang_ToCrouch" type="StaticBody3D" parent="."]
+position = Vector3(-16, 1.375, -39)
+[node name="Collision" type="CollisionShape3D" parent="Hang_ToCrouch"]
+shape = SubResource("S11")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_ToCrouch"]
+mesh = SubResource("M11")
+material_override = SubResource("Material")
+[node name="Hang_Rising" type="StaticBody3D" parent="."]
+position = Vector3(-8, 1.25, -39)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Rising"]
+shape = SubResource("S12")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Rising"]
+mesh = SubResource("M12")
+material_override = SubResource("Material")
+[node name="Hang_Chain" type="StaticBody3D" parent="."]
+position = Vector3(0, 1.125, -39)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Chain"]
+shape = SubResource("S13")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Chain"]
+mesh = SubResource("M13")
+material_override = SubResource("Material")
+[node name="Hang_Chain_Second" type="StaticBody3D" parent="."]
+position = Vector3(0, 2.25, -43)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Chain_Second"]
+shape = SubResource("S14")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Chain_Second"]
+mesh = SubResource("M14")
+material_override = SubResource("Material")
+[node name="Sign0" type="Label3D" parent="."]
+position = Vector3(0, 2.8, -3)
+text = "4 — BRACED HANG\nJump toward wall: automatic catch\nAfter settle: W — Climb Up / S — Release\nSafe floor below: release, land and retry\nCTRL uncrouch / R reset / Home hub"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign1" type="Label3D" parent="."]
+position = Vector3(-16, 3.55, -13)
+text = "BASIC / RISING\nJump close to wall; automatic catch"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign2" type="Label3D" parent="."]
+position = Vector3(-8, 4.55, -13)
+text = "APEX / HIGH\nJump toward the 3.25m lip"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign3" type="Label3D" parent="."]
+position = Vector3(0, 3.55, -13)
+text = "FALLING\nJump early; meet the wall while descending"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign4" type="Label3D" parent="."]
+position = Vector3(8, 4.05, -13)
+text = "DIAGONAL\nApproach obliquely while airborne"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign5" type="Label3D" parent="."]
+position = Vector3(16, 4.05, -13)
+text = "CONE EDGE\nVelocity-led search; loose facing +/-100 degrees"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign6" type="Label3D" parent="."]
+position = Vector3(-16, 4.05, -26)
+text = "BEHIND / AWAY\nA ledge behind your facing, or moving away: no catch"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign7" type="Label3D" parent="."]
+position = Vector3(-8, 4.05, -26)
+text = "NO BRACE\nThin lip: hand edge but no wall below; must reject"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign8" type="Label3D" parent="."]
+position = Vector3(0, 3.55, -26)
+text = "LOW — 2.25m\nCatch then W to climb up"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign9" type="Label3D" parent="."]
+position = Vector3(8, 4.05, -26)
+text = "MEDIUM — 2.75m\nCatch then W to climb up"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign10" type="Label3D" parent="."]
+position = Vector3(16, 4.55, -26)
+text = "HIGH — 3.25m\nCatch near apex"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign11" type="Label3D" parent="."]
+position = Vector3(-16, 4.05, -39)
+text = "TO CROUCH\nWait 0.20s, press W; resume locomotion"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign12" type="Label3D" parent="."]
+position = Vector3(-8, 3.8, -39)
+text = "RISING\nJump late close to wall"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign13" type="Label3D" parent="."]
+position = Vector3(0, 3.55, -39)
+text = "CHAIN\nCatch / W / jump toward next raised platform"
+font_size = 32
+pixel_size = 0.006
+billboard = 1
+[node name="Sign14" type="Label3D" parent="."]
+position = Vector3(13, 1.5, -39)
+text = "RESERVED OPEN SPACE\nFuture Free Hang / Shimmy / Hops"
+font_size = 32
+pixel_size = 0.006
+billboard = 1

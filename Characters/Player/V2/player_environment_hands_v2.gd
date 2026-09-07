@@ -131,6 +131,7 @@ func eligibility(_allow_idle: bool = false) -> String:
 	var s=motor.animation_state
 	if motor.crouch.active(): return "CROUCH"
 	if motor.traversal.mantle.running: return "MANTLE"
+	if motor.traversal.hang.is_attached(): return "BRACED_HANG"
 	if s.locked_on: return "LOCKED"
 	if motor.dodge.is_dodging or motor.dodge.run_roll_recovery_visible: return "DODGE"
 	var animation=motor.get_node("AnimationController")

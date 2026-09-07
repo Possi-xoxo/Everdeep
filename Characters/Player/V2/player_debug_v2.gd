@@ -21,7 +21,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		feet.foot_grounding_debug=not feet.foot_grounding_debug
 		if feet.foot_grounding_debug: enabled=true
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F3:
-		enabled = not enabled
+		if event.ctrl_pressed:
+			motor.traversal.hang.hang_debug=not motor.traversal.hang.hang_debug
+			if motor.traversal.hang.hang_debug: enabled=true
+		else: enabled = not enabled
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F4:
 		motor.step_solver.debug_steps = not motor.step_solver.debug_steps
 		if motor.step_solver.debug_steps: enabled = true
@@ -41,6 +44,8 @@ func _process(_delta: float) -> void:
 	label.text = "Player V2\n\nGait: %s\nPhysical: %s\nAnimation: %s\nHorizontal Speed: %.2f m/s\nVertical Velocity: %.2f m/s\nRun Buildup: %.0f%%\nAir Time: %.2f s\n\nWASD: Move  Shift: Run / Sprint\nSpace: Jump  Mouse: Orbit\nF3: Debug  Esc: Release mouse" % [gait, "GROUNDED" if s.is_grounded else "AIRBORNE", $"../AnimationController".presentation_label(), s.horizontal_speed, s.vertical_velocity, s.run_buildup_ratio * 100.0, s.air_time]
 	var animation = $"../AnimationController"
 	label.text+="\nAlt: Dodge"
+	if (motor.traversal.hang.running or motor.traversal.hang.release_active) and not motor.traversal.hang.debug_detection_enabled():
+		label.text+="\n\n"+motor.traversal.hang.debug_text()
 	if s.locked_on: label.text=label.text.replace("Shift: Run / Sprint","Shift: Combat Run (no Sprint)").replace("Mouse: Orbit","Mouse orbit disabled")
 	if lock_tuning_debug:
 		label.text="F10: Tuning overlay\n"+motor.lock_on.debug_text()
@@ -70,6 +75,8 @@ func _process(_delta: float) -> void:
 		label.text += "\n\n" + motor.step_solver.debug_text()
 	if animation.debug_tree_playback:
 		label.text += "\n\n" + animation.playback_debug_text()
+	if motor.traversal.hang.debug_detection_enabled():
+		label.text += "\n\n"+motor.traversal.hang.acquisition.debug_text(motor.traversal.hang)+"\nHang: W pull up / S release"
 	var turn = motor.turn_180
 	if turn != null and turn.debug_180:
 		label.text += "\n\nRun180 Active: %s\nStored Entry Speed: %.2f\nTurn Target Direction: %s\nHorizontal Translation Paused: %s" % [turn.active and turn.running, turn.entry_speed, turn.target_direction, turn.active and turn.running and turn.progress >= turn.run_180_carry_end_progress]
