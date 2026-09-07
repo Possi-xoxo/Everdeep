@@ -1,3 +1,13 @@
+# Climb Camera Activation After Approach
+
+The camera previously gated its climb anchor on mantle.pose_owned(), which includes committed ENTRY/alignment as well as ACTIVE animation. This captured the anchor where interaction was accepted, before the assisted approach finished, causing the camera to stay behind the moving player.
+
+The gate is now mantle.running && traversal.phase == ACTIVE: the same authoritative phase in which AnimationController enters TRV_SPRINT_TO_WALL_CLIMB_02. ENTRY keeps the ordinary player-relative free-origin follow path. At ACTIVE the existing camera transition captures its anchor at launch; EXIT/completion still uses the original return path. No extra delay, camera framework, framing/offset/easing/rotation changes, or gameplay/IK/trajectory edits. Existing camera tracking/active fields remain available for inspection.
+
+Changed player_camera_v2.gd and added test_climb_camera_entry_v2.gd. The focused test covers far stationary/moving press, held-E running approach, close entry, cancellation and dynamic blocking before animation, exact normal approach follow, matching animation/camera activation, bounded camera motion, unchanged yaw and completed return. Play-test far activation specifically: the camera should travel with the assisted approach before adopting the familiar climb framing at launch.
+
+Final validation: climb_camera_entry, camera_distance, climb_prompt_authority and mantle all passed headlessly. The final camera-entry test resets held-input state between fixtures so cancellation cases genuinely begin an approach. No script/test errors in final runs; the existing unrelated certificate-store warning remains. Subjective framing should still be confirmed in play-testing.
+
 # Mantle Hand Clamp and Phase-Aware Height Retarget
 
 The controller was already height-aware: its trajectory ended at the validated landing. The implicit 2.54m vertical animation-compensation reference is now exposed as reference_climb_height rather than buried in prepare_clip. This is the existing compensation calibration, not a new measurement of a uniquely correct authored wall height. At commitment/preflight actual_climb_height=landing.y-alignment.y and vertical_retarget_offset=actual-reference. Horizontal flattening and private runtime clip ownership are unchanged.

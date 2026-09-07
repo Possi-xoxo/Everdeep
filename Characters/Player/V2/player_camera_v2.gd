@@ -63,7 +63,9 @@ func _process(delta: float) -> void:
 	var weight:=smoothstep(0,1,_lock_weight)
 	var free_origin: Vector3=motor.to_global(_base_position)
 	var mantle=motor.traversal.mantle
-	var tracking: bool=mantle.pose_owned()
+	# Commitment owns the motor during ENTRY, but the animation controller
+	# starts Mantle only in ACTIVE. Keep ordinary follow through alignment.
+	var tracking: bool=mantle.running and motor.traversal.phase==motor.traversal.Phase.ACTIVE
 	if tracking and not _mantle_tracking:
 		_mantle_start=free_origin
 		_mantle_origin=global_position
