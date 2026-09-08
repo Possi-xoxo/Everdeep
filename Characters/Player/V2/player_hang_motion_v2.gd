@@ -3,6 +3,7 @@ extends RefCounted
 const SAMPLE_COUNT: int=240
 var profiles: Dictionary={}
 var measurements: Dictionary={}
+var original_right_profile: Array[Vector3]=[]
 
 func capture(h: Node,player: AnimationPlayer,name: String,clip: Animation) -> void:
 	var track: int=h.hip_track(clip)
@@ -49,6 +50,7 @@ func capture(h: Node,player: AnimationPlayer,name: String,clip: Animation) -> vo
 	samples[0]=Vector3.ZERO
 	samples[SAMPLE_COUNT]=Vector3(1,0,0)
 	profiles[StringName(name)]=samples
+	if name=="HangHopRight": original_right_profile=samples.duplicate()
 	measurements[name]={"raw_lateral_m":(last.x-first.x)*source_direction/100.0,"derived_distance_m":distance,"vertical_peak_m":peak,"duration":clip.length,"in_place_reconstruction":not hop}
 
 func sample(name: StringName,p: float) -> Vector3:
@@ -56,3 +58,10 @@ func sample(name: StringName,p: float) -> Vector3:
 	var index: float=clampf(p,0,1)*SAMPLE_COUNT
 	var low: int=mini(int(index),SAMPLE_COUNT-1)
 	return Vector3(samples[low]).lerp(samples[low+1],index-low)
+
+func configure_right_hop(mirror_left: bool) -> void:
+	# X is normalized unsigned travel, not world X. The existing right-side
+	# route supplies the mirror sign; do not negate it twice. Y (rise) and Z
+	# (outward retreat) are copied unchanged. Right keeps its own clip clock.
+	profiles[&"HangHopRight"]=profiles[&"HangHopLeft"].duplicate() if mirror_left else original_right_profile.duplicate()
+	measurements["HangHopRight"]["movement_profile_source"]="HangHopLeft mirrored" if mirror_left else "HangHopRight authored"

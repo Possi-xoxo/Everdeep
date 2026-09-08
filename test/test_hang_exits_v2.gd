@@ -105,13 +105,13 @@ func run() -> void:
 	check(hang.try_catch(DT),"different ledge automatically caught")
 	check(hang.source==other and not hang.release_active,"new catch owns animation instead of release tail")
 	for frame in 20: await actual_input()
-	# Large drop: source baked landing must never finish in midair.
+	# New safety policy: S must not release when there is no safe floor.
 	floor_box.queue_free()
 	await physics_frame
 	await actual_input("move_backward",true)
 	await actual_input("move_backward",false)
 	for frame in 30: await actual_input()
-	check(not hang.release_active and animation.current_state==&"Fall" and body.velocity.y< -5,"large drop hands off to real Fall")
+	check(hang.running and not hang.release_active and animation.current_state==&"HangIdle" and body.velocity.is_zero_approx(),"large drop S stays safely hanging")
 	check(not body.ground_support.has_ground_support,"no authored phantom landing")
 	print("HANG_EXITS_V2: ","PASS" if failures.is_empty() else str(failures))
 	quit(0 if failures.is_empty() else 1)

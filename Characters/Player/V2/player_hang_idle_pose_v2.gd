@@ -35,7 +35,11 @@ func update(h: Node,animation: Node,delta: float) -> void:
 	# Dedicated rig instance position avoids fighting locomotion's VisualRoot
 	# compression/offset writers. Always reconstruct from the saved base.
 	animation.rig.position=rig_base+Vector3.UP*offset
-	if weight==0 and visual_weight==0:
+	if h.top_entry.active:
+		# Convert the independent world-space visual route into the turning
+		# rig parent's local axes. Reconstruct every tick, never accumulate.
+		animation.rig.position+=animation.rig.get_parent().global_basis.inverse()*h.top_entry.visual_offset()
+	if weight==0 and visual_weight==0 and not h.top_entry.active:
 		feet.clear()
 		bound=false
 

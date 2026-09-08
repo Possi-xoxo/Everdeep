@@ -1,10 +1,41 @@
 extends Node
 ## Automatic braced hang with continuous same-wall lateral actions. No Free Hang.
-enum HangPhase { NONE, CATCH, SETTLE, IDLE, TO_CROUCH, RELEASE, LATERAL }
+enum HangPhase { NONE, CATCH, SETTLE, IDLE, TO_CROUCH, RELEASE, LATERAL, VERTICAL, JUMP_OFF, TOP_ENTRY }
+var top_entry: Node3D
+@export_group("Top-Down Hang Entry")
+@export_range(.5,2,.05) var top_down_hang_playback_speed: float=.9
+@export_range(.3,1,.05) var top_down_hang_prompt_distance: float=.7
+@export_range(0,.3,.01) var top_down_hang_lateral_tolerance: float=.15
+@export_range(10,70,5) var top_down_hang_facing_tolerance: float=50
+@export_range(6,18,1) var top_down_hang_contact_frame: float=9
+@export_range(1,14,1) var top_down_hang_hand_blend_frame: float=12
+@export_range(.1,.6,.05) var top_down_hang_max_hand_correction: float=.45
+@export_group("Hang Navigation")
+@export_range(.5,3,.05) var braced_hang_safe_release_distance: float=1.75
+@export_range(1,8,.1) var braced_hang_jump_outward_speed: float=4.5
+@export_range(4,12,.1) var braced_hang_jump_up_speed: float=9.0
+@export_range(0,3,.1) var braced_hang_jump_lateral_influence: float=1.5
+@export_range(.3,1,.05) var braced_hang_interact_range: float=.75
+@export_range(.08,.2,.01) var lateral_brace_recess: float=.12
+@export_range(.5,8,.5) var lateral_max_normal_change: float=3.0
+@export_range(5,60,1) var lateral_max_total_turn: float=35.0
+var navigation=preload("res://Characters/Player/V2/player_hang_navigation_v2.gd").new()
+@export_group("Vertical Hang")
+@export_range(.5,2,.05) var braced_hang_vertical_playback_speed: float=1.1
+@export_range(.5,2.5,.05) var vertical_up_range: float=1.4
+@export_range(.5,3,.05) var vertical_down_range: float=1.6
+@export_range(.2,.8,.05) var vertical_min_separation: float=.45
+@export_range(0,.5,.05) var vertical_horizontal_tolerance: float=.3
+@export_range(.05,.3,.01) var vertical_wall_tolerance: float=.2
+@export_range(0,20,1) var vertical_angle_tolerance: float=10
+@export_range(.001,.03,.001) var vertical_clearance_margin: float=.005
+var vertical=preload("res://Characters/Player/V2/player_hang_vertical_v2.gd").new()
 @export_group("Lateral Hang")
 @export_range(.1,.8,.05) var braced_hang_shimmy_distance: float=.7
 @export_range(.5,3,.05) var braced_hang_hop_distance: float=3.0
 @export var braced_hang_hop_use_authored_distance: bool=false
+## Prepared at scene load. Disable and restart play to restore authored Right Hop movement.
+@export var braced_hang_right_hop_mirror_left_curve: bool=false
 @export_range(.5,2,.05) var braced_hang_lateral_playback_speed: float=1.1
 @export_range(.01,.05,.005) var lateral_query_spacing: float=.025
 @export_range(.005,.04,.005) var lateral_height_tolerance: float=.02
@@ -96,6 +127,9 @@ var up_elapsed: float = 0
 @onready var motor=get_parent().get_parent()
 
 func _ready() -> void:
+	top_entry=preload("res://Characters/Player/V2/player_hang_top_entry_v2.gd").new()
+	top_entry.name="TopDownEntry"
+	add_child(top_entry)
 	detection_visual=preload("res://Characters/Player/V2/player_hang_debug_v2.gd").new()
 	add_child(detection_visual)
 
@@ -105,15 +139,22 @@ func pose_owned() -> bool: return is_attached() or (release_active and release_e
 func project_foot(controller: Node,leg: Dictionary,pose: Transform3D) -> Dictionary:
 	var contact=controller.ClimbContact
 	var samples: Array=[pose.origin,controller._world(controller.skeleton.find_bone("mixamorig_"+leg.side+"ToeBase")).origin]
+	if vertical.active:
+		var target: Dictionary=vertical.contact_target()
+		var weight: float=vertical.contact_weight() if controller.enabled and controller.climb_foot_ik_enabled else 0.0
+		return contact._surface(controller,leg,pose,samples,target.edge,target.normal,braced_hang_foot_wall_clearance,braced_hang_max_foot_correction,weight,"VERTICAL_WALL",foot_contact_response,self,target.source)
 	var envelope: float=smoothstep(0,settle_duration,elapsed) if hang_phase!=HangPhase.TO_CROUCH else 1.0-smoothstep(.60,.75,progress)
+	if top_entry.active: envelope=top_entry.foot_weight()
+	if navigation.jumping: envelope*=1-smoothstep(.25,navigation.LAUNCH_TIME,navigation.jump_pose_time)
 	if not controller.enabled or not controller.climb_foot_ik_enabled: envelope=0
 	if controller.enabled and controller.climb_foot_ik_enabled and hang_phase==HangPhase.TO_CROUCH and progress>.65:
 		return contact._surface(controller,leg,pose,[pose.origin-landing_plane_normal*controller.feet.foot_sole_offset,samples[1]],top,landing_plane_normal,foot_wall_clearance,max_foot_correction,1.0,"LEDGE_TOP",foot_contact_response,self)
 	var legacy: Dictionary=contact._surface(controller,leg,pose,samples,wall_point,wall_normal,foot_wall_clearance,max_foot_correction,envelope,"WALL",foot_contact_response,self)
-	return idle_pose.foot_contact(self,controller,leg,pose,samples,legacy) if idle_pose.weight>0 else legacy
+	return idle_pose.foot_contact(self,controller,leg,pose,samples,legacy) if idle_pose.weight>0 and not navigation.jumping and not top_entry.active else legacy
 
 ## Shared hand layer consumes this contact clock, not the source clip clock.
 func current_frame() -> float:
+	if top_entry.active: return lerpf(17,23,top_entry.hand_weight())
 	if hang_phase==HangPhase.RELEASE: return lerpf(37,44,clampf(release_elapsed/.10,0,1))
 	if hang_phase in [HangPhase.CATCH,HangPhase.SETTLE]: return lerpf(17,23,clampf(elapsed/settle_duration,0,1))
 	if hang_phase==HangPhase.TO_CROUCH: return 30.0 if progress<=.45 else lerpf(37,44,clampf((progress-.45)/.25,0,1))
@@ -166,6 +207,8 @@ func validate(data: Dictionary) -> bool:
 	return data.get("valid",false) and is_instance_valid(data.get("source")) and clear_segment(motor.global_position,data.anchor,motor.crouch.standing_capsule_height)
 
 func begin(data: Dictionary) -> void:
+	navigation.invalidate()
+	navigation.jump_visual=false
 	entry_gait=int(data.get("entry_gait",motor.animation_state.gait))
 	entry_run_time=float(data.get("entry_run_time",0))
 	entry_crouched=motor.crouch.requested
@@ -221,6 +264,7 @@ func prepare_clips(player: AnimationPlayer,root_reference: Vector3) -> void:
 	var up:=player.get_animation(&"TRV_BRACED_HANG_TO_CROUCH")
 	var catch_clip:=player.get_animation(&"TRV_JUMPING_TO_BRACED_HANG")
 	var idle_z: float=idle.track_get_key_value(hip_track(idle),0).z
+	top_entry.prepare(player,root_reference,idle_z)
 	var crouch:=player.get_animation(&"CRC_CROUCH_IDLE")
 	var crouch_z: float=crouch.track_get_key_value(hip_track(crouch),0).z
 	# Only the final six source frames provide the small settled catch, not
@@ -259,6 +303,8 @@ func prepare_clips(player: AnimationPlayer,root_reference: Vector3) -> void:
 	match_sprint_tail(player,up)
 	prepare_release(player,root_reference,idle_z)
 	lateral.prepare(self,player,root_reference,idle_z)
+	vertical.prepare(self,player,root_reference,idle_z)
+	navigation.prepare(self,player,root_reference,idle_z)
 
 ## Share the compensated sprint root translation as well as its body path.
 ## Only translation is transferred; braced joint rotations remain authored.
@@ -381,6 +427,17 @@ func align_up_support(player: AnimationPlayer,clip: Animation) -> void:
 
 func request_up() -> bool:
 	if not running or hang_phase!=HangPhase.IDLE: return false
+	if not check_pull_up(): return false
+	motor.crouch.clear_handoff()
+	motor.crouch.requested=true
+	motor.crouch.phase=motor.crouch.Phase.CROUCHED
+	motor.crouch.resize(motor.crouch.crouch_capsule_height)
+	hang_phase=HangPhase.TO_CROUCH
+	progress=0
+	up_elapsed=0
+	return true
+
+func check_pull_up() -> bool:
 	climb_destination_valid=false
 	if not is_instance_valid(source) or source.is_queued_for_deletion() or not source.global_transform.is_equal_approx(source_transform): return false
 	# Match standard climb's near-edge finish without sacrificing support.
@@ -394,39 +451,41 @@ func request_up() -> bool:
 		if not clear_segment(previous,target,motor.crouch.crouch_capsule_height): exit_reason="TOP_OR_PATH_BLOCKED"; return false
 		previous=target
 	climb_destination_valid=true
-	motor.crouch.clear_handoff()
-	motor.crouch.requested=true
-	motor.crouch.phase=motor.crouch.Phase.CROUCHED
-	motor.crouch.resize(motor.crouch.crouch_capsule_height)
-	hang_phase=HangPhase.TO_CROUCH
-	progress=0
-	up_elapsed=0
 	return true
 
 func contact_still_exists() -> bool:
-	var tangent:=facing.cross(Vector3.UP)
+	return validate_contacts(source,ledge_edge,top,wall_normal,landing_plane_normal)
+
+func validate_contacts(contact_source: Node3D,edge: Vector3,plane: Vector3,normal: Vector3,plane_normal: Vector3) -> bool:
+	var into_wall: Vector3=-normal
+	var tangent:=into_wall.cross(Vector3.UP)
 	for lateral in [-.28,.28]:
-		var hand: Vector3=ledge_edge+tangent*lateral+facing*.04
-		hand.y=top.y-(landing_plane_normal.x*(hand.x-top.x)+landing_plane_normal.z*(hand.z-top.z))/landing_plane_normal.y
+		var hand: Vector3=edge+tangent*lateral+into_wall*.04
+		hand.y=plane.y-(plane_normal.x*(hand.x-plane.x)+plane_normal.z*(hand.z-plane.z))/plane_normal.y
 		var hit:=ray(hand+Vector3.UP*.06,hand-Vector3.UP*.06)
-		if hit.is_empty() or hit.collider!=source or hit.normal.dot(landing_plane_normal)<.98: return false
-		var brace: Vector3=ledge_edge+tangent*lateral-Vector3.UP*1.15
-		hit=ray(brace-facing*.12,brace+facing*.12)
-		if hit.is_empty() or hit.collider!=source or hit.normal.dot(wall_normal)<.98: return false
+		if hit.is_empty() or hit.collider!=contact_source or hit.normal.dot(plane_normal)<.98: return false
+		var brace: Vector3=edge+tangent*lateral-Vector3.UP*1.15
+		hit=ray(brace-into_wall*.12,brace+into_wall*.12)
+		if hit.is_empty() or hit.collider!=contact_source or hit.normal.dot(normal)<.98: return false
 	return true
 
 func step(delta: float) -> bool:
 	if not running: return false
+	if top_entry.active: return top_entry.step(delta)
+	if navigation.jumping: return navigation.jump_step(self,delta)
 	if owner_controller.phase==owner_controller.Phase.EXIT:
 		exit_elapsed+=delta
 		if exit_elapsed>=owner_controller.mantle.mantle_exit_blend_time: owner_controller.finish("HANG_TO_CROUCH_COMPLETED")
 		return false
 	if not is_instance_valid(source) or source.is_queued_for_deletion() or not source.global_transform.is_equal_approx(source_transform): owner_controller.finish("HANG_SOURCE_LOST"); return false
-	if not contact_still_exists(): owner_controller.finish("HANG_CONTACT_LOST"); return false
+	if not vertical.active and not contact_still_exists(): owner_controller.finish("HANG_CONTACT_LOST"); return false
+	navigation.advance(self,delta)
+	if vertical.active and not vertical.advance(self,delta): return false
 	if lateral.active: lateral.advance(self,delta)
 	motor.velocity=Vector3.ZERO
 	var target:=alignment
 	if lateral.active: target=lateral.expected_position
+	if vertical.active: target=vertical.expected_position
 	if hang_phase in [HangPhase.CATCH,HangPhase.SETTLE]:
 		elapsed+=delta
 		hang_phase=HangPhase.SETTLE
@@ -443,6 +502,7 @@ func step(delta: float) -> bool:
 		if not motor.ground_support.evaluate(landing,Basis(Vector3.UP,atan2(-facing.x,-facing.z)),source,landing_plane_normal).supported: owner_controller.finish("HANG_DESTINATION_LOST"); return false
 	if not clear_segment(motor.global_position,target,motor.crouch.collision.shape.height): owner_controller.finish("HANG_BLOCKED"); return false
 	if motor.move_and_collide(target-motor.global_position)!=null and motor.global_position.distance_to(target)>.02: owner_controller.finish("HANG_BLOCKED"); return false
+	if vertical.active: vertical.complete(self)
 	var s=motor.animation_state
 	s.is_grounded=false
 	s.is_airborne=true
@@ -472,7 +532,11 @@ func step(delta: float) -> bool:
 
 func restore(reason: String) -> void:
 	if not running: return
+	top_entry.active=false
 	lateral.active=false
+	vertical.active=false
+	navigation.interacting=false
+	navigation.invalidate()
 	release_suppression_active=false
 	last_source_id=source.get_instance_id() if is_instance_valid(source) else 0
 	last_edge=ledge_edge
@@ -482,7 +546,8 @@ func restore(reason: String) -> void:
 	exit_reason=reason
 	if reason!="HANG_TO_CROUCH_COMPLETED": motor.velocity=Vector3.ZERO
 	var a=motor.get_node("AnimationController")
-	if reason!="HANG_TO_CROUCH_COMPLETED": a._enter(&"Fall")
+	if reason not in ["HANG_TO_CROUCH_COMPLETED","HANG_JUMP_OFF"]: a._enter(&"Fall")
 
 func debug_text() -> String:
+	if top_entry.active: return top_entry.debug_text()
 	return "HANG %s / %s\nW: Climb Up / S: Release\nSettle complete: %s / Last top check: %s\nCandidate %s / %s\nAngle %.1f / Distance %.2f / Settle %.2f\nAnchor %s / Last %s\nRegrab suppressed: %s / Ledge ID: %d\nRelease velocity: %s" % ["BRACED" if running else "NONE",HangPhase.keys()[hang_phase],elapsed>=settle_duration,climb_destination_valid,result.get("classification","NONE"),result.get("reason","NONE"),result.get("angle",0.0),result.get("distance",0.0),elapsed,alignment,exit_reason,release_suppression_active,last_source_id,release_velocity]

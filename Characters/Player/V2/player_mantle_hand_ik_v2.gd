@@ -112,6 +112,7 @@ func prepare_targets(delta: float) -> void:
 			arm.solver.influence=0.0
 		return
 	var lateral_active: bool=mantle==motor.traversal.hang and motor.traversal.hang.lateral.active
+	var vertical_active: bool=mantle==motor.traversal.hang and motor.traversal.hang.vertical.active
 	if mantle==motor.traversal.hang:
 		# Scoped modifier-pass translation of the chest and descendants only.
 		# Pelvis/legs are siblings, untouched; no rotation or arm-length edits.
@@ -125,6 +126,8 @@ func prepare_targets(delta: float) -> void:
 	if not captured or captured_source!=mantle.source or (captured_alignment!=mantle.alignment and not lateral_active): _capture_grips()
 	var frame: float=mantle.current_frame()
 	var envelope: float=smoothstep(hand_clamp_start_frame,hand_clamp_full_frame,frame)*(1.0-smoothstep(hand_release_frame,hand_release_end_frame,frame))
+	if mantle==motor.traversal.hang and mantle.top_entry.active: envelope=mantle.top_entry.hand_weight()
+	if mantle==motor.traversal.hang and mantle.navigation.jumping: envelope*=1-smoothstep(.30,mantle.navigation.LAUNCH_TIME,mantle.navigation.jump_pose_time)
 	for arm in arms:
 		var shoulder:=world(arm.bones[0]).origin
 		var elbow:=world(arm.bones[1]).origin
@@ -143,14 +146,26 @@ func prepare_targets(delta: float) -> void:
 			arm.grip=arm.base_grip.lerp(h.idle_pose.hand_target(h,arm,pose.origin),idle_weight)
 			correction_cap=lerpf(correction_cap,h.braced_hang_max_hand_correction,idle_weight)
 			contact_weight=lerpf(1.0,h.braced_hang_hand_ik_weight,idle_weight)
-		if lateral_active:
+		if mantle==motor.traversal.hang and mantle.top_entry.active:
+			arm.grip=mantle.idle_pose.hand_target(mantle,arm,pose.origin)
+			correction_cap=mantle.top_entry.maximum_positional_correction
+		elif lateral_active:
 			var contact: Dictionary=mantle.lateral.hand_contact(mantle,arm,pose.origin)
+			arm.grip=contact.target
+			contact_weight*=contact.weight
+		elif vertical_active:
+			var contact: Dictionary=mantle.vertical.hand_contact(mantle,arm)
 			arm.grip=contact.target
 			contact_weight*=contact.weight
 		elif mantle==motor.traversal.hang and mantle.hang_phase==mantle.HangPhase.TO_CROUCH:
 			# Keep the family's below-lip contact through early support; return
 			# to the existing pull-up target as the shared baseline fades out.
 			arm.grip.y+=(mantle.braced_hang_hand_vertical_offset-hand_vertical_offset)*(1.0-idle_weight)*(1.0-smoothstep(.35,.70,mantle.progress))
+		if mantle==motor.traversal.hang:
+			var reach_contact: Dictionary=mantle.navigation.reach(mantle,arm)
+			if not reach_contact.is_empty():
+				arm.grip=arm.grip.lerp(reach_contact.target,reach_contact.weight)
+				correction_cap=max_hand_correction_distance
 		var offset: Vector3=arm.grip-pose.origin
 		var goal: Vector3=arm.grip
 		arm.limited=offset.length()>correction_cap or shoulder.distance_to(goal)>reach*.995

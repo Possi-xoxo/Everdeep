@@ -28,6 +28,9 @@ const CLIPS := {
 	"HangCatch": &"TRV_JUMPING_TO_BRACED_HANG", "HangIdle": &"TRV_BRACED_HANG_IDLE", "HangUp": &"TRV_BRACED_HANG_TO_CROUCH",
 	"HangRelease": &"TRV_BRACED_HANG_DROP_AND_LAND",
 	"HangShimmyLeft": &"TRV_BRACED_HANG_SHIMMY_LEFT", "HangShimmyRight": &"TRV_BRACED_HANG_SHIMMY_RIGHT",
+	"HangHopUp": &"TRV_BRACED_HANG_HOP_UP", "HangHopDown": &"TRV_BRACED_HANG_HOP_DOWN",
+	"HangJumpOff": &"TRV_JUMP_FROM_BRACED_HANG",
+	"HangTopEntry": &"HangTopEntry_Full",
 	"HangHopLeft": &"TRV_BRACED_HANG_HOP_LEFT", "HangHopRight": &"TRV_BRACED_HANG_HOP_RIGHT",
 	"CrouchIdle": &"CRC_CROUCH_IDLE", "CrouchWalk": &"BOW_STANDING_WALK_FORWARD",
 	"CrouchLeft": &"BOW_STANDING_WALK_LEFT", "CrouchRight": &"BOW_STANDING_WALK_RIGHT",
@@ -125,6 +128,7 @@ func _ready() -> void:
 
 func _prepare_library() -> bool:
 	for clip: StringName in CLIPS.values():
+		if clip==&"HangTopEntry_Full": continue # Prepared from full source before Catch's private trim.
 		if not player.has_animation(clip):
 			push_error("V2 missing canonical action: " + clip)
 			return false
@@ -139,6 +143,7 @@ func _prepare_library() -> bool:
 		if idle.track_get_type(track) == Animation.TYPE_POSITION_3D and String(idle.track_get_path(track)).ends_with(":mixamorig_Hips"):
 			reference = idle.track_get_key_value(track, 0)
 	for state: String in CLIPS:
+		if state=="HangTopEntry": continue
 		var clip := player.get_animation(CLIPS[state])
 		if state.begins_with("Hang"): continue
 		if state=="DodgeStand": motor.dodge.prepare_stand_leadin(clip)
@@ -183,6 +188,12 @@ func _trim_backstep() -> void:
 func _clip(state: String) -> AnimationNodeAnimation:
 	var node := AnimationNodeAnimation.new()
 	node.animation = CLIPS[state]
+	if state in ["HangTopEntry","HangHopUp","HangHopDown"]:
+		var hang_controller=motor.get_node("TraversalController/BracedHang")
+		var rate: float=hang_controller.top_down_hang_playback_speed if state=="HangTopEntry" else hang_controller.braced_hang_vertical_playback_speed
+		node.use_custom_timeline=true
+		node.stretch_time_scale=true
+		node.timeline_length=player.get_animation(CLIPS[state]).length/rate
 	if state in ["HangShimmyLeft","HangShimmyRight","HangHopLeft","HangHopRight"]:
 		node.use_custom_timeline=true
 		node.stretch_time_scale=true
@@ -210,6 +221,9 @@ func _build_tree() -> void:
 	machine.add_node(&"Locomotion", locomotion)
 	var states: Array[String]=["HangCatch", "HangIdle", "HangUp", "HangRelease", "Mantle", "Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack", "CrouchEnter", "CrouchExit", "CrouchIdle", "CrouchWalk", "CrouchLocked", "CrouchRun", "CrouchLockedRun"]
 	states.append_array(["HangShimmyLeft","HangShimmyRight","HangHopLeft","HangHopRight"])
+	states.append_array(["HangHopUp","HangHopDown"])
+	states.append("HangJumpOff")
+	states.append("HangTopEntry")
 	for state in states:
 		if state=="Locomotion": continue
 		if state in ["CrouchLocked","CrouchLockedRun"]:
@@ -240,6 +254,7 @@ func _build_tree() -> void:
 				transition.xfade_time=motor.get_node("CrouchController").crouch_locomotion_blend_time
 			if (from=="CrouchEnter" and to in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"]) or (from=="CrouchExit" and to=="Locomotion"):
 				transition.xfade_time=motor.get_node("CrouchController").crouch_transition_handoff_blend
+			if to=="HangTopEntry": transition.xfade_time=.30
 			machine.add_transition(from, to, transition)
 	tree.root_node = tree.get_path_to(rig)
 	tree.anim_player = tree.get_path_to(player)
@@ -258,11 +273,22 @@ func _physics_process(delta: float) -> void:
 		land_visual_offset=0
 		visual_root.position=visual_root_base_position
 		var h=motor.traversal.hang
-		_enter(h.lateral.state if h.lateral.active else (&"HangUp" if h.hang_phase==h.HangPhase.TO_CROUCH else (&"HangIdle" if h.hang_phase==h.HangPhase.IDLE else &"HangCatch")))
+		if h.top_entry.active:
+			_enter(&"HangTopEntry")
+			return
+		if h.navigation.jumping:
+			_enter(&"HangJumpOff")
+			return
+		_enter(h.vertical.state if h.vertical.active else (h.lateral.state if h.lateral.active else (&"HangUp" if h.hang_phase==h.HangPhase.TO_CROUCH else (&"HangIdle" if h.hang_phase==h.HangPhase.IDLE else &"HangCatch"))))
 		return
 	if motor.traversal.hang.running and current_state==&"HangUp":
 		gait_blend=float(motor.animation_state.gait+1) if motor.animation_state.move_input_magnitude>.01 else 0.0
 		_enter(motor.crouch.animation_node() if motor.crouch.active() else &"Locomotion")
+	if motor.traversal.hang.navigation.jump_visual:
+		_episode_visible=true
+		fall_visual_committed=true
+		_enter(&"HangJumpOff")
+		return
 	if motor.traversal.hang.release_active:
 		if motor.animation_state.is_grounded or motor.animation_state.jump_started:
 			motor.traversal.hang.end_release_visual()

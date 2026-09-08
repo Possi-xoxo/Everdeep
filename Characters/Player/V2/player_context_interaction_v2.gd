@@ -49,6 +49,7 @@ func _ready() -> void:
 func valid(candidate) -> bool:
 	if not is_instance_valid(candidate) or candidate.is_queued_for_deletion() or not candidate.is_inside_tree(): return false
 	if not candidate.can_interact(motor) or not motor.traversal.can_begin(candidate.requires_grounded): return false
+	if candidate==motor.traversal.hang.top_entry: return true # Full local entry query owns range/facing/path.
 	var point: Vector3=candidate.get_interaction_point()
 	var origin: Vector3=motor.global_position+Vector3.UP
 	var offset:=point-origin
@@ -74,6 +75,7 @@ func score(candidate) -> float:
 	return candidate.priority+2.0*facing-offset.length()/interaction_detection_range
 
 func scan() -> void:
+	motor.traversal.hang.top_entry.refresh()
 	motor.traversal.get_node("LedgeDetector").refresh_contextual_candidate()
 	var best: Node3D=selected if valid(selected) else null
 	var best_score: float=score(best) if best!=null else -INF
@@ -117,6 +119,12 @@ func _held_rearm_allowed() -> bool:
 	return Vector2(traveled.x,traveled.z).length()>=.5 and motor.animation_state.move_input_magnitude>.01
 
 func tick(pressed: bool=false, held: bool=false) -> void:
+	if motor.traversal.hang.is_attached():
+		selected=null
+		var movement_input: bool=Input.is_action_pressed("move_left") or Input.is_action_pressed("move_right") or Input.is_action_pressed("move_forward") or Input.is_action_pressed("move_backward")
+		if pressed and not Input.is_action_just_pressed("jump") and not movement_input:
+			motor.traversal.hang.navigation.resolve(motor.traversal.hang,"INTERACT")
+		return
 	held_climb_intent=held or pressed
 	if not held_climb_intent:
 		_consumed_climb=""
@@ -141,6 +149,13 @@ func _process(_delta: float) -> void:
 	refresh_ui()
 
 func refresh_ui() -> void:
+	if motor.traversal.hang.is_attached():
+		var nav=motor.traversal.hang.navigation
+		prompt.visible=is_instance_valid(nav.selected) and not nav.interacting
+		prompt.text="E to "+nav.selected.get_action_text() if prompt.visible else ""
+		debug_label.visible=false
+		debug_mesh.visible=false
+		return
 	prompt.visible=valid(selected) and not motor.traversal.is_traversing
 	prompt.text="E to "+selected.get_action_text() if prompt.visible else ""
 	debug_label.visible=interaction_debug or motor.traversal.traversal_debug or motor.traversal.mantle.mantle_debug
@@ -148,6 +163,7 @@ func refresh_ui() -> void:
 		debug_label.text="TRAVERSAL\nCandidate: %s\nType: %s / Mode: CONTEXTUAL\nDistance: %.2f / Action: %s\nAvailable: %s\n%s" % [selected.name if is_instance_valid(selected) else "None",Context.Type.keys()[selected.get_interaction_type()] if is_instance_valid(selected) else "NONE",motor.global_position.distance_to(selected.get_interaction_point()) if is_instance_valid(selected) else 0.0,selected.get_action_text() if is_instance_valid(selected) else "",is_instance_valid(selected),motor.traversal.debug_text()]
 	if debug_label.visible:
 		debug_label.text+="\nHeld climb: %s / Consumed ledge: %s" % [held_climb_intent,not _consumed_climb.is_empty()]
+		debug_label.text+="\n"+motor.traversal.hang.top_entry.debug_text()
 	debug_mesh.visible=interaction_debug
 	if interaction_debug:
 		var mesh:=ImmediateMesh.new()

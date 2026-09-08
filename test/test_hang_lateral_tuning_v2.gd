@@ -17,6 +17,17 @@ func run() -> void:
 	check(hang.try_catch(DT),"catch")
 	for frame in 30: await crouch_tick(false)
 	var original: Vector3=hang.alignment
+	if hang.braced_hang_right_hop_mirror_left_curve:
+		var curves=hang.lateral.motion
+		var difference: float=0
+		for i in range(curves.SAMPLE_COUNT+1):
+			check(Vector3(curves.profiles[&"HangHopRight"][i]).distance_to(curves.profiles[&"HangHopLeft"][i])<.000001,"right uses direction-mirrored left profile")
+			difference=maxf(difference,Vector3(curves.original_right_profile[i]).distance_to(curves.profiles[&"HangHopRight"][i]))
+		check(difference>.01,"replacement differs from original right curve")
+		curves.configure_right_hop(false)
+		check(curves.profiles[&"HangHopRight"]==curves.original_right_profile,"original right curve can be restored")
+		curves.configure_right_hop(true)
+		print("RIGHT_HOP_MIRROR maximum normalized/profile difference=",difference)
 	for hop in [false,true]:
 		for side in [-1,1]:
 			var start: Vector3=hang.alignment

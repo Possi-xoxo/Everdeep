@@ -1,6 +1,7 @@
-[gd_scene load_steps=27 format=3]
+[gd_scene load_steps=28 format=3]
 
 [ext_resource type="PackedScene" path="res://test/traversal_playground/hang_detour.tscn" id="Hang"]
+[ext_resource type="PackedScene" path="res://test/traversal_playground/hang_vertical_course.tscn" id="VerticalHang"]
 
 [sub_resource type="StandardMaterial3D" id="Material"]
 albedo_color = Color(0.32, 0.48, 0.7, 1)
@@ -265,3 +266,5 @@ no_depth_test = false
 
 [node name="BracedHangDetour" parent="." instance=ExtResource("Hang")]
 position = Vector3(6, 0, -3)
+[node name="VerticalHangCourse" parent="." instance=ExtResource("VerticalHang")]
+position = Vector3(24, 0, -3)

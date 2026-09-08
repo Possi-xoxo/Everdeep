@@ -59,6 +59,7 @@ func _process(delta: float) -> void:
 	mesh=ImmediateMesh.new()
 	display.mesh=mesh
 	mesh.surface_begin(Mesh.PRIMITIVE_LINES)
+	h.top_entry.draw(self)
 	var center: Vector3=q.base+Vector3.UP*h.hang_vertical_offset
 	var low: Vector3=center-Vector3.UP*h.vertical_reach_below
 	var high: Vector3=center+Vector3.UP*h.vertical_reach_allowance
@@ -148,4 +149,6 @@ func _process(delta: float) -> void:
 			cross_at(foot.target,color,.045)
 			line(foot.raw,foot.target,color)
 			line(foot.sample,foot.hit,color)
+	if h.is_attached(): h.vertical.draw(self,h)
+	if h.is_attached(): h.navigation.draw(self,h)
 	mesh.surface_end()

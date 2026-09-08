@@ -1,4 +1,7 @@
-[gd_scene load_steps=34 format=3]
+[gd_scene load_steps=37 format=3]
+[ext_resource type="PackedScene" path="res://test/traversal_playground/hang_top_entry_course.tscn" id="TopEntry"]
+[ext_resource type="PackedScene" path="res://test/traversal_playground/hang_navigation_course.tscn" id="Navigation"]
+[ext_resource type="PackedScene" path="res://test/traversal_playground/hang_vertical_course.tscn" id="VerticalHang"]
 [ext_resource type="PackedScene" path="res://test/traversal_playground/hang_lateral_course.tscn" id="Lateral"]
 [ext_resource type="PackedScene" path="res://test/traversal_playground/hang_acquisition_lanes.tscn" id="Acquisition"]
 [sub_resource type="StandardMaterial3D" id="Material"]
@@ -259,6 +262,13 @@ text = "CHAIN\nCatch / W / jump toward next raised platform"
 font_size = 32
 pixel_size = 0.006
 billboard = 1
+[node name="NavigationCourse" parent="." instance=ExtResource("Navigation")]
+position = Vector3(65, 0, -23)
+[node name="TopDownEntryCourse" parent="." instance=ExtResource("TopEntry")]
+position = Vector3(165, 0, -23)
+[node name="VerticalHangCourse" parent="." instance=ExtResource("VerticalHang")]
+position = Vector3(-34, 0, -23)
+rotation_degrees = Vector3(0, 180, 0)
 [node name="Sign14" type="Label3D" parent="."]
 position = Vector3(13, 1.5, -39)
 text = "RESERVED OPEN SPACE\nFuture Free Hang / Shimmy / Hops"

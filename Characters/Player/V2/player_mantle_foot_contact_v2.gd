@@ -24,9 +24,10 @@ static func project(controller: Node,leg: Dictionary,pose: Transform3D) -> Dicti
 		return _surface(controller,leg,pose,[pose.origin,toe],mantle.wall_point,mantle.wall_normal.normalized(),controller.climb_foot_wall_offset,controller.climb_foot_max_correction,envelope,"WALL",controller.wall_ik_blend_speed)
 	return result
 
-static func _surface(controller: Node,leg: Dictionary,pose: Transform3D,samples: Array,plane_point: Vector3,normal: Vector3,clearance: float,cap: float,envelope: float,mode: String,blend_speed: float,geometry: Node=null) -> Dictionary:
+static func _surface(controller: Node,leg: Dictionary,pose: Transform3D,samples: Array,plane_point: Vector3,normal: Vector3,clearance: float,cap: float,envelope: float,mode: String,blend_speed: float,geometry: Node=null,source_override: Node3D=null) -> Dictionary:
 	var result: Dictionary={"valid":false,"target":pose.origin,"hit":pose.origin,"weight":0.0,"mode":"NONE","normal":normal,"penetration":0.0,"amount":0.0,"limited":false,"blend_speed":blend_speed}
 	var mantle=geometry if geometry!=null else controller.motor.traversal.mantle
+	var contact_source: Node3D=source_override if source_override!=null else mantle.source
 	for sample: Vector3 in samples:
 		var depth: float=-(sample-plane_point).dot(normal)
 		if depth<=0 or depth<=result.penetration: continue
@@ -35,7 +36,7 @@ static func _surface(controller: Node,leg: Dictionary,pose: Transform3D,samples:
 		# under this sample: never lift a foot outside the finite ledge footprint.
 		var query:=PhysicsRayQueryParameters3D.create(projected+normal*.05,projected-normal*.05,controller.motor.collision_mask,[controller.motor.get_rid()])
 		var hit: Dictionary=controller.motor.get_world_3d().direct_space_state.intersect_ray(query)
-		if hit.is_empty() or hit.collider!=mantle.source or hit.normal.dot(normal)<.98: continue
+		if hit.is_empty() or hit.collider!=contact_source or hit.normal.dot(normal)<.98: continue
 		result.penetration=depth
 		result.hit=projected
 	if result.penetration<=0: return result

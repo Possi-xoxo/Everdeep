@@ -37,6 +37,11 @@ var _mantle_start := Vector3.ZERO
 var _mantle_tracking: bool = false
 var traversal_camera_mode: String = "NORMAL"
 var _hang_camera_top := Vector3.ZERO
+var _top_hold: bool=false
+var _top_sequence: bool=false
+var _top_rejoining: bool=false
+var _top_rejoin_offset:=Vector3.ZERO
+var _last_camera_origin:=Vector3.ZERO
 var _free_shape: Shape3D
 var _lock_shape := SphereShape3D.new()
 @onready var yaw: Node3D = $YawPivot
@@ -51,6 +56,7 @@ func _ready() -> void:
 	_free_shape=arm.shape
 	_lock_shape.radius=0.12
 	_smooth_origin=global_position
+	_last_camera_origin=global_position
 	arm.add_excluded_object(get_parent().get_rid())
 	if DisplayServer.get_name() != "headless":
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -70,8 +76,27 @@ func _process(delta: float) -> void:
 	# starts Mantle only in ACTIVE. Keep ordinary follow through alignment.
 	var climb_tracking: bool=mantle.running and motor.traversal.phase==motor.traversal.Phase.ACTIVE
 	var hang_tracking: bool=hang.running and hang.hang_phase==hang.HangPhase.TO_CROUCH and motor.traversal.phase==motor.traversal.Phase.ACTIVE
-	var tracking: bool=climb_tracking or hang_tracking
-	if tracking and not _mantle_tracking:
+	var animation=motor.get_node("AnimationController")
+	var top_playing: bool=hang.running and hang.top_entry.active and motor.traversal.phase==motor.traversal.Phase.ACTIVE and animation._playback!=null and animation._playback.get_current_node()==&"HangTopEntry"
+	if top_playing and not _top_hold:
+		_top_hold=true
+		_top_sequence=true
+		_top_rejoining=false
+		# Parent motion has already changed global_position this render tick.
+		# Capture the last displayed world origin, not that inherited delta.
+		_mantle_origin=_last_camera_origin
+		_mantle_start=_last_camera_origin
+		_hang_camera_top=hang.alignment+motor.global_basis*_base_position
+		mantle_camera_active=true
+	var stable_hang: bool=hang.running and hang.hang_phase==hang.HangPhase.IDLE and motor.global_position.distance_to(hang.alignment)<.02 and absf(hang.idle_pose.offset-hang.braced_hang_visual_vertical_offset)<.005
+	if _top_hold and (stable_hang or not hang.running or motor.traversal.phase!=motor.traversal.Phase.ACTIVE or hang_tracking): _top_hold=false
+	var top_tracking: bool=_top_hold
+	var tracking: bool=climb_tracking or hang_tracking or top_tracking
+	if _top_sequence and (climb_tracking or hang_tracking):
+		# A prompt follow-up pull-up must capture its own approved anchor.
+		_mantle_tracking=false
+		_top_sequence=false
+	if tracking and not _mantle_tracking and not top_tracking:
 		_mantle_start=free_origin
 		_mantle_origin=global_position
 		if hang_tracking: _hang_camera_top=hang.landing+Vector3.UP*(_base_position.y+mantle.mantle_camera_top_offset)
@@ -86,20 +111,40 @@ func _process(delta: float) -> void:
 				# corrections. Reuse climb's easing, response and reunion below.
 				top_anchor=_hang_camera_top
 				weight_top=smoothstep(0,1,hang.progress)
+			if top_tracking:
+				top_anchor=_hang_camera_top
+				weight_top=smoothstep(0,1,clampf(hang.top_entry.clock/hang.top_entry.length,0,1))
 			mantle_camera_target=_mantle_start.lerp(top_anchor,weight_top)
 		else:
 			mantle_camera_target=free_origin
 		var speed: float=mantle.mantle_camera_follow_speed if tracking else mantle.mantle_camera_return_speed
-		_mantle_origin=_mantle_origin.lerp(mantle_camera_target,1-exp(-speed*delta))
+		if top_tracking:
+			# Animation-clock easing already smooths both ends. A second lag
+			# filter would postpone arrival until after the clip has finished.
+			_mantle_origin=mantle_camera_target
+		elif _top_sequence and not tracking:
+			if not _top_rejoining:
+				_top_rejoin_offset=_mantle_origin-free_origin
+				_top_rejoining=true
+			# Same exponential return, expressed as a decaying follow offset.
+			# Also converges if an aborted entry leaves the player falling.
+			_top_rejoin_offset*=exp(-speed*delta)
+			_mantle_origin=free_origin+_top_rejoin_offset
+		else:
+			_mantle_origin=_mantle_origin.lerp(mantle_camera_target,1-exp(-speed*delta))
 		if not tracking and _mantle_origin.distance_to(free_origin)<.002:
 			mantle_camera_active=false
 		else:
 			free_origin=_mantle_origin
 	_mantle_tracking=tracking
 	traversal_camera_mode="HANG_PULLUP_HOLD" if hang_tracking else ("CLIMB" if climb_tracking else ("REJOIN" if mantle_camera_active else ("HANG" if hang.is_attached() else "NORMAL")))
+	if climb_tracking or hang_tracking: _top_sequence=false
+	if not mantle_camera_active: _top_sequence=false
+	if _top_sequence: traversal_camera_mode="TOP_DOWN_HANG_GLIDE" if top_tracking else "TOP_DOWN_HANG_REJOIN"
 	var locked_origin: Vector3=motor.global_position+Vector3.UP*lock_camera_height
 	_smooth_origin=_smooth_origin.lerp(locked_origin,1-exp(-lock_camera_position_smoothing*delta))
 	global_position=free_origin.lerp(_smooth_origin,weight)
+	_last_camera_origin=global_position
 	distance_target=selected_distance()*lerpf(1.0,lock_camera_distance_multiplier,weight)
 	arm.spring_length=lerpf(arm.spring_length,distance_target,1-exp(-maxf(camera_distance_smoothing,0.01)*delta))
 	_display_remaining=maxf(0.0,_display_remaining-delta)

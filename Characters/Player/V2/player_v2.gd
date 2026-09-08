@@ -76,8 +76,9 @@ func physical_ground_contact() -> bool:
 
 func _physics_process(delta: float) -> void:
 	if traversal.hang.running:
-		if Input.is_action_just_pressed("move_forward"): traversal.hang.request_up()
-		elif Input.is_action_just_pressed("move_backward"): traversal.hang.request_release()
+		if not Input.is_action_just_pressed("jump"):
+			if Input.is_action_just_pressed("move_forward"): traversal.hang.navigation.resolve(traversal.hang,"UP")
+			elif Input.is_action_just_pressed("move_backward"): traversal.hang.navigation.resolve(traversal.hang,"DOWN")
 	context_interaction.tick(Input.is_action_just_pressed("interact"),Input.is_action_pressed("interact"))
 	if not traversal.is_traversing or traversal.phase==traversal.Phase.EXIT:
 		if Input.is_action_just_pressed("lock_on"): lock_on.toggle()
@@ -87,9 +88,11 @@ func _physics_process(delta: float) -> void:
 ## Input boundary also supports deterministic play tests without emulating OS keys.
 func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pressed: bool = false, crouch_requested: bool = false) -> void:
 	if not ground_support.initialized: ground_support.refresh(0)
+	traversal.hang.navigation.air_tick(traversal.hang,delta)
 	var hang_intent: Vector3=traversal.hang.acquisition.prepare_tick(traversal.hang,delta,stick)
 	if traversal.hang.running:
-		if absf(stick.x)>.5: traversal.hang.lateral.request(traversal.hang,-1 if stick.x<0 else 1,shift)
+		if jump: traversal.hang.navigation.resolve(traversal.hang,"JUMP",stick.x)
+		elif absf(stick.x)>.5: traversal.hang.navigation.resolve(traversal.hang,"LATERAL",-1 if stick.x<0 else 1,shift)
 		if traversal.hang.step(delta): return
 		crouch_requested=crouch.requested
 	elif traversal.hang.try_catch(delta,hang_intent):
@@ -262,11 +265,14 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 			parallel = move_toward(parallel, target_speed * s.move_input_magnitude, rate * delta)
 			horizontal = allowed_direction * parallel + lateral.move_toward(Vector3.ZERO, lateral_damping * delta)
 	elif not direction.is_zero_approx() and not s.jump_started:
-		horizontal = horizontal.move_toward(direction * target_speed * s.move_input_magnitude, acceleration * air_control * delta)
+		var launch_control: float=.15 if traversal.hang.navigation.jump_visual else 1.0
+		horizontal = horizontal.move_toward(direction * target_speed * s.move_input_magnitude, acceleration * air_control * launch_control * delta)
 	velocity.x = horizontal.x
 	velocity.z = horizontal.z
 	if dodge.is_dodging and dodge.dodge_type!="BACKSTEP":
 		visual.rotation.y=lerp_angle(visual.rotation.y,atan2(-dodge.dodge_direction.x,-dodge.dodge_direction.z),1-exp(-dodge.dodge_rotation_speed*delta))
+	elif traversal.hang.navigation.jump_visual:
+		pass # Retain wall-relative authored jump pose until its short exit.
 	elif locked:
 		lock_on.face_target(delta)
 	elif walk_direction_smoothing_active and not direction.is_zero_approx():

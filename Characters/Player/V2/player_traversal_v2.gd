@@ -41,7 +41,9 @@ func _begin(data: Dictionary,mode: int) -> bool:
 	if type<=Context.Type.NONE or type>=Context.Type.GENERIC_INTERACT: return false
 	if not can_begin(bool(data.get("requires_grounded",true))): return false
 	var source=data.get("source")
-	if mode==Context.Mode.CONTEXTUAL and (not is_instance_valid(source) or not source.can_interact(motor)): return false
+	var top_hang: bool=mode==Context.Mode.CONTEXTUAL and type==Context.Type.LEDGE and data.get("top_down_hang",false)
+	if top_hang and not hang.top_entry.validate(data): return false
+	if mode==Context.Mode.CONTEXTUAL and not top_hang and (not is_instance_valid(source) or not source.can_interact(motor)): return false
 	var real_mantle: bool=mode==Context.Mode.CONTEXTUAL and type==Context.Type.MANTLE and data.has("landing_position")
 	var real_hang: bool=mode==Context.Mode.AUTOMATIC and data.get("braced_hang",false)
 	if real_hang and not hang.validate(data): return false
@@ -59,6 +61,7 @@ func _begin(data: Dictionary,mode: int) -> bool:
 	_set_phase(Phase.ENTRY)
 	if real_mantle: mantle.begin(data)
 	if real_hang: hang.begin(data)
+	if top_hang: hang.top_entry.begin(data)
 	traversal_started.emit(active_data)
 	if traversal_debug: print("Traversal started: ",Context.Type.keys()[type])
 	return true
