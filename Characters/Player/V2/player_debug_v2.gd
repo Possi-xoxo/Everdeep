@@ -76,7 +76,8 @@ func _process(_delta: float) -> void:
 	if animation.debug_tree_playback:
 		label.text += "\n\n" + animation.playback_debug_text()
 	if motor.traversal.hang.debug_detection_enabled():
-		label.text += "\n\n"+motor.traversal.hang.acquisition.debug_text(motor.traversal.hang)+"\nHang: W pull up / S release"
+		var h=motor.traversal.hang
+		label.text += "\n\n"+(h.idle_pose.debug_text(h) if h.is_attached() or h.idle_pose.weight>0 else h.acquisition.debug_text(h))+"\nHang: W pull up / S release"
 	var turn = motor.turn_180
 	if turn != null and turn.debug_180:
 		label.text += "\n\nRun180 Active: %s\nStored Entry Speed: %.2f\nTurn Target Direction: %s\nHorizontal Translation Paused: %s" % [turn.active and turn.running, turn.entry_speed, turn.target_direction, turn.active and turn.running and turn.progress >= turn.run_180_carry_end_progress]

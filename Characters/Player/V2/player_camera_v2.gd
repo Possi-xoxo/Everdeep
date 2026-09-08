@@ -35,6 +35,8 @@ var mantle_camera_target := Vector3.ZERO
 var _mantle_origin := Vector3.ZERO
 var _mantle_start := Vector3.ZERO
 var _mantle_tracking: bool = false
+var traversal_camera_mode: String = "NORMAL"
+var _hang_camera_top := Vector3.ZERO
 var _free_shape: Shape3D
 var _lock_shape := SphereShape3D.new()
 @onready var yaw: Node3D = $YawPivot
@@ -63,18 +65,27 @@ func _process(delta: float) -> void:
 	var weight:=smoothstep(0,1,_lock_weight)
 	var free_origin: Vector3=motor.to_global(_base_position)
 	var mantle=motor.traversal.mantle
+	var hang=motor.traversal.hang
 	# Commitment owns the motor during ENTRY, but the animation controller
 	# starts Mantle only in ACTIVE. Keep ordinary follow through alignment.
-	var tracking: bool=mantle.running and motor.traversal.phase==motor.traversal.Phase.ACTIVE
+	var climb_tracking: bool=mantle.running and motor.traversal.phase==motor.traversal.Phase.ACTIVE
+	var hang_tracking: bool=hang.running and hang.hang_phase==hang.HangPhase.TO_CROUCH and motor.traversal.phase==motor.traversal.Phase.ACTIVE
+	var tracking: bool=climb_tracking or hang_tracking
 	if tracking and not _mantle_tracking:
 		_mantle_start=free_origin
 		_mantle_origin=global_position
+		if hang_tracking: _hang_camera_top=hang.landing+Vector3.UP*(_base_position.y+mantle.mantle_camera_top_offset)
 		mantle_camera_active=true
 	if mantle_camera_active:
 		if tracking:
 			var weight_top:=smoothstep(12,50,mantle.current_frame())
 			# World-space anchor independent of instantaneous capsule lift.
 			var top_anchor: Vector3=mantle.landing+Vector3.UP*(_base_position.y+mantle.mantle_camera_top_offset)
+			if hang_tracking:
+				# Validated destination + animation clock only, never capsule/IK
+				# corrections. Reuse climb's easing, response and reunion below.
+				top_anchor=_hang_camera_top
+				weight_top=smoothstep(0,1,hang.progress)
 			mantle_camera_target=_mantle_start.lerp(top_anchor,weight_top)
 		else:
 			mantle_camera_target=free_origin
@@ -85,6 +96,7 @@ func _process(delta: float) -> void:
 		else:
 			free_origin=_mantle_origin
 	_mantle_tracking=tracking
+	traversal_camera_mode="HANG_PULLUP_HOLD" if hang_tracking else ("CLIMB" if climb_tracking else ("REJOIN" if mantle_camera_active else ("HANG" if hang.is_attached() else "NORMAL")))
 	var locked_origin: Vector3=motor.global_position+Vector3.UP*lock_camera_height
 	_smooth_origin=_smooth_origin.lerp(locked_origin,1-exp(-lock_camera_position_smoothing*delta))
 	global_position=free_origin.lerp(_smooth_origin,weight)
@@ -127,7 +139,7 @@ func apply_mouse_motion(relative: Vector2) -> void:
 	pitch.rotation.x = clampf(pitch.rotation.x - deg_to_rad(relative.y * sensitivity), deg_to_rad(minimum_pitch), deg_to_rad(maximum_pitch))
 
 func debug_text() -> String:
-	return "LOCK CAMERA\nMode: %s / Blend: %.2f\nLevel: %d / Target Distance: %.2f\nSpringArm: %.2f / Collision Length: %.2f\nAnchor Height: %.2f / Target Weight: %.2f" % ["LOCKED" if _was_locked else "FREE",_lock_weight,camera_distance_level,distance_target,arm.spring_length,arm.get_hit_length(),lock_camera_height,lock_camera_target_weight]
+	return "LOCK CAMERA\nMode: %s / Blend: %.2f\nLevel: %d / Target Distance: %.2f\nSpringArm: %.2f / Collision Length: %.2f\nAnchor Height: %.2f / Target Weight: %.2f\nTraversal: %s / Anchor %s / Target %s" % ["LOCKED" if _was_locked else "FREE",_lock_weight,camera_distance_level,distance_target,arm.spring_length,arm.get_hit_length(),lock_camera_height,lock_camera_target_weight,traversal_camera_mode,_mantle_origin,mantle_camera_target]
 
 func selected_distance() -> float:
 	var minimum:=maxf(0.1,camera_distance_min)

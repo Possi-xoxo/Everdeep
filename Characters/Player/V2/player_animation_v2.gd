@@ -155,8 +155,8 @@ func _prepare_library() -> bool:
 					value.z = reference.z
 				clip.track_set_key_value(track, key, value)
 	_trim_backstep()
-	motor.get_node("TraversalController/BracedHang").prepare_clips(player,reference)
 	motor.get_node("TraversalController/Mantle").prepare_clip(player.get_animation(CLIPS.Mantle))
+	motor.get_node("TraversalController/BracedHang").prepare_clips(player,reference)
 	return grounded.prepare(player)
 
 func _trim_backstep() -> void:
@@ -242,6 +242,7 @@ func _build_tree() -> void:
 
 func _physics_process(delta: float) -> void:
 	_pose_delta = delta
+	motor.traversal.hang.idle_pose.update(motor.traversal.hang,self,delta)
 	if motor.traversal.hang.is_attached():
 		_episode_visible=false
 		_intentional_jump_episode=false

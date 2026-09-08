@@ -98,6 +98,7 @@ func _capture_grips() -> void:
 		var hit: Dictionary=get_world_3d().direct_space_state.intersect_ray(query)
 		arm.valid=not hit.is_empty() and hit.collider==mantle.source and hit.normal.dot(n)>.98
 		arm.grip=edge+Vector3.UP*hand_vertical_offset+mantle.wall_normal*hand_wall_normal_offset
+		arm.base_grip=arm.grip
 		arm.weight=0.0
 		arm.pole_direction=Vector3.ZERO
 
@@ -122,13 +123,22 @@ func prepare_targets(delta: float) -> void:
 		arm.upper_length=shoulder.distance_to(elbow)
 		arm.lower_length=elbow.distance_to(pose.origin)
 		var reach: float=arm.upper_length+arm.lower_length
+		var idle_weight: float=motor.traversal.hang.idle_pose.weight if mantle==motor.traversal.hang else 0.0
+		arm.grip=arm.base_grip
+		var correction_cap: float=max_hand_correction_distance
+		var contact_weight: float=1.0
+		if idle_weight>0:
+			var h=motor.traversal.hang
+			arm.grip=arm.base_grip.lerp(h.idle_pose.hand_target(h,arm,pose.origin),idle_weight)
+			correction_cap=lerpf(correction_cap,h.braced_hang_max_hand_correction,idle_weight)
+			contact_weight=lerpf(1.0,h.braced_hang_hand_ik_weight,idle_weight)
 		var offset: Vector3=arm.grip-pose.origin
 		var goal: Vector3=arm.grip
-		arm.limited=offset.length()>max_hand_correction_distance or shoulder.distance_to(goal)>reach*.995
-		if offset.length()>max_hand_correction_distance: goal=pose.origin+offset.limit_length(max_hand_correction_distance)
+		arm.limited=offset.length()>correction_cap or shoulder.distance_to(goal)>reach*.995
+		if offset.length()>correction_cap: goal=pose.origin+offset.limit_length(correction_cap)
 		if shoulder.distance_to(goal)>reach*.995: goal=shoulder+(goal-shoulder).normalized()*reach*.995
-		var desired: float=envelope if arm.valid else 0.0
-		if goal.distance_to(pose.origin)>max_hand_correction_distance+.001:
+		var desired: float=envelope*contact_weight if arm.valid else 0.0
+		if goal.distance_to(pose.origin)>correction_cap+.001:
 			goal=pose.origin
 			desired=0.0
 		arm.weight=desired
@@ -157,7 +167,9 @@ func capture_result() -> void:
 			y=z.cross(x).normalized()
 			var desired:=Basis(x,y,z)
 			var angle: float=arm.basis.get_rotation_quaternion().angle_to(desired.get_rotation_quaternion())
-			var fraction: float=minf(1.0,deg_to_rad(max_wrist_rotation_degrees)/maxf(angle,.001))*hand_orientation_weight*arm.weight
+			var idle_weight: float=motor.traversal.hang.idle_pose.weight if mantle==motor.traversal.hang else 0.0
+			var orientation_weight: float=lerpf(hand_orientation_weight,.10,idle_weight)
+			var fraction: float=minf(1.0,deg_to_rad(max_wrist_rotation_degrees)/maxf(angle,.001))*orientation_weight*arm.weight
 			var pose:=skeleton.get_bone_global_pose(arm.bones[2])
 			var scale: Vector3=(skeleton.global_basis*pose.basis).get_scale()
 			pose.basis=skeleton.global_basis.inverse()*arm.basis.slerp(desired,fraction).scaled(scale)

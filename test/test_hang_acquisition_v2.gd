@@ -60,7 +60,9 @@ func run() -> void:
 	body.velocity=Vector3.ZERO
 	check(hang.detect().valid,"input fallback when wall contact removes velocity")
 	body.animation_state.move_input_magnitude=0
-	check(hang.detect().reason=="NO_APPROACH","stationary with no input rejected")
+	check(hang.detect().grace,"stationary release retains short recent approach grace")
+	hang.acquisition.reset_history()
+	check(hang.detect().reason=="NO_APPROACH","stationary with no input or recent approach rejected")
 	await air_setup()
 	hang.last_source_id=wall.get_instance_id()
 	hang.last_edge=Vector3(200,3,9.35)
@@ -75,7 +77,7 @@ func run() -> void:
 	wall.queue_free()
 	await physics_frame
 	var floor_box=box(Vector3(200,-.25,10),Vector3(20,.5,20))
-	for height in [1.65,1.7,1.85,2.0,2.25,2.4]:
+	for height in [1.65,1.7,1.75,1.85,2.0,2.25,2.4,2.5]:
 		wall=box(Vector3(200,height*.5,8.35),Vector3(4,height,2))
 		await air_setup()
 		body.position.y=maxf(.03,height-1.75)

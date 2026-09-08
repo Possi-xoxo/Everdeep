@@ -180,7 +180,7 @@ pixel_size = 0.006
 billboard = 1
 [node name="Sign1" type="Label3D" parent="."]
 position = Vector3(-16, 3.55, -13)
-text = "BASIC / RISING\nJump close to wall; automatic catch"
+text = "2.25m INPUT RELEASE / REPRESS\nA: hold W + jump | B: jump, release W and coast\nC: jump, release W, repress W | D: diagonal jump\nE: jump late (rising) | F: jump early (falling)\nCtrl+F3: inspect approach speed, grace and reach"
 font_size = 32
 pixel_size = 0.006
 billboard = 1

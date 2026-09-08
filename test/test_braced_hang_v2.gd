@@ -4,6 +4,7 @@ var hang: Node
 func air_setup(vertical: float=0, yaw: float=0, away: bool=false) -> void:
 	if body.traversal.is_traversing: body.traversal.finish("TEST_RESET")
 	hang.cooldown=0
+	hang.acquisition.reset_history()
 	crouch.requested=false
 	crouch.phase=crouch.Phase.STANDING
 	crouch.resize(crouch.standing_capsule_height)

@@ -73,9 +73,19 @@ func _process(delta: float) -> void:
 			line(low+v,high+v,Color.YELLOW)
 			line(low+v,low+v+q.prediction,Color.ORANGE)
 			line(high+v,high+v+q.prediction,Color.ORANGE)
+			if q.recent_start.is_finite():
+				line(low+v,low+v+q.recent_start-q.base,Color.ORANGE_RED)
+				line(high+v,high+v+q.recent_start-q.base,Color.ORANGE_RED)
 	arrow(center,center+q.motion*.15,Color.BLUE)
 	arrow(center,center+q.intent,Color.MAGENTA)
 	arrow(center,center+q.prediction,Color.ORANGE)
+	if q.recent_start.is_finite():
+		line(q.recent_start+Vector3.UP*h.hang_vertical_offset,center,Color.ORANGE_RED)
+		for sign_value in [-1,1]:
+			var band_offset: float=h.vertical_reach_allowance if sign_value>0 else -h.vertical_reach_below
+			line(q.recent_start+Vector3.UP*(h.hang_vertical_offset+band_offset),center+Vector3.UP*band_offset,Color.ORANGE_RED)
+	if retained_result.has("to_ledge"):
+		arrow(center,center+retained_result.to_ledge*h.max_grab_distance,Color.GREEN_YELLOW)
 	for sign_value in [-1,1]:
 		var cone: Vector3=q.search_direction.rotated(Vector3.UP,deg_to_rad(h.braced_hang_forward_cone_degrees*.5*sign_value))
 		line(center,center+cone*h.max_grab_distance,Color.CYAN)
@@ -100,4 +110,29 @@ func _process(delta: float) -> void:
 			line(c.braces[0],c.braces[2],color)
 			line(c.braces[2],c.braces[3],color)
 			line(c.braces[1],c.braces[3],color)
+	if h.is_attached() or h.idle_pose.weight>0:
+		cross_at(h.alignment,Color.WHITE,.12)
+		var visual: Vector3=h.motor.visual.global_position
+		var rig: Vector3=h.motor.get_node("AnimationController").rig.global_position
+		cross_at(visual,Color.YELLOW,.06)
+		cross_at(rig,Color.ORANGE,.06)
+		line(visual,rig,Color.ORANGE)
+		var tangent: Vector3=h.facing.cross(Vector3.UP)
+		var upper: Vector3=h.ledge_edge-Vector3.UP*.5
+		var lower: Vector3=h.ledge_edge-Vector3.UP*1.5
+		line(upper-tangent*.4,upper+tangent*.4,Color.GRAY)
+		line(lower-tangent*.4,lower+tangent*.4,Color.GRAY)
+		line(upper-tangent*.4,lower-tangent*.4,Color.GRAY)
+		line(upper+tangent*.4,lower+tangent*.4,Color.GRAY)
+		for arm in h.motor.get_node("MantleHandIK").arms:
+			cross_at(arm.animated,Color.YELLOW,.035)
+			cross_at(arm.grip,Color.GREEN,.045)
+			line(arm.animated,arm.grip,Color.GREEN)
+		for side in h.idle_pose.feet:
+			var foot: Dictionary=h.idle_pose.feet[side]
+			var color:=Color.RED if foot.reason!="NONE" else Color.CYAN
+			cross_at(foot.raw,Color.YELLOW,.035)
+			cross_at(foot.target,color,.045)
+			line(foot.raw,foot.target,color)
+			line(foot.sample,foot.hit,color)
 	mesh.surface_end()

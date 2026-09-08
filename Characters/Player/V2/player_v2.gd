@@ -87,10 +87,11 @@ func _physics_process(delta: float) -> void:
 ## Input boundary also supports deterministic play tests without emulating OS keys.
 func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pressed: bool = false, crouch_requested: bool = false) -> void:
 	if not ground_support.initialized: ground_support.refresh(0)
+	var hang_intent: Vector3=traversal.hang.acquisition.prepare_tick(traversal.hang,delta,stick)
 	if traversal.hang.running:
 		if traversal.hang.step(delta): return
 		crouch_requested=crouch.requested
-	elif traversal.hang.try_catch(delta):
+	elif traversal.hang.try_catch(delta,hang_intent):
 		traversal.hang.step(delta)
 		return
 	var was_mantling: bool=traversal.mantle.running

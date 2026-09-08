@@ -1,3 +1,133 @@
+# Braced Hang pull-up camera
+
+Camera-only refinement: player_camera_v2 reuses the existing mantle anchor, exponential follow and reunion branch for a running TO_CROUCH in traversal ACTIVE. This phase is committed only after request_up validates the destination; idle hang, blocked attempts and S/release do not acquire the hold. A captured validated landing anchor plus animation progress drives smoothstep framing from the starting anchor toward the top, independent of instantaneous capsule or IK corrections. Uses existing mantle follow response 5/s and top offset .4 m. Mouse orbit, pitch limits, SpringArm collision, distance controls and existing lock-camera precedence remain unchanged.
+
+Reunion starts when ACTIVE ends after the supported top-out/state handoff, or whenever the pull-up is interrupted. Existing exponential return response is 6/s (about .5 seconds to close 95% of a stationary gap, not a fixed-duration blend). Normal follow resumes within 2 mm. Camera ownership is separate from gameplay ownership and also cleans up on failure. Optional camera debug text reports HANG, HANG_PULLUP_HOLD, REJOIN, NORMAL or CLIMB plus anchor and target. No gameplay, animation, IK or trajectory edits.
+
+Added test_hang_camera_v2 for repeat completion, idle, blocked destination, release, interruption, body-correction isolation, orbit and reunion cleanup; standard climb camera and gait-exit regressions are also run.
+
+# Braced Hang pull-up — exact sprint-tail path mapping
+
+Replaced the independent braced hoist and toe-clearance bake with the existing TRV_SPRINT_TO_WALL_CLIMB_02 reference path. Braced frame 10 maps to sprint frame 27; braced frame 35 maps to sprint frame 55. Between these points the clock is mapped linearly. The shared sprint reference path is placed relative to the same ledge/landing, using its 2.54 m reference height, 40 cm cubic control height, forward bias and completion point, not a separately approximated hang curve. The opening hang section connects to the shared path at frame 10.
+
+Transferred the prepared sprint hip-position track over the same mapped interval into the private braced runtime clip, including mapped key times and an explicit frame-10 key. Frames 5–10 blend into this translation. This also matches the vertical root compensation; changing the capsule alone would again leave the rendered source lift unchanged. Removed the toe-derived forward/down correction. Braced joint rotations and source GLB remain untouched. Sampled corresponding joint poses differ by roughly 3–10 degrees on average before converging at the end, so this matches trajectory/root translation, not every limb pose. Total braced clip duration, idle hand settings, landing setback, acquisition and exit/gait restoration are retained.
+
+Validation: test_hang_hoist_arc_v2 now asserts exact mapped body paths and runtime hip translations, dense capsule clearance and rendered late-foot proximity at four heights. Pass. Hang gait exit, playground and exits pass. Historical tests asserting the superseded independent arc's <5 cm capsule overshoot were replaced with direct sprint-path equivalence; visible foot-height checks remain. Existing idle hand-cap caveat remains unchanged.
+
+# Braced Hang pull-up — remove rendered late float
+
+Screenshot follow-up: the capsule-only trajectory refinement preserved authored vertical motion through root compensation, so it did not solve the visible float. Runtime measurement showed the lower toe about 35 cm above the ledge at 76% progress, with both feet still outside the wall plane.
+
+Added a private runtime hip-translation bake after supporting-hand alignment. It samples the actual toe poses plus the controller trajectory, eases in across 60–78% during hand release, brings the lower toe toward 4 cm above the lip and the leading toe toward 4 cm inside it, and fades out across 90–100%. Corrections are bounded to 40 cm vertically and 45 cm forward. No bone rotations, imported source clips, idle pose/hand tuning, acquisition, capsule path, landing setback, clip duration, or exit behavior changed.
+
+Validation: expanded test_hang_hoist_arc_v2 checks rendered toe clearance and leading-foot proximity across 78–90% at four ledge heights, in addition to existing capsule sweeps, early hand support, arm lengths and supported completion. Pass. Hang gait exit, playground and exits also pass. Existing idle hand-target cap limitation below is unchanged. Visual approval remains a play-test task.
+
+# Braced Hang pull-up — coordinated late hoist
+
+Replaced the separated lift-then-forward trajectory with a cubic hoist modeled on the sprint climb's path construction. Preserves the supporting first 45% of the clip, then blends lift and forward travel together through 98%. Uses an 8 cm control-point clearance (not the sprint clip's 40 cm setting); measured capsule-base overshoot is 4.45 cm instead of 10.6 cm. Final 15 cm landing setback, clip duration, gait restoration, exit blending, acquisition, idle hand targets and rotation remain unchanged.
+
+Runtime root compensation and early supporting-hand compensation now reference the same path. Source GLB and authored vertical pose trajectory remain untouched; reduced capsule overshoot is not a claim of equivalent rendered mesh height reduction. The visible change principally brings forward travel into the lift rather than delaying it to 65% of the clip.
+
+Validation: new test_hang_hoist_arc_v2 passes dense capsule sweeps, unchanged early support, endpoints, arm lengths, supporting toe clearance and supported completion at four ledge heights. Maximum early hand error is 2.8 mm. Hang gait exit, playground, exits, standard mantle hand-height and climb-penetration tests pass. Visual play-test still required to judge feel. Existing idle exact-target test limitation described below remains unchanged.
+
+# Braced Hang idle — 7.5 cm below-lip hand targets
+
+Following positive screenshot feedback, lowered only braced_hang_hand_vertical_offset another 2.5 cm, from -.050 m to -.075 m. Updated the solved-wrist test expectation. Rotation handling, outward clearance, body offset, foot IK and pull-up targets remain unchanged.
+
+Validation caveat: both hands now hit the unchanged .22 m correction cap, so the exact-target/no-limiting assertions fail across the tested heights. Measured settled wrists reach about 6.0–6.3 cm below the lip rather than the requested 7.5 cm. Foot clearance and other pose checks still pass. The requested targets are retained for visual review; no safety limit was relaxed.
+
+# Braced Hang idle — larger hand-target comparison
+
+Lowered only braced_hang_hand_vertical_offset from -.025 m to -.050 m, an additional 2.5 cm requested for a visible comparison. Updated the solved-wrist contact-height test. Body offset, rotation handling, outward clearance, feet and pull-up targets remain unchanged. Restart play-testing to load the new script default.
+
+# Braced Hang idle — further 5 mm hand-target lowering
+
+Lowered only braced_hang_hand_vertical_offset from -.020 m to -.025 m following screenshot feedback. Idle wrists now target 2.5 cm below the lip. Updated the contact-height regression expectation. Rotation, outward clearance, body visual offset, feet and pull-up targets remain unchanged.
+
+# Braced Hang idle — hand targets just below the lip
+
+Changed only braced_hang_hand_vertical_offset from +.005 m to -.02 m and allowed negative Inspector values. Idle wrists now target the wall face 2 cm below the lip, retaining the existing .03 m outward clearance. Hand/finger animation and rotation handling, -.05 m rig offset, foot IK, acquisition and pull-up targets/blending are unchanged. Updated the idle-pose test's vertical contact expectation.
+
+The idle-pose suite passes again, including its no-reach-limiting assertion at all four tested heights; this resolves the previous -.05 m rig-offset reach-limit caveat without relaxing safety limits.
+
+# Braced Hang idle — additional 2 cm visual lowering
+
+Per the screenshot follow-up, changed only braced_hang_visual_vertical_offset from -.03 m to -.05 m total. Updated its regression expectation. Hand targets, foot IK tuning, blend timing, gameplay body/capsule, hang anchor and acquisition remain unchanged. Existing hand IK still independently targets the ledge, so this is a body-pose adjustment, not a hand-target adjustment.
+
+Validation caveat: the idle-pose suite now flags the existing hand reach limiter at all four tested ledge heights. Other assertions pass, including foot clearance, body/anchor invariance and restoration. A measured right wrist falls about 7 mm short of its target because the safety limiter prevents stretching; the left wrist reaches its target. Kept the requested -.05 m adjustment without weakening reach limits or changing hand targets. Visual review is needed before treating this tuning as fully validated.
+
+# Braced Hang idle — render-only offset and lightweight contact polish
+
+Focused on TRV_BRACED_HANG_IDLE. Acquisition, motor and standard mantle scripts are byte-for-byte unchanged in this pass (SHA-256 checked). Gameplay body/capsule, hang anchor/settle timing, W/S, .15 m top-out setback and gait/.30 s exit behavior remain authoritative and unchanged. No source animation/GLB edits.
+
+The referenced screenshot was not attached to this request. Before-change numerical pose inspection showed existing corrected wrist targets at ledge +.03 m and toe samples about .047–.064 m off the wall. The old hang foot layer corrected penetration only, so these visibly separated feet received zero IK weight. Raw wrists sit about .184–.187 m above the ledge before the existing hand solver; this existing retarget requirement should not be confused with the final 3 cm target clearance.
+
+## Visual offset / ownership
+
+braced_hang_visual_vertical_offset starts at -.03 m, the conservative end of the requested range. It is applied ONLY to the rendered VisualRoot/MasterRig instance position. VisualRoot itself remains available to its existing locomotion/compression writers. No gameplay transform or collider moves. The exact rig base position is captured when the visual layer enters and every offset is reconstructed from that base, never accumulated. It restores the exact base and stops writing outside the visual blend.
+
+Catch/settle uses the existing .20 s settle clock with smooth easing. Idle holds the correction. On pull-up, release or interruption it eases to zero over braced_hang_visual_blend_out (.12 s). The idle hand/foot target mix yields to the existing HangUp contacts over that same short interval; after it reaches zero, the old hoist/top contact behavior is unchanged. Release retains its existing hand fade and normal airborne foot fade rather than retaining wall targets after detach.
+
+## Hands
+
+Reuses the existing single hand-solver pass; no extra competing IK layer. Idle targets use the already validated ledge/top and preserve the existing grip spacing with at most .005 m of authored lateral movement. Idle vertical target clearance is .005 m; outward wrist clearance remains .03 m to avoid forcing the arms to overreach. Initial narrower wall clearance and unrestricted authored lateral drift hit the reach limit, so those were not retained. Full idle contact weight defaults to 1.0, but position correction is bounded at .22 m (down from the shared .45 m cap), existing chain reach protection is retained, and orientation influence is reduced to .10 to preserve wrist character. Poles continue to follow the authored elbow bend.
+
+Normal mantle and HangUp's fully restored grip targets, correction cap, timing and wrist treatment are unchanged. Measured settled wrists reached ledge +.005 m without reach limitation; raw-to-solved correction remains about .18–.19 m, primarily the retargeting the existing solver already performed, not a new aggressive pose correction.
+
+## Feet
+
+Uses each animated ankle/toe sample AFTER the render offset. One short local ray confirms the known bracing wall under each closest foot sample; actual hit depth is used, including slight local surface relief. Only wall-normal depth changes. Authored foot height, lateral spacing, knee bend/pole and ankle orientation are preserved; no fixed world-space foot markers and no forced flat sole.
+
+braced_hang_foot_wall_clearance=.02 m and braced_hang_max_foot_correction=.12 m. Normal measured corrections are about .027–.044 m. Missing wall, excessive correction or a target beyond .995 of chain reach fades back toward the authored pose and reports a debug reason instead of stretching. Existing foot-solver position-space easing and response are reused. After settling, toe clearance measured approximately .020 m, with unchanged leg lengths. The test also confirms .020 m clearance against a 3 cm local wall protrusion.
+
+Tuning is grouped under BracedHang / Idle Visual Polish: visual vertical offset, hand vertical/wall offsets, hand weight/max correction, foot clearance/max correction and visual blend-out duration.
+
+## Debug / tests / changed files
+
+Ctrl+F3 now shows an idle-pose panel while hanging: render offset, blend, gameplay anchor, VisualRoot and rig world positions, per-hand weight/error/reach limit and per-foot actual solver weight/fallback reason. Geometry shows anchor, root/rig offset, raw animated hands/feet, corrected targets, foot ray/contact, and a known-wall rectangle. Yellow=animated, green=hand target, cyan=foot target, red=invalid/limited foot, gray=wall. Acquisition diagnostics remain available when not hanging.
+
+Added player_hang_idle_pose_v2.gd and test_hang_idle_pose_v2.gd. Updated player_braced_hang_v2.gd (visual tuning/contact delegation only), player_animation_v2.gd (visual layer update), player_mantle_hand_ik_v2.gd (hang-idle-only target mix), player_hang_debug_v2.gd and player_debug_v2.gd.
+
+Nine headless suites passed: idle pose, braced hang, release/retry exits, gait exit, hang playground, mantle hand heights, climb penetration, release/repress acquisition and acquisition limits. Pose tests cover 1.85/2.25/2.75/3.25 m ledges, varied wall depth/local relief, unchanged body/anchor/capsule, bounded limbs, distant-wall fallback, smooth nonaccumulating offset, exact base restoration and release/pull-up ownership cleanup. Existing supporting-hand error during pull-up remains approximately .0121 m.
+
+Visual QA is still required; no screenshot-based sign-off is claimed. Inspect fingers/palms rather than wrist bones alone, toe mesh clearance, natural knees, and the first .12 s of pull-up/release. No commit/push or new traversal mechanics in this pass.
+
+# Braced Hang — release/repress reliability and recent-motion sweep
+
+## Diagnosis before changes
+
+Used the existing Hang Detection query/HUD output on a physically valid 2.25 m ledge. With input released, .11 m/s toward the ledge passed, but .09/.05 m/s reported NO_APPROACH with every height/reach/brace/body/head check passing. The old .1 m/s magnitude switch discarded genuine slow velocity and substituted the empty input vector. A deterministic repress through step_motor also reported NO_APPROACH on its first tick: acquisition ran before animation_state received that tick's W input. Querying immediately after the motor update passed. Thus W was not an unconditional requirement, but became a de facto gate at low velocity, compounded by one-frame-stale intent. The 1.7 m height gate was not the failing condition in these reproductions.
+
+A release/retry regression trace additionally exposed tangential wall sliding: collision zeroed the inward velocity component but retained sideways velocity above .1 m/s. Input assist now accounts for confirmed contact with the SAME candidate wall rather than requiring all horizontal motion to stop.
+
+## Focused changes
+
+player_v2.gd passes current camera-/lock-relative input to hang acquisition at its existing input boundary. This observes input only: it does not change animation state, motor acceleration, braking, jump, coyote, gait or camera behavior. Animation-state intent remains a fallback for direct tooling/test queries.
+
+Actual horizontal momentum is retained down to the configurable approach_speed_tolerance (.005 m/s numerical tolerance, not a run-speed requirement). The existing .05 normalized approach dot remains a generous direction test; debug also reports actual signed velocity toward the candidate in m/s. Bounded previous-frame displacement can establish approach after wall collision zeroes velocity. Input can assist near-zero motion, or tangential sliding in confirmed same-wall contact when there is no away component. Genuine away motion overrides intent and immediately clears that candidate's remembered approach. Facing remains the unchanged +/-100-degree supporting limit; the search is still velocity-led with intent/facing supporting rays.
+
+candidate_grace_time defaults to .15 seconds. A nearby, physically checked approaching candidate can prime this grace just before entering the vertical band. Grace is source- and edge-specific (within .25 m of that same edge), cannot refresh itself, and never bypasses current horizontal reach, vertical/swept reach, height eligibility, width, hands, bracing, capsule clearance or regrab suppression. Landing, busy traversal, reset/teleport and away movement discard history appropriately. No remote catch or cached-transform commitment was introduced.
+
+recent_sweep_distance defaults to .45 m, independently limiting the previous-physics-position to current-position sweep; the existing .45 m predictive cap remains. Both trajectories sample at <=.15 m spacing. Teleport-sized discontinuities discard previous motion instead of sweeping through the world. All alignment still validates from the current actual capsule, and the .40 m horizontal correction bound is unchanged. Rising/falling use identical physical rules.
+
+Height category and current reach remain separate: category height is ledge top minus the launch/lower-current-feet reference, and must be > the physics-derived approximately 1.7 m jump threshold. Actual catch reach uses current hand height (feet + 1.75 m), its +/- .40 m envelope, and bounded recent/predictive segments. There is no maximum obstacle-height gate at 1.7 m. Explicit tests now include 1.75, 2.0, 2.25 and 2.5 m supported ledges. No jump tuning changed.
+
+## Debug / playground / verification
+
+Ctrl+F3 now additionally shows ledge world top, category height, hand height, signed vertical delta, horizontal distance, velocity/input/to-ledge vectors, signed approach speed and dot, direction source, wall contact, grace use/time, swept intersection/necessity and grouped reach/direction/physical flags with the exact final reason. A lime arrow points toward the candidate; red-orange lines show recent movement alongside the existing prediction/reach geometry. Existing .20 second snapshot persistence is retained.
+
+The Hang course's existing BASIC 2.25 m fixture is now labeled INPUT RELEASE / REPRESS with A–F instructions: continuous W, release/coast, release/repress, diagonal, rising and falling. No unrelated playground geometry changes.
+
+Added test_hang_input_repress_v2.gd: 18 real-motor A–F attempts (three repetitions each), slow released momentum, same-tick repress, wall-slide intent, grace expiry, away precedence, head-obstruction preservation, historical falling sweep/settle and teleport-history rejection. Updated existing acquisition tests for grace and the explicit height examples; teleported hang fixtures clear history. Regression runs cover braced-hang contact/settle, W/S release/retry, gait exit, playground, sprint-jump continuity, ground support/coyote, E/held climb and climb camera.
+
+Changed player_hang_acquisition_v2.gd, player_braced_hang_v2.gd (new knobs/input argument only), player_v2.gd (input observation), player_hang_debug_v2.gd, hang_course.tscn and the three hang test scripts. Preserved the previous .15 m near-edge top-out, W/S controls, gait restoration, .30 s exit blend, animation clips, hand/foot IK and standard mantle. No new traversal feature or commit/push. Automated tests do not replace visual play-testing: repeat A–F with Ctrl+F3 and inspect maximum swept corrections and input-source labels.
+
+# Braced Hang pull-up — near-edge finishing position
+
+Reduced BracedHang.landing_setback from .45 m to .15 m, matching the standard climb's current near-edge default. request_up clamps that request to GroundSupport.minimum_landing_setback(), then retains the existing actual support-footprint and complete capsule-path checks before commitment. Unsupported or obstructed top-outs are still rejected rather than forced. The final controller position is 30 cm closer to the climbed lip; current movement input can still carry the player forward during the normal exit blend.
+
+Only landing placement changed. Source GLB, clip timing, vertical hand correction, foot bracing, W/S controls, acquisition, saved gait and .30s exit blend are unchanged. Updated test_hang_gait_exit_v2.gd to verify the .15 m target, support-safe placement and no-input finish remaining near the lip. Headless gait-exit and braced-hang contact tests pass, including unchanged supporting-hand/foot errors. Visual pose feel still needs in-game confirmation.
+
 # Automatic Braced Hang acquisition refinement
 
 Scope: acquisition and diagnostics only. The existing hang catch/settle, idle, hand/foot bracing, W pull-up / S release, release suppression, supported top-out, previous-gait restoration and mantle-style .30s exit blend are preserved. No Free Hang, shimmy, hops, lower-target selection, hang jump or interactions were added. Standard E climb/mantle, animation clips/root correction, movement tuning, camera and IK solvers are unchanged.

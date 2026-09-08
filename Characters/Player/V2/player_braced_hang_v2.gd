@@ -29,18 +29,34 @@ var exit_elapsed: float = 0
 @export_range(0,.8,.01) var approach_direction_dot: float = .05
 @export_range(80,120,1) var facing_acceptance_half_angle: float = 100
 @export_range(0,.5,.01) var predictive_distance: float = .45
+@export_range(0,.6,.01) var recent_sweep_distance: float = .45
+@export_range(0,.20,.01) var candidate_grace_time: float = .15
+@export_range(.001,.05,.001) var approach_speed_tolerance: float = .005
 @export_range(0,.25,.01) var debug_persistence: float = .20
 var acquisition=preload("res://Characters/Player/V2/player_hang_acquisition_v2.gd").new()
 var detection_visual: Node3D
+@export_group("Idle Visual Polish")
+@export_range(-.10,0,.005) var braced_hang_visual_vertical_offset: float = -.05
+@export_range(-.10,.03,.005) var braced_hang_hand_vertical_offset: float = -.075
+@export_range(0,.04,.005) var braced_hang_hand_wall_offset: float = .03
+@export_range(0,1,.05) var braced_hang_hand_ik_weight: float = 1.0
+@export_range(.10,.30,.01) var braced_hang_max_hand_correction: float = .22
+@export_range(.01,.03,.005) var braced_hang_foot_wall_clearance: float = .02
+@export_range(.03,.15,.01) var braced_hang_max_foot_correction: float = .12
+@export_range(.05,.2,.01) var braced_hang_visual_blend_out: float = .12
+var idle_pose=preload("res://Characters/Player/V2/player_hang_idle_pose_v2.gd").new()
+@export_group("Existing Hang Contact")
 @export_range(.46,.6,.01) var body_distance_from_wall: float = .50
 @export_range(1.7,2.1,.01) var hang_vertical_offset: float = 1.75
 @export_range(.15,.25,.01) var settle_duration: float = .20
-@export_range(.3,.7,.01) var landing_setback: float = .45
+@export_range(.0,.30,.01) var landing_setback: float = .15
 @export_range(.2,2,.1) var regrab_cooldown: float = 1.0
 @export var hang_debug: bool = false
 @export_range(.01,.05,.005) var foot_wall_clearance: float = .03
 @export_range(.05,.15,.01) var max_foot_correction: float = .15
 @export_range(10,60,1) var foot_contact_response: float = 50
+const UP_MATCH_FRAME: float = 10.0
+const SPRINT_MATCH_FRAME: float = 27.0
 var mantle_debug: bool:
 	get: return hang_debug
 var running: bool = false
@@ -83,7 +99,8 @@ func project_foot(controller: Node,leg: Dictionary,pose: Transform3D) -> Diction
 	if not controller.enabled or not controller.climb_foot_ik_enabled: envelope=0
 	if controller.enabled and controller.climb_foot_ik_enabled and hang_phase==HangPhase.TO_CROUCH and progress>.65:
 		return contact._surface(controller,leg,pose,[pose.origin-landing_plane_normal*controller.feet.foot_sole_offset,samples[1]],top,landing_plane_normal,foot_wall_clearance,max_foot_correction,1.0,"LEDGE_TOP",foot_contact_response,self)
-	return contact._surface(controller,leg,pose,samples,wall_point,wall_normal,foot_wall_clearance,max_foot_correction,envelope,"WALL",foot_contact_response,self)
+	var legacy: Dictionary=contact._surface(controller,leg,pose,samples,wall_point,wall_normal,foot_wall_clearance,max_foot_correction,envelope,"WALL",foot_contact_response,self)
+	return idle_pose.foot_contact(self,controller,leg,pose,samples,legacy) if idle_pose.weight>0 else legacy
 
 ## Shared hand layer consumes this contact clock, not the source clip clock.
 func current_frame() -> float:
@@ -113,20 +130,20 @@ func clear_segment(a: Vector3,b: Vector3,height: float) -> bool:
 	var sweep=motor.get_world_3d().direct_space_state.cast_motion(q)
 	return sweep.size()==2 and sweep[0]>=.999
 
-func detect(delta: float=1.0/60.0) -> Dictionary:
-	return acquisition.query(self,delta)
+func detect(delta: float=1.0/60.0,current_intent: Vector3=Vector3.INF) -> Dictionary:
+	return acquisition.query(self,delta,current_intent)
 
-func try_catch(delta: float) -> bool:
+func try_catch(delta: float,current_intent: Vector3=Vector3.INF) -> bool:
 	cooldown=maxf(0,cooldown-delta)
 	advance_release(delta)
 	var available: bool=enabled and not running and owner_controller.can_begin(false) and not motor.ground_support.has_ground_support and not motor.is_on_floor()
 	if not available:
 		if debug_detection_enabled() and not running:
-			result=detect(delta)
+			result=detect(delta,current_intent)
 			result.valid=false
 			result.reason="STATE_NOT_AIRBORNE" if motor.ground_support.has_ground_support or motor.is_on_floor() else "STATE_BUSY"
 		return false
-	result=detect(delta)
+	result=detect(delta,current_intent)
 	if not result.valid: return false
 	result.entry_gait=motor.animation_state.gait
 	result.entry_run_time=motor._run_time
@@ -164,12 +181,25 @@ func begin(data: Dictionary) -> void:
 	owner_controller._set_phase(owner_controller.Phase.ACTIVE)
 
 func up_position(p: float) -> Vector3:
-	var value:=alignment.lerp(landing,smoothstep(.65,.98,p))
-	value.y=lerpf(alignment.y,landing.y,up_rise(p))
-	return value
+	return up_path(p,alignment,landing)
+
+func up_path(p: float,from: Vector3,to: Vector3) -> Vector3:
+	var mantle=owner_controller.mantle
+	var reference_from:=Vector3(from.x,to.y-mantle.reference_climb_height,from.z)
+	var match_p: float=UP_MATCH_FRAME/(30.0*up_length)
+	if p>=match_p:
+		return mantle.reference_profile_position(sprint_progress(p),reference_from,to)
+	var first: Vector3=mantle.reference_profile_position(mantle.frame_progress(SPRINT_MATCH_FRAME),reference_from,to)
+	return from.lerp(first,smoothstep(0,match_p,p))
+
+func sprint_progress(p: float) -> float:
+	var mantle=owner_controller.mantle
+	var match_p: float=UP_MATCH_FRAME/(30.0*up_length)
+	return lerpf(mantle.frame_progress(SPRINT_MATCH_FRAME),1.0,clampf(inverse_lerp(match_p,1.0,p),0,1))
 
 func up_rise(p: float) -> float:
-	return 1.06*smoothstep(0,.62,p) if p<.62 else lerpf(1.06,1.0,smoothstep(.62,1,p))
+	var height: float=hang_vertical_offset+.015
+	return up_path(p,Vector3.ZERO,Vector3(0,height,1)).y/height
 
 func hip_track(clip: Animation) -> int:
 	for t in clip.get_track_count():
@@ -216,7 +246,30 @@ func prepare_clips(player: AnimationPlayer,root_reference: Vector3) -> void:
 			clip.track_set_key_value(track,k,value)
 	up_length=up.length
 	align_up_support(player,up)
+	match_sprint_tail(player,up)
 	prepare_release(player,root_reference,idle_z)
+
+## Share the compensated sprint root translation as well as its body path.
+## Only translation is transferred; braced joint rotations remain authored.
+func match_sprint_tail(player: AnimationPlayer,clip: Animation) -> void:
+	var sprint: Animation=player.get_animation(owner_controller.mantle.ACTION)
+	var track:=hip_track(clip)
+	var sprint_track:=hip_track(sprint)
+	var original: Animation=clip.duplicate(true)
+	var times: Array[float]=[UP_MATCH_FRAME/30.0,clip.length]
+	for key in clip.track_get_key_count(track): times.append(clip.track_get_key_time(track,key))
+	# Preserve every mapped sprint key, including the precise splice boundary.
+	for key in sprint.track_get_key_count(sprint_track):
+		var time: float=sprint.track_get_key_time(sprint_track,key)
+		if time>SPRINT_MATCH_FRAME/30.0:
+			times.append(lerpf(UP_MATCH_FRAME/30.0,clip.length,inverse_lerp(SPRINT_MATCH_FRAME/30.0,sprint.length,time)))
+	for key in range(clip.track_get_key_count(track)-1,-1,-1): clip.track_remove_key(track,key)
+	times.sort()
+	for time in times:
+		var p: float=time/clip.length
+		var target: Vector3=sprint.position_track_interpolate(sprint_track,sprint_progress(p)*sprint.length)
+		var existing: Vector3=original.position_track_interpolate(track,time)
+		clip.track_insert_key(track,time,existing.lerp(target,smoothstep(5.0,UP_MATCH_FRAME,time*30.0)))
 
 func prepare_release(player: AnimationPlayer,root_reference: Vector3,idle_z: float) -> void:
 	var clip:=player.get_animation(RELEASE_CLIP)
@@ -302,7 +355,7 @@ func align_up_support(player: AnimationPlayer,clip: Animation) -> void:
 		var center:=Vector3.ZERO
 		for side in ["Left","Right"]:
 			center+=visual.to_local(skeleton.global_transform*skeleton.get_bone_global_pose(skeleton.find_bone("mixamorig_"+side+"Hand")).origin)*.5
-		var controller_delta:=Vector3(0,(hang_vertical_offset+.015)*up_rise(p),-(body_distance_from_wall+landing_setback)*smoothstep(.65,.98,p))
+		var controller_delta:=up_path(p,Vector3.ZERO,Vector3(0,hang_vertical_offset+.015,-(body_distance_from_wall+landing_setback)))
 		var envelope: float=smoothstep(0,.12,p)*(1-smoothstep(.45,.70,p))
 		var offset: Vector3=(grip_center-controller_delta-center)*envelope
 		# Correct source hand-height drift only. Translating the entire pose
@@ -319,7 +372,9 @@ func request_up() -> bool:
 	if not running or hang_phase!=HangPhase.IDLE: return false
 	climb_destination_valid=false
 	if not is_instance_valid(source) or source.is_queued_for_deletion() or not source.global_transform.is_equal_approx(source_transform): return false
-	landing=ledge_edge+facing*landing_setback
+	# Match standard climb's near-edge finish without sacrificing support.
+	var safe_setback: float=maxf(landing_setback,motor.ground_support.minimum_landing_setback())
+	landing=ledge_edge+facing*safe_setback
 	landing.y=top.y-(landing_plane_normal.x*(landing.x-top.x)+landing_plane_normal.z*(landing.z-top.z))/landing_plane_normal.y+.015
 	if not motor.ground_support.evaluate(landing,Basis(Vector3.UP,atan2(-facing.x,-facing.z)),source,landing_plane_normal).supported: exit_reason="NO_TOP_SUPPORT"; return false
 	var previous:=alignment

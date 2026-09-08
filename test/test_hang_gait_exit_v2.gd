@@ -36,6 +36,9 @@ func run() -> void:
 		await actual_input("move_forward",true)
 		await actual_input("move_forward",false)
 		check(hang.hang_phase==hang.HangPhase.TO_CROUCH,"W top out")
+		var expected_setback: float=maxf(hang.landing_setback,body.ground_support.minimum_landing_setback())
+		check(is_equal_approx(hang.landing_setback,.15),"near-edge hang default matches standard climb")
+		check(absf((hang.landing-hang.ledge_edge).dot(hang.facing)-expected_setback)<.001,"landing uses near-edge support-safe setback")
 		var stick:=Vector2(0,-1) if gait<3 or gait==5 else Vector2.ZERO
 		var saw_exit: bool=false
 		var exit_start:=Vector3.ZERO
@@ -57,6 +60,8 @@ func run() -> void:
 							check(is_equal_approx(tree.tree_root.get_transition(index).xfade_time,body.traversal.mantle.mantle_exit_blend_time),"same .30s mantle blend")
 			if not hang.running: break
 		check(saw_exit and hang.exit_reason=="HANG_TO_CROUCH_COMPLETED","clean exit lifecycle")
+		if gait==3:
+			check(absf((body.position-hang.ledge_edge).dot(hang.facing)-expected_setback)<.02,"idle finish stays near ledge rather than drifting inland")
 		if gait<3: check(body.position.distance_to(exit_start)>.05 and body.velocity.length()>.1,"movement continues through blend and completion")
 		if is_instance_valid(roof): roof.queue_free()
 	print("HANG_GAIT_EXIT_V2: ","PASS" if failures.is_empty() else str(failures))
