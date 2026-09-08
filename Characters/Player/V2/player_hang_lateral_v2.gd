@@ -1,0 +1,167 @@
+extends RefCounted
+## Same-wall lateral actions only. Does not use or modify catch acquisition.
+const CLIPS={"HangShimmyLeft":&"TRV_BRACED_HANG_SHIMMY_LEFT","HangShimmyRight":&"TRV_BRACED_HANG_SHIMMY_RIGHT","HangHopLeft":&"TRV_BRACED_HANG_HOP_LEFT","HangHopRight":&"TRV_BRACED_HANG_HOP_RIGHT"}
+var active: bool=false
+var hopping: bool=false
+var direction: int=0
+var state: StringName=&"HangIdle"
+var progress: float=0
+var elapsed: float=0
+var lengths: Dictionary={}
+var start:=Vector3.ZERO
+var edge_start:=Vector3.ZERO
+var top_start:=Vector3.ZERO
+var wall_start:=Vector3.ZERO
+var displacement:=Vector3.ZERO
+var last_query: Dictionary={}
+var motion=preload("res://Characters/Player/V2/player_hang_motion_v2.gd").new()
+var expected_position:=Vector3.ZERO
+
+func path(p: float) -> Vector3:
+	var sample: Vector3=motion.sample(state,p)
+	return start+displacement*sample.x+Vector3.UP*sample.y+wall_normal*sample.z
+
+var wall_normal:=Vector3.ZERO
+
+func travel_distance(h: Node,side: int,hop: bool) -> float:
+	if not hop: return h.braced_hang_shimmy_distance
+	if h.braced_hang_hop_use_authored_distance:
+		var name: String="HangHopLeft" if side<0 else "HangHopRight"
+		return float(motion.measurements[name].derived_distance_m)
+	return h.braced_hang_hop_distance
+
+func query(h: Node,side: int,distance: float) -> Dictionary:
+	var tangent: Vector3=h.facing.cross(Vector3.UP).normalized()
+	var offset:=tangent*float(side)*distance
+	var result: Dictionary={"valid":false,"reason":"NO_SOURCE","direction":side,"distance":distance,"target":h.alignment+offset,"tangent":tangent,"brace":false,"clearance":false,"blocker":""}
+	if not is_instance_valid(h.source) or h.source.is_queued_for_deletion() or h.source.global_transform!=h.source_transform: return result
+	var previous: Vector3=h.alignment
+	var steps: int=maxi(1,ceili(distance/h.lateral_query_spacing))
+	for i in range(steps+1):
+		var delta_position:=offset*float(i)/steps
+		var edge: Vector3=h.ledge_edge+delta_position
+		for lateral in [-.28,0.0,.28]:
+			var hand: Vector3=edge+tangent*lateral+h.facing*.04
+			var hit: Dictionary=h.ray(hand+Vector3.UP*.06,hand-Vector3.UP*.06)
+			if hit.is_empty() or hit.collider!=h.source or hit.normal.dot(h.landing_plane_normal)<h.lateral_normal_dot or absf(hit.position.y-hand.y)>h.lateral_height_tolerance:
+				result.reason="LEDGE_END_GAP_OR_CORNER"
+				return result
+			for depth in [.35,.80,1.15,1.50]:
+				var brace: Vector3=edge+tangent*lateral-Vector3.UP*depth
+				hit=h.ray(brace+h.wall_normal*.08,brace-h.wall_normal*.08)
+				if hit.is_empty() or hit.collider!=h.source or hit.normal.dot(h.wall_normal)<h.lateral_normal_dot or absf((Vector3(hit.position)-brace).dot(h.wall_normal))>h.lateral_height_tolerance:
+					result.reason="NO_CONTINUOUS_BRACE"
+					return result
+		result.brace=true
+		var point: Vector3=h.alignment+delta_position
+		if not h.clear_segment(previous,point,h.motor.crouch.standing_capsule_height):
+			result.reason="BODY_OR_HEAD_BLOCKED"
+			result.blocker="Capsule sweep / overlap"
+			return result
+		# Include the hop's bounded authored retreat from the wall in clearance.
+		var retreat: Vector3=h.wall_normal*.30
+		if not h.clear_segment(previous+retreat,point+retreat,h.motor.crouch.standing_capsule_height):
+			result.reason="VISUAL_RETREAT_BLOCKED"
+			result.blocker="Retreat clearance sweep"
+			return result
+		previous=point
+	result.clearance=true
+	result.valid=true
+	result.reason="VALID"
+	return result
+
+func request(h: Node,side: int,shift: bool) -> bool:
+	if not h.is_attached() or h.hang_phase!=h.HangPhase.IDLE or side==0: return false
+	var distance: float=travel_distance(h,side,shift)
+	last_query=query(h,side,distance)
+	if not last_query.valid: return false
+	direction=side
+	hopping=shift
+	state=StringName("Hang"+("Hop" if shift else "Shimmy")+("Left" if side<0 else "Right"))
+	if not lengths.has(state): last_query.reason="MISSING_CLIP"; return false
+	start=h.alignment
+	edge_start=h.ledge_edge
+	top_start=h.top
+	wall_start=h.wall_point
+	displacement=Vector3(last_query.target)-start
+	wall_normal=h.wall_normal
+	expected_position=start
+	# Preserve source overshoot/settling, including the right hop's overshoot.
+	var peak: float=1
+	for sample in motion.profiles[state]: peak=maxf(peak,sample.x)
+	last_query=query(h,side,distance*peak)
+	if not last_query.valid: return false
+	var previous:=start
+	for i in range(1,motion.SAMPLE_COUNT+1):
+		var point:=path(float(i)/motion.SAMPLE_COUNT)
+		if not h.clear_segment(previous,point,h.motor.crouch.standing_capsule_height):
+			last_query.valid=false
+			last_query.reason="AUTHORED_ARC_BLOCKED"
+			return false
+		previous=point
+	progress=0
+	elapsed=0
+	active=true
+	h.hang_phase=h.HangPhase.LATERAL
+	return true
+
+func advance(h: Node,delta: float) -> void:
+	elapsed+=delta
+	var playback=h.motor.get_node("AnimationController")._playback
+	if playback.get_current_node()==state: progress=clampf(playback.get_current_play_position()/float(lengths[state]),0,1)
+	if progress>=.995: progress=1.0
+	var travel: float=motion.sample(state,progress).x
+	var target:=start+displacement*travel
+	expected_position=path(progress)
+	var remaining: float=h.alignment.distance_to(target)
+	# Revalidate each increment for newly introduced obstacles or lost support.
+	var step_direction: int=direction if (target-h.alignment).dot(displacement)>=0 else -direction
+	var result:=query(h,step_direction,remaining)
+	if not h.clear_segment(h.motor.global_position,expected_position,h.motor.crouch.standing_capsule_height):
+		result.valid=false
+		result.reason="AUTHORED_ARC_BLOCKED"
+	if not result.valid or elapsed>float(lengths[state])+2:
+		last_query=result
+		last_query.reason="LATERAL_INTERRUPTED_"+str(result.reason)
+		active=false
+		h.hang_phase=h.HangPhase.IDLE
+		return
+	var offset:=displacement*travel
+	h.alignment=target
+	h.ledge_edge=edge_start+offset
+	h.top=top_start+offset
+	h.wall_point=wall_start+offset
+	if progress>=.995:
+		active=false
+		h.hang_phase=h.HangPhase.IDLE
+
+func prepare(h: Node,player: AnimationPlayer,reference: Vector3,idle_z: float) -> void:
+	for name in CLIPS:
+		if not player.has_animation(CLIPS[name]): push_error("Missing lateral hang clip: "+str(CLIPS[name])); continue
+		var clip: Animation=player.get_animation(CLIPS[name])
+		motion.capture(h,player,name,clip)
+		lengths[StringName(name)]=clip.length/h.braced_hang_lateral_playback_speed
+		clip.loop_mode=Animation.LOOP_NONE
+		var track: int=h.hip_track(clip)
+		for key in clip.track_get_key_count(track):
+			# All sampled translation is now applied once by the controller.
+			clip.track_set_key_value(track,key,Vector3(reference.x,reference.y,idle_z))
+
+func hand_contact(h: Node,arm: Dictionary,animated: Vector3) -> Dictionary:
+	var tangent: Vector3=h.facing.cross(Vector3.UP).normalized()
+	var lateral: float=clampf((animated-h.ledge_edge).dot(tangent),-.28,.28)
+	var target: Vector3=h.ledge_edge+tangent*lateral+Vector3.UP*h.braced_hang_hand_vertical_offset+h.wall_normal*h.braced_hang_hand_wall_offset
+	var weight: float=1.0
+	if hopping:
+		weight=1.0-smoothstep(.08,.25,progress)*(1.0-smoothstep(.70,.94,progress))
+	else:
+		# Direction-side hand reaches first, trailing hand follows. Do not use
+		# absolute wrist height here: the intentional below-lip idle target
+		# would otherwise weaken BOTH arms throughout the entire action.
+		var leading: bool=(arm.side=="Left")== (direction<0)
+		weight=1.0-smoothstep(.05,.20,progress)*(1-smoothstep(.40,.55,progress)) if leading else 1.0-smoothstep(.45,.60,progress)*(1-smoothstep(.80,.95,progress))
+	return {"target":target,"weight":weight}
+
+func debug_text(h: Node) -> String:
+	var sample: Vector3=motion.sample(state,progress) if motion.profiles.has(state) else Vector3.ZERO
+	return "LATERAL %s | progress %.2f | %s\nShimmy %.2fm / Hop L %.3fm R %.3fm\nAuthored lateral %.3f / rise %.3fm / retreat %.3fm\nExpected %s / Actual %s / Error %.4fm\nFinal anchor %s / Tangent %s / Query %s" % [state if active else &"IDLE",progress,"RELEASE/REGRAB" if hopping else "LEDGE CONTACT",h.braced_hang_shimmy_distance,travel_distance(h,-1,true),travel_distance(h,1,true),sample.x,sample.y,sample.z,expected_position,h.motor.global_position,expected_position.distance_to(h.motor.global_position),start+displacement,h.facing.cross(Vector3.UP),str(last_query)]

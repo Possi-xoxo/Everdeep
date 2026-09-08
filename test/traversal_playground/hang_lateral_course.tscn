@@ -1,0 +1,71 @@
+[gd_scene load_steps=11 format=3]
+[ext_resource type="Shader" path="res://test/traversal_playground/lateral_checker.gdshader" id="Checker"]
+[sub_resource type="BoxShape3D" id="FloorShape"]
+size = Vector3(26, 0.5, 22)
+[sub_resource type="BoxMesh" id="FloorMesh"]
+size = Vector3(26, 0.5, 22)
+[sub_resource type="BoxShape3D" id="WallShape"]
+size = Vector3(18, 2.25, 3)
+[sub_resource type="BoxMesh" id="WallMesh"]
+size = Vector3(18, 2.25, 3)
+[sub_resource type="BoxShape3D" id="BlockShape"]
+size = Vector3(0.6, 2.5, 1.4)
+[sub_resource type="BoxMesh" id="BlockMesh"]
+size = Vector3(0.6, 2.5, 1.4)
+[sub_resource type="StandardMaterial3D" id="FloorMat"]
+albedo_color = Color(0.18, 0.27, 0.3, 1)
+[sub_resource type="ShaderMaterial" id="WallMat"]
+shader = ExtResource("Checker")
+[sub_resource type="StandardMaterial3D" id="BlockMat"]
+albedo_color = Color(0.8, 0.3, 0.12, 1)
+[node name="HangLateralCourse" type="Node3D"]
+[node name="Floor" type="StaticBody3D" parent="."]
+position = Vector3(0, -0.25, 0)
+[node name="Collision" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("FloorShape")
+[node name="Mesh" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("FloorMesh")
+material_override = SubResource("FloorMat")
+[node name="Hang_Shimmy_Long" type="StaticBody3D" parent="."]
+position = Vector3(0, 1.125, 4)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Shimmy_Long"]
+shape = SubResource("WallShape")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Shimmy_Long"]
+mesh = SubResource("WallMesh")
+material_override = SubResource("WallMat")
+[node name="Hang_Hop_Long" type="StaticBody3D" parent="."]
+position = Vector3(0, 1.125, -5)
+[node name="Collision" type="CollisionShape3D" parent="Hang_Hop_Long"]
+shape = SubResource("WallShape")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_Hop_Long"]
+mesh = SubResource("WallMesh")
+material_override = SubResource("WallMat")
+[node name="Hang_LateralBlocked" type="StaticBody3D" parent="."]
+position = Vector3(5, 1.25, -3)
+[node name="Collision" type="CollisionShape3D" parent="Hang_LateralBlocked"]
+shape = SubResource("BlockShape")
+[node name="Mesh" type="MeshInstance3D" parent="Hang_LateralBlocked"]
+mesh = SubResource("BlockMesh")
+material_override = SubResource("BlockMat")
+[node name="Instructions" type="Label3D" parent="."]
+position = Vector3(0, 3.2, 4)
+text = "LATERAL BRACED HANG\nA / D: Shimmy | Shift + A / D: Hop\nW: Pull up | S: Release"
+font_size = 36
+pixel_size = 0.006
+billboard = 1
+[node name="Hang_Shimmy_LeftEdge" type="Label3D" parent="."]
+position = Vector3(-8, 2.8, 4)
+text = "LEFT EDGE\nNo corner / gap transfer"
+billboard = 1
+[node name="Hang_Shimmy_RightEdge" type="Label3D" parent="."]
+position = Vector3(8, 2.8, 4)
+text = "RIGHT EDGE\nInvalid input stays hanging"
+billboard = 1
+[node name="Hang_Hop_LeftEdge" type="Label3D" parent="."]
+position = Vector3(-8, 2.8, -5)
+text = "HOP EDGE LIMIT"
+billboard = 1
+[node name="Hang_Hop_RightEdge" type="Label3D" parent="."]
+position = Vector3(7, 3, -5)
+text = "HOP / SHIMMY OBSTRUCTION\nOrange block stops lateral travel"
+billboard = 1

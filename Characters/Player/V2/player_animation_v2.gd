@@ -27,6 +27,8 @@ const CLIPS := {
 	"Mantle": &"TRV_SPRINT_TO_WALL_CLIMB_02",
 	"HangCatch": &"TRV_JUMPING_TO_BRACED_HANG", "HangIdle": &"TRV_BRACED_HANG_IDLE", "HangUp": &"TRV_BRACED_HANG_TO_CROUCH",
 	"HangRelease": &"TRV_BRACED_HANG_DROP_AND_LAND",
+	"HangShimmyLeft": &"TRV_BRACED_HANG_SHIMMY_LEFT", "HangShimmyRight": &"TRV_BRACED_HANG_SHIMMY_RIGHT",
+	"HangHopLeft": &"TRV_BRACED_HANG_HOP_LEFT", "HangHopRight": &"TRV_BRACED_HANG_HOP_RIGHT",
 	"CrouchIdle": &"CRC_CROUCH_IDLE", "CrouchWalk": &"BOW_STANDING_WALK_FORWARD",
 	"CrouchLeft": &"BOW_STANDING_WALK_LEFT", "CrouchRight": &"BOW_STANDING_WALK_RIGHT",
 	"CrouchBack": &"BOW_STANDING_WALK_BACK",
@@ -181,6 +183,10 @@ func _trim_backstep() -> void:
 func _clip(state: String) -> AnimationNodeAnimation:
 	var node := AnimationNodeAnimation.new()
 	node.animation = CLIPS[state]
+	if state in ["HangShimmyLeft","HangShimmyRight","HangHopLeft","HangHopRight"]:
+		node.use_custom_timeline=true
+		node.stretch_time_scale=true
+		node.timeline_length=player.get_animation(CLIPS[state]).length/motor.get_node("TraversalController/BracedHang").braced_hang_lateral_playback_speed
 	if state=="Mantle":
 		node.use_custom_timeline=true
 		node.stretch_time_scale=true
@@ -203,6 +209,7 @@ func _build_tree() -> void:
 	var machine := AnimationNodeStateMachine.new()
 	machine.add_node(&"Locomotion", locomotion)
 	var states: Array[String]=["HangCatch", "HangIdle", "HangUp", "HangRelease", "Mantle", "Locomotion", "JumpStanding", "JumpMoving", "Fall", "Land", "DodgeStand", "DodgeRun", "DodgeBack", "CrouchEnter", "CrouchExit", "CrouchIdle", "CrouchWalk", "CrouchLocked", "CrouchRun", "CrouchLockedRun"]
+	states.append_array(["HangShimmyLeft","HangShimmyRight","HangHopLeft","HangHopRight"])
 	for state in states:
 		if state=="Locomotion": continue
 		if state in ["CrouchLocked","CrouchLockedRun"]:
@@ -226,6 +233,7 @@ func _build_tree() -> void:
 			transition.xfade_time = land_blend_out if to == "Locomotion" else (land_blend_in if to == "Land" else (jump_to_fall_blend if to == "Fall" else jump_blend_in))
 			if to=="Mantle": transition.xfade_time=.15
 			if to.begins_with("Hang"): transition.xfade_time=.12
+			if from in ["HangShimmyLeft","HangShimmyRight"] and to=="HangIdle": transition.xfade_time=.30
 			if to.begins_with("Crouch"): transition.xfade_time=motor.get_node("CrouchController").crouch_enter_blend_time
 			if from=="CrouchExit" or to=="CrouchExit": transition.xfade_time=motor.get_node("CrouchController").crouch_exit_blend_time
 			if from in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"] and to in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"]:
@@ -250,7 +258,7 @@ func _physics_process(delta: float) -> void:
 		land_visual_offset=0
 		visual_root.position=visual_root_base_position
 		var h=motor.traversal.hang
-		_enter(&"HangUp" if h.hang_phase==h.HangPhase.TO_CROUCH else (&"HangIdle" if h.hang_phase==h.HangPhase.IDLE else &"HangCatch"))
+		_enter(h.lateral.state if h.lateral.active else (&"HangUp" if h.hang_phase==h.HangPhase.TO_CROUCH else (&"HangIdle" if h.hang_phase==h.HangPhase.IDLE else &"HangCatch")))
 		return
 	if motor.traversal.hang.running and current_state==&"HangUp":
 		gait_blend=float(motor.animation_state.gait+1) if motor.animation_state.move_input_magnitude>.01 else 0.0

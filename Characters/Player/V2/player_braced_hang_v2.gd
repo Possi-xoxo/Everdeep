@@ -1,6 +1,15 @@
 extends Node
-## Automatic airborne braced hang. No Free Hang or directional hang actions.
-enum HangPhase { NONE, CATCH, SETTLE, IDLE, TO_CROUCH, RELEASE }
+## Automatic braced hang with continuous same-wall lateral actions. No Free Hang.
+enum HangPhase { NONE, CATCH, SETTLE, IDLE, TO_CROUCH, RELEASE, LATERAL }
+@export_group("Lateral Hang")
+@export_range(.1,.8,.05) var braced_hang_shimmy_distance: float=.7
+@export_range(.5,3,.05) var braced_hang_hop_distance: float=3.0
+@export var braced_hang_hop_use_authored_distance: bool=false
+@export_range(.5,2,.05) var braced_hang_lateral_playback_speed: float=1.1
+@export_range(.01,.05,.005) var lateral_query_spacing: float=.025
+@export_range(.005,.04,.005) var lateral_height_tolerance: float=.02
+@export_range(.98,1,.001) var lateral_normal_dot: float=.995
+var lateral=preload("res://Characters/Player/V2/player_hang_lateral_v2.gd").new()
 const RELEASE_CLIP: StringName=&"TRV_BRACED_HANG_DROP_AND_LAND"
 const RELEASE_START: float=9.0/30.0
 const RELEASE_END: float=18.0/30.0
@@ -36,11 +45,12 @@ var exit_elapsed: float = 0
 var acquisition=preload("res://Characters/Player/V2/player_hang_acquisition_v2.gd").new()
 var detection_visual: Node3D
 @export_group("Idle Visual Polish")
-@export_range(-.10,0,.005) var braced_hang_visual_vertical_offset: float = -.05
-@export_range(-.10,.03,.005) var braced_hang_hand_vertical_offset: float = -.075
+@export_range(-.35,0,.005) var braced_hang_visual_vertical_offset: float = -.23
+@export_range(0,.12,.005) var braced_hang_chest_wall_offset: float = .08
+@export_range(-.10,.03,.005) var braced_hang_hand_vertical_offset: float = -.01
 @export_range(0,.04,.005) var braced_hang_hand_wall_offset: float = .03
 @export_range(0,1,.05) var braced_hang_hand_ik_weight: float = 1.0
-@export_range(.10,.30,.01) var braced_hang_max_hand_correction: float = .22
+@export_range(.10,.30,.01) var braced_hang_max_hand_correction: float = .16
 @export_range(.01,.03,.005) var braced_hang_foot_wall_clearance: float = .02
 @export_range(.03,.15,.01) var braced_hang_max_foot_correction: float = .12
 @export_range(.05,.2,.01) var braced_hang_visual_blend_out: float = .12
@@ -248,6 +258,7 @@ func prepare_clips(player: AnimationPlayer,root_reference: Vector3) -> void:
 	align_up_support(player,up)
 	match_sprint_tail(player,up)
 	prepare_release(player,root_reference,idle_z)
+	lateral.prepare(self,player,root_reference,idle_z)
 
 ## Share the compensated sprint root translation as well as its body path.
 ## Only translation is transferred; braced joint rotations remain authored.
@@ -412,8 +423,10 @@ func step(delta: float) -> bool:
 		return false
 	if not is_instance_valid(source) or source.is_queued_for_deletion() or not source.global_transform.is_equal_approx(source_transform): owner_controller.finish("HANG_SOURCE_LOST"); return false
 	if not contact_still_exists(): owner_controller.finish("HANG_CONTACT_LOST"); return false
+	if lateral.active: lateral.advance(self,delta)
 	motor.velocity=Vector3.ZERO
 	var target:=alignment
+	if lateral.active: target=lateral.expected_position
 	if hang_phase in [HangPhase.CATCH,HangPhase.SETTLE]:
 		elapsed+=delta
 		hang_phase=HangPhase.SETTLE
@@ -459,6 +472,7 @@ func step(delta: float) -> bool:
 
 func restore(reason: String) -> void:
 	if not running: return
+	lateral.active=false
 	release_suppression_active=false
 	last_source_id=source.get_instance_id() if is_instance_valid(source) else 0
 	last_edge=ledge_edge

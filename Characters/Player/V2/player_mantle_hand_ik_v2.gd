@@ -111,7 +111,18 @@ func prepare_targets(delta: float) -> void:
 			arm.weight=0.0
 			arm.solver.influence=0.0
 		return
-	if not captured or captured_source!=mantle.source or captured_alignment!=mantle.alignment: _capture_grips()
+	var lateral_active: bool=mantle==motor.traversal.hang and motor.traversal.hang.lateral.active
+	if mantle==motor.traversal.hang:
+		# Scoped modifier-pass translation of the chest and descendants only.
+		# Pelvis/legs are siblings, untouched; no rotation or arm-length edits.
+		# Skeleton3D restores the input pose after the pass, avoiding accumulation.
+		var chest: int=skeleton.find_bone("mixamorig_Spine2")
+		if chest>=0:
+			var chest_pose: Transform3D=skeleton.get_bone_global_pose(chest)
+			var shift: Vector3=-mantle.wall_normal.normalized()*mantle.braced_hang_chest_wall_offset*mantle.idle_pose.visual_weight
+			chest_pose.origin+=skeleton.global_basis.inverse()*shift
+			skeleton.set_bone_global_pose(chest,chest_pose)
+	if not captured or captured_source!=mantle.source or (captured_alignment!=mantle.alignment and not lateral_active): _capture_grips()
 	var frame: float=mantle.current_frame()
 	var envelope: float=smoothstep(hand_clamp_start_frame,hand_clamp_full_frame,frame)*(1.0-smoothstep(hand_release_frame,hand_release_end_frame,frame))
 	for arm in arms:
@@ -132,6 +143,14 @@ func prepare_targets(delta: float) -> void:
 			arm.grip=arm.base_grip.lerp(h.idle_pose.hand_target(h,arm,pose.origin),idle_weight)
 			correction_cap=lerpf(correction_cap,h.braced_hang_max_hand_correction,idle_weight)
 			contact_weight=lerpf(1.0,h.braced_hang_hand_ik_weight,idle_weight)
+		if lateral_active:
+			var contact: Dictionary=mantle.lateral.hand_contact(mantle,arm,pose.origin)
+			arm.grip=contact.target
+			contact_weight*=contact.weight
+		elif mantle==motor.traversal.hang and mantle.hang_phase==mantle.HangPhase.TO_CROUCH:
+			# Keep the family's below-lip contact through early support; return
+			# to the existing pull-up target as the shared baseline fades out.
+			arm.grip.y+=(mantle.braced_hang_hand_vertical_offset-hand_vertical_offset)*(1.0-idle_weight)*(1.0-smoothstep(.35,.70,mantle.progress))
 		var offset: Vector3=arm.grip-pose.origin
 		var goal: Vector3=arm.grip
 		arm.limited=offset.length()>correction_cap or shoulder.distance_to(goal)>reach*.995

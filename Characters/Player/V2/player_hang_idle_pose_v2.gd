@@ -3,13 +3,16 @@ extends RefCounted
 var weight: float=0
 var blend: float=0
 var offset: float=0
+var visual_blend: float=0
+var visual_weight: float=0
 var rig_base:=Vector3.ZERO
 var bound: bool=false
 var feet: Dictionary={}
 
 func update(h: Node,animation: Node,delta: float) -> void:
 	var idle_owned: bool=h.is_attached() and h.hang_phase!=h.HangPhase.TO_CROUCH
-	if not bound and not idle_owned: return
+	var family_owned: bool=h.is_attached()
+	if not bound and not family_owned: return
 	if not bound:
 		rig_base=animation.rig.position
 		bound=true
@@ -18,11 +21,21 @@ func update(h: Node,animation: Node,delta: float) -> void:
 	else:
 		blend=move_toward(blend,0,delta/maxf(.001,h.braced_hang_visual_blend_out))
 	weight=smoothstep(0,1,blend)
-	offset=h.braced_hang_visual_vertical_offset*weight
+	# Contact influence retains its existing pull-up release. Visual baseline
+	# has separate ownership so it does not disappear on pull-up frame one.
+	if family_owned:
+		if h.hang_phase==h.HangPhase.TO_CROUCH:
+			visual_blend=1.0-smoothstep(.35,.85,h.progress)
+		else:
+			visual_blend=move_toward(visual_blend,clampf(h.elapsed/h.settle_duration,0,1),delta/h.settle_duration)
+	else:
+		visual_blend=move_toward(visual_blend,0,delta/maxf(.001,h.braced_hang_visual_blend_out))
+	visual_weight=smoothstep(0,1,visual_blend)
+	offset=h.braced_hang_visual_vertical_offset*visual_weight
 	# Dedicated rig instance position avoids fighting locomotion's VisualRoot
 	# compression/offset writers. Always reconstruct from the saved base.
 	animation.rig.position=rig_base+Vector3.UP*offset
-	if weight==0:
+	if weight==0 and visual_weight==0:
 		feet.clear()
 		bound=false
 
@@ -74,14 +87,14 @@ func foot_contact(h: Node,controller: Node,leg: Dictionary,pose: Transform3D,sam
 	return result
 
 func debug_text(h: Node) -> String:
-	var text: String="HANG IDLE POSE\nRender offset %.3f m | Blend %.2f\nAnchor %s\nVisualRoot %s | Rig %s" % [offset,weight,str(h.alignment),str(h.motor.visual.global_position),str(h.motor.get_node("AnimationController").rig.global_position)]
+	var text: String="HANG SHARED VISUAL BASELINE\nRender offset %.3f m | Visual %.2f / Contact %.2f\nAnchor %s\nVisualRoot %s | Rig base %s / Final %s" % [offset,visual_weight,weight,str(h.alignment),str(h.motor.visual.global_position),str(rig_base),str(h.motor.get_node("AnimationController").rig.global_position)]
 	for side in feet:
 		var foot: Dictionary=feet[side]
 		var actual_weight: float=foot.weight
 		for leg in h.motor.get_node("FootIKController").legs:
 			if leg.side==side: actual_weight=leg.weight
-		text+="\n%s foot: weight %.2f | %s" % [side,actual_weight,foot.reason]
+		text+="\n%s foot: weight %.2f | correction %.3fm | %s" % [side,actual_weight,Vector3(foot.raw).distance_to(foot.target),foot.reason]
 	for arm in h.motor.get_node("MantleHandIK").arms:
-		text+="\n%s hand: weight %.2f | error %.3fm | limited %s" % [arm.side,arm.weight,arm.error,arm.limited]
+		text+="\n%s hand: weight %.2f | correction %.3fm | error %.3fm | limited %s" % [arm.side,arm.weight,Vector3(arm.animated).distance_to(arm.solved),arm.error,arm.limited]
 	text+="\nYellow: animated | Green: hands | Cyan: feet\nRed: foot reach limit | Gray: known wall"
 	return text

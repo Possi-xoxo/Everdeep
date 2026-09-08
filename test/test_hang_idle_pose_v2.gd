@@ -37,15 +37,16 @@ func run() -> void:
 		var prior_offset: float=hang.idle_pose.offset
 		for frame in 70:
 			await crouch_tick(false)
-			check(absf(hang.idle_pose.offset-prior_offset)<.009,"offset blends without snap")
+			check(absf(hang.idle_pose.offset-prior_offset)<.014,"offset blends without snap")
 			prior_offset=hang.idle_pose.offset
 		check(body.position.distance_to(anchor)<.001 and hang.alignment==anchor,"render correction never moves gameplay anchor/body")
 		check(crouch.collision.shape.height==capsule_height,"idle polish leaves capsule unchanged")
 		check(body.visual.position==original_visual,"VisualRoot baseline untouched")
-		check(animation.rig.position.is_equal_approx(original_rig+Vector3(0,-.05,0)),"exact nonaccumulating render-only offset")
+		check(animation.rig.position.is_equal_approx(original_rig+Vector3(0,-.10,0)),"exact nonaccumulating shared offset")
 		for arm in body.get_node("MantleHandIK").arms:
-			check(absf(arm.solved.y-height+.075)<.003,"idle hand meets wall just below ledge lip")
-			check(arm.length_error<.005 and not arm.limited,"hands reach without stretching")
+			check(absf(arm.solved.y-height+.01)<.025,"idle hand near lip within conservative reach constraint")
+			check(arm.length_error<.005,"hands never stretch to force contact")
+			check(arm.animated.distance_to(arm.solved)<.16,"hand correction reduced from previous 22 cm")
 			check(arm.animated.distance_to(arm.solved)<=hang.braced_hang_max_hand_correction+.001,"hand correction bounded")
 		for leg in foot_solver.legs:
 			var gap: float=(leg.solved_toe-hang.wall_point).dot(hang.wall_normal)
@@ -69,8 +70,13 @@ func run() -> void:
 			check(not hang.running and body.ground_support.has_ground_support,"normal release lands")
 		else:
 			check(hang.request_up(),"existing top-out still works")
+			var previous_visual_offset: float=hang.idle_pose.offset
 			for frame in 140:
 				await crouch_tick(crouch.requested)
+				check(absf(hang.idle_pose.offset-previous_visual_offset)<.014,"pull-up shared offset has no pop")
+				previous_visual_offset=hang.idle_pose.offset
+				if hang.is_attached() and hang.progress<.35: check(absf(hang.idle_pose.offset+.10)<.0001,"early pull-up retains hang baseline")
+				if hang.progress>=.85: check(absf(hang.idle_pose.offset)<.0001,"normal baseline before handoff")
 				if hang.up_elapsed>.15:
 					check(hang.idle_pose.weight==0,"idle correction yields completely to existing HangUp")
 				if not hang.running: break

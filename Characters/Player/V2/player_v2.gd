@@ -89,6 +89,7 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 	if not ground_support.initialized: ground_support.refresh(0)
 	var hang_intent: Vector3=traversal.hang.acquisition.prepare_tick(traversal.hang,delta,stick)
 	if traversal.hang.running:
+		if absf(stick.x)>.5: traversal.hang.lateral.request(traversal.hang,-1 if stick.x<0 else 1,shift)
 		if traversal.hang.step(delta): return
 		crouch_requested=crouch.requested
 	elif traversal.hang.try_catch(delta,hang_intent):

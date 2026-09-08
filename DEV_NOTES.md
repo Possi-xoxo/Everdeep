@@ -1,3 +1,113 @@
+# Right hop full-length restoration
+
+Reverted the recent right-hop trim/splice experiments and their movement-path remapping. Right hop again uses its full source duration and captured path, including authored settling/slide. Its HangIdle blend is .12 s, matching Left Hop. Both hops remain 3 m at 1.1x playback. Chest correction and all other tuning remain unchanged. Notes below describe superseded experiments.
+
+# Right hop ends at frame 35
+
+Supersedes the splice below: right hop now ends at source frame 35 and blends to HangIdle over .30 s. The shortened movement profile is normalized to the preserved 3 m distance, with residual vertical/wall-normal displacement eased out to prevent an endpoint snap. Left hop and source GLB are unchanged.
+
+# Longer right-hop splice blend
+
+The right-hop replacement bridge now lasts the removed ten source frames (1/3 second, approximately .303 seconds at 1.1x playback), restoring the original total duration. The unwanted source motion between frames 35 and 45 remains replaced by the smooth endpoint blend. Pose and movement path use the same longer bridge; both hop distances remain 3 m.
+
+# Right hop settling splice and 3 m travel
+
+Both hops now travel 3 m. Right hop alone replaces source frames 35..45 (30 fps convention) with a smooth .11 s runtime-source bridge, equivalent to .10 s at 1.1x playback. Quaternion poses and the original captured movement profile share the same splice mapping. Pre-cut motion, final endpoint, idle blends, chest correction and left-hop timing are preserved. Only private runtime animation data changes; source GLB remains untouched. No fixed hand locks.
+
+# Hop lock rollback and 2.5 m travel
+
+Removed frame-triggered world-space hop grips and their enlarged correction-cap override. Restored the previous hop hand contact envelope. Both hop directions now travel 2.5 m. The 8 cm chest-only correction, 1.1x playback, shimmy distance and exit blends remain unchanged. The frame-lock notes below describe the superseded implementation.
+
+# Doubled chest correction and frame-triggered hop grips
+
+Chest-only wall offset increased from .04 to .08 m, retaining the same shared family blend and leaving pelvis/legs untouched. Hop distance remains 3 m and playback 1.1x. Hop hands capture validated world-space ledge targets at source frame 35 left / 30 right (source clock accounts for custom playback timeline). Targets stay fixed through the remainder of the action, instead of following the moving anchor/wrist. New actions clear captured grips; ordinary idle IK resumes at completion. No wrist rotation change.
+
+Locked hop hands use the existing .45 m climb correction cap instead of the .16 m idle cleanup cap; anatomical reach limits remain enforced. Tests verify no early capture, capture within a source frame, invariant world targets, unchanged action timing/endpoints and unchanged arm lengths. IMPORTANT: this verifies target locking, not perfect solved-hand locking. Left hop maximum target error is ~4.3 cm; right remains reach-limited at up to ~27.4 cm during settling. Preserving the current 3 m path and preventing arm stretching prevents an exact right-hand lock with this setup. Further visual compensation would be a separate adjustment; do not claim the right-hop slide is fully resolved.
+
+# Lateral checker walls and further chest reach
+
+The two long shimmy/hop playground walls now use a world-space checker shader with 25 cm squares, including tops and ends, to expose sliding. Collision and the orange obstruction remain unchanged. Increased only braced_hang_chest_wall_offset from .02 to .04 m; pelvis, knee/foot chains, rig position, distances and playback remain unchanged.
+
+Settled diagnostic confirms unchanged foot positions and ~2 cm wall clearance. Hand target error improved from roughly 6.6/7.4 cm to 5.1/6.0 cm in 3D; still reach-limited, not fully resolved. Headless playground load checked; visual check of checker contrast and upper-body contact still required. No commit/push.
+
+# Braced Hang upper-body reach and 3 m hops
+
+Added braced_hang_chest_wall_offset=.02 m. The existing hand preparation SkeletonModifier3D translates Spine2/chest and its descendants 2 cm toward the wall before solving the arms. It uses the shared visual blend, preserving family continuity and pull-up fade-out. No chest rotation, wrist rotation, limb-length or IK-limit changes. The scoped skeleton modifier resets the input pose each pass; no persistent bone overrides. Pelvis/leg chains are outside the chest subtree and stay in place. The -23 cm rig baseline remains vertical-only.
+
+Both side hops now use the shared 3 m target. Shimmy .7 m, playback 1.1x and shimmy-idle .3 s blend are unchanged. Updated endpoint regression. Settled diagnostic shows hands shifted 2 cm toward the wall before IK, unchanged rig/body and identical foot positions/clearance compared with the pre-change pose. Contact remains reach-limited (roughly 6.6/7.4 cm 3D error); this is not a complete hand-contact fix. Manual visual review required, particularly shoulders/chest deformation and knee clearance.
+
+# Revert Braced Hang visual wall shift
+
+Reverted the 3 cm toward-wall visual shift at user request because of knee-clearance concerns. Removed its export and parent-space shift calculation; restored vertical-only rig positioning. The -23 cm vertical baseline and all movement/IK tuning remain unchanged. No alternative hand-contact adjustment implemented in this revert.
+
+# Braced Hang visual wall shift
+
+Added braced_hang_visual_wall_offset=.03 m: shared rig baseline moves 3 cm toward the validated wall, converted from world wall normal to rig-parent local space. Uses the same family blend as the -23 cm vertical offset, including pull-up fade and exit restoration; reconstructs from saved rig_base without accumulation. Gameplay transforms, hand orientation, IK targets/limits and movement tuning are unchanged.
+
+Settled diagnostic confirms rig offset (0,-.23,-.03) on the fixture, unchanged body/anchor, and ~2 cm toe wall clearance on both feet. Actual hand corrections are ~3.0/4.6 cm, but remaining reach-limited contact error is still ~5.8/6.7 cm in 3D; this is an incremental improvement, not verified perfect wall contact. Visual play-test required.
+
+# Hop range and shimmy-idle blend
+
+Both lateral hops now travel 2.5 m (shared override remains enabled); expanded the inspector range to 3 m. Only HangShimmyLeft/Right -> HangIdle crossfades increased from .12 to .30 seconds. Hop blends, .7 m shimmy distance, 1.1x lateral playback, authored profiles and collision validation remain unchanged. Updated the tuning test for endpoints and per-transition blend values.
+
+# Lateral distance and playback tuning
+
+Requested tuning: shimmy left/right now .70 m, hop left/right 2.00 m. Authored-hop-distance mode is disabled so both hops honor the shared 2 m override. All four lateral AnimationNodeAnimation timelines run at 1.10x via a custom stretched timeline; the controller uses the same shortened duration to sample the authored motion profiles. Nominal durations are 1.091 s shimmies, 1.394 s left hop, 1.545 s right hop. Other animation states and source resources are unchanged. Existing -23 cm shared visual baseline remains intact.
+
+Added test_hang_lateral_tuning_v2 to verify per-state 1.10x timelines, synchronized body motion, measured completion time, exact .7/2 m endpoints and no left/right pair drift. Previous visual/contact caveats remain; this tuning does not claim to resolve them.
+
+# Shared Braced Hang baseline — additional 13 cm lowering
+
+User-requested visual-only tuning: braced_hang_visual_vertical_offset changed from -.10 to -.23 m, with its inspector range expanded. All existing family ownership and entry/exit/pull-up blending remain unchanged. No gameplay anchors, capsule, paths, camera or IK targets/limits changed.
+
+Settled diagnostic: actual hand displacement is now about 4.4 cm left / 5.9 cm right, but this alone is not proof of better contact. Raw wrists sit about 4.4–4.7 cm below the lip; reach-limited solved wrists sit about 5.8–6.4 cm below it instead of meeting the -1 cm target. Feet retain ~2 cm wall clearance. Existing -10 cm baseline/contact assertions are intentionally not relaxed to certify this visual tuning; play-test required, particularly early pull-up and final wrist contact.
+
+# Shared Braced Hang visual baseline
+
+Consolidated the existing -5 cm rig offset into a shared -10 cm baseline (braced_hang_visual_vertical_offset). Applied only to VisualRoot/MasterRig using the cached normal position, not CharacterBody, capsule, gameplay anchors or individual bones. Catch/settle blends in over .20 s; idle, shimmy and hop retain it continuously. Pull-up retains full offset through 35%, eases to zero across 35–85% using smoothstep, and is back at normal visual alignment before the gameplay handoff. Release/interruption restores the cached baseline using the existing .12 s visual blend-out. Visual weighting is now separate from the existing hand/foot contact weight, so entering pull-up no longer removes the baseline immediately. No accumulation on repeated entry.
+
+Retuned the shared below-lip hand target from -7.5 cm to -1 cm and reduced the correction cap from 22 cm to 16 cm. Early pull-up now shares that below-lip target, returning to its existing target as hand support releases. Idle measured corrections dropped from 22 cm on both arms to 13.44 cm left / 14.12 cm right (~39%/36% reduction). Remaining correction includes ~10 cm of wall-normal mismatch, so this is not yet a few-centimeter-only correction. Reach constraints can leave ~1–2 cm idle target error and ~3.2 cm early pull-up error; no reach limits were relaxed. The hoist test explicitly records the new 3.5 cm contact tolerance rather than claiming the prior ~2.4 mm match remains intact.
+
+Existing clip normalization, authored lateral trajectories, and sprint-tail compensation solve separate motion/retargeting problems and remain unchanged. No new per-clip pose patch was added. Foot IK still samples the post-offset pose and changes only wall-normal contact: measured idle toe clearance remains ~2 cm and correction amounts remain ~4.0/2.7 cm. No foot IK parameter changes. Debug now shows shared visual/contact weights, saved rig base, final rig position and actual limb correction magnitudes.
+
+Tests updated for exact -10 cm nonaccumulating baseline, catch/pull-up blend continuity, early pull-up ownership, zero offset before handoff, post-exit restoration, reduced bounded hand correction and unchanged wall-foot behavior. Idle visual, lateral, camera and gait-exit tests pass; hoist checks include the explicitly documented reach-limited tolerance. Manual review should focus on early pull-up hand contact and whether the remaining horizontal reach warrants a later separate adjustment. No camera, acquisition, locomotion, gameplay path or source GLB changes. Not committed/pushed.
+
+# Braced hops — individual authored distances
+
+Reviewed the supplied TRV_BRACED_HANG_HOP_LEFT/RIGHT.FBX files in an isolated inspection project (not imported into Everdeep). Their moving mixamo_com takes end at 1.473806 m left and 1.311351 m right, matching the imported GLB clips. The FBXs also contain a static Take 001; that is not the active gameplay animation. FBX moving durations are 1.5/1.6667 s versus GLB 1.5333/1.7 s (one extra frame); existing GLB playback timing is preserved.
+
+braced_hang_hop_use_authored_distance now defaults true. Left and right hops use their own measured distance, eliminating the shared 1.4 m scale factor. Existing braced_hang_hop_distance remains an optional override only when authored-distance mode is disabled. Debug markers/text reflect the actual per-side distances. The sampled trajectory, vertical arc, overshoot, root compensation and collision checks are retained. Shimmy, IK, camera and other traversal actions are unchanged.
+
+Tests assert exact raw authored distances, profile matching, final endpoints and correct nonzero displacement after a left/right pair (left travels about 16.25 cm farther than right; that difference is authored, not drift).
+
+# Braced Hang lateral authored-motion refinement
+
+Confirmed runtime assignments are TRV_BRACED_HANG_SHIMMY_LEFT, TRV_BRACED_HANG_SHIMMY_RIGHT, TRV_BRACED_HANG_HOP_LEFT and TRV_BRACED_HANG_HOP_RIGHT. No Free Hang clip is assigned. Replaced the generic smoothstep travel windows with profiles sampled from unmodified private animation copies (241 samples per clip). Playback durations/speeds are unchanged.
+
+Measurements in meters: shimmy raw hip net travel is effectively zero in both directions. These are in-place cycles, so dividing by raw hip distance would be invalid. Supporting-wrist backward displacement reconstructs the missing travel, with support changing from trailing to leading hand at 35% (visible reach arrival in source pose samples). Add the authored hip lateral sway to that displacement before normalization. Derived travel is 0.54162 m left / 0.55355 m right; configured common shimmy distance is now 0.55 m (was .35). This is an inferred contact-based trajectory, not a claim of baked root travel.
+
+Hop authored net lateral travel is 1.47381 m left / 1.31135 m right; configured common distance remains 1.40 m, near their mean. Curves retain real source overshoot and reverse settling rather than clamping lateral progress to 1. Authored relative vertical peaks are .62749 m left / .77734 m right; both are now controller motion, not the previous 20 cm visual bob cap. Shimmy rise (.19065/.19212 m) is likewise sampled. Endpoint vertical drift is removed by subtracting the linear start/end difference; outward wall-normal motion is retained while inward motion is omitted for safety.
+
+CharacterBody follows the sampled lateral curve scaled to the configured distance, plus the vertical/retreat offsets. The stable ledge geometry anchor moves laterally only; transient body rise does not move the ledge/IK plane. Private runtime hip-position tracks are flat in all axes at the idle reference, so this movement occurs once, not through both skeleton and body. Limb rotation/IK settings remain untouched. Final profile sample is exactly (1,0,0), and completion converges to that endpoint without accumulated drift.
+
+Collision validation retains the existing continuous ledge query and additionally checks the full scaled arc, including lateral overshoot, using dense capsule sweeps before commitment. Each runtime move still checks current geometry and sweeps to the expected body position. An overhead obstacle intersecting only the arc rejects the action. Debug adds normalized lateral sample, vertical/retreat meters, expected/actual body position and error, final anchor, and an orange sampled-path line.
+
+Tests: lateral regression now compares every sampled hop lateral/vertical value against the raw imported clip, verifies flat runtime hip tracks, measures reconstructed shimmy distance, checks frame-by-frame body positions, exact endpoints, repeated movement, input lockout, gap/end/blocker rejection and overhead arc clearance. Pass; minimum toe clearance in the fixture is positive for all four actions (~1.0–1.5 cm). Existing camera, gait exit, hoist, acquisition, release and standard climb camera regression suites are rerun. Manual side-view review is still needed for artistic synchronization, especially the shimmy stance-switch inference and the right hop's larger vertical arc. No camera, acquisition, idle IK, pull-up, release or source GLB changes; no commit/push.
+
+# Braced Hang lateral shimmy and hop
+
+Added four runtime AnimationTree states: HangShimmyLeft/Right and HangHopLeft/Right, using the existing imported TRV_BRACED_HANG_SHIMMY_LEFT/RIGHT and TRV_BRACED_HANG_HOP_LEFT/RIGHT clips. No FBX imports or source GLB edits. HangPhase.LATERAL owns a committed action; A/D chooses direction, Shift chooses hop at initiation. Later modifier/direction changes cannot interrupt or restart it. W/S are rejected until idle returns. Holding a lateral direction can initiate the next action after completion without a new buffering framework. Grounded Shift is untouched.
+
+Authored measurements: shimmy clips are 1.20 s and have effectively zero net hip displacement (in-place); hops are 1.533 s left / 1.700 s right with about 1.474 m / 1.311 m authored lateral displacement. Initial controller travel is 0.35 m shimmy (~0.29 m/s average) and 1.40 m hop (~0.91/0.82 m/s average). Distances are exported independently; durations retain native clip timing. Smoothstep travel windows are 8–92% shimmy and 12–82% hop, read from the authoritative animation clock. Anchors use a saved start plus absolute displacement, not accumulated increments.
+
+player_hang_lateral_v2 is a separate query/action helper; automatic acquisition was not modified. The query samples every 2.5 cm, checks three hand-support offsets, bracing at four heights, same collider and normals (dot >= .995), and <=2 cm plane deviation. Standing capsule sweeps/overlaps cover body/head and an additional 30 cm outward envelope for visual hop retreat. Target and intermediate support must remain continuous; gaps, corners, different sources, ledge ends, protrusions and blocked targets reject without an animation. Each movement increment is revalidated. A new blocker cancels lateral motion at the last safe anchor and restores idle; existing source/contact-loss handling still releases safely. Future corner/gap/transfer features can build on the query but are deliberately unsupported now.
+
+Runtime animation copies cancel lateral root travel. Hip vertical motion is normalized to existing hang idle and bounded to 20 cm. Hops retain up to 30 cm authored outward hip retreat: removing this caused right-hop toe penetration, while retaining it keeps authored foot clearance without increasing existing IK caps. Shimmy uses alternating lead/trailing hand release windows (5–55% / 45–95%); hop releases across 8–25% and reacquires across 70–94%. Targets follow authored lateral wrist placement within the validated span, projected to the existing lip/wall offsets. Existing capped wall-aware feet and wrist orientation remain unchanged. Idle hand correction cap limitation remains as documented below.
+
+Added hang_lateral_course.tscn to the active hang course at local (37,0,-23): two 18 m walls, labeled shimmy/hop ends and an orange lateral obstruction, on a floor adjoining the original course. Existing debug shows tangent, requested target validity/reason, distance, bracing/clearance, animation/IK phase, and cyan shimmy/magenta hop target markers. Normal hang camera remains active; no new cinematic mode.
+
+Tests: test_hang_lateral_v2 covers four clips, exact distances, repeat holds, modifier/direction/W/S lockout, no drift, end rejection, obstruction before/during movement, internal same-collider gap rejection, hand release/contact, arm lengths, toe penetration and subsequent pull-up. Existing hang camera, gait exit, hoist, input-repress acquisition, release and standard climb-camera tests pass. Active playground headless smoke test passes. Manual play-testing is still needed for action feel and alternating hand contact, especially the longer right-hop clip. No commit/push performed for this implementation.
+
 # Braced Hang pull-up camera
 
 Camera-only refinement: player_camera_v2 reuses the existing mantle anchor, exponential follow and reunion branch for a running TO_CROUCH in traversal ACTIVE. This phase is committed only after request_up validates the destination; idle hang, blocked attempts and S/release do not acquire the hold. A captured validated landing anchor plus animation progress drives smoothstep framing from the starting anchor toward the top, independent of instantaneous capsule or IK corrections. Uses existing mantle follow response 5/s and top offset .4 m. Mouse orbit, pitch limits, SpringArm collision, distance controls and existing lock-camera precedence remain unchanged.

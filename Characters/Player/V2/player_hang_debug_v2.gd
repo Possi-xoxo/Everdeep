@@ -112,6 +112,19 @@ func _process(delta: float) -> void:
 			line(c.braces[1],c.braces[3],color)
 	if h.is_attached() or h.idle_pose.weight>0:
 		cross_at(h.alignment,Color.WHITE,.12)
+		if h.is_attached():
+			var lateral_tangent: Vector3=h.facing.cross(Vector3.UP)
+			arrow(h.alignment,h.alignment+lateral_tangent,Color.YELLOW)
+			for side in [-1,1]:
+				cross_at(h.alignment+lateral_tangent*side*h.braced_hang_shimmy_distance,Color.CYAN)
+				cross_at(h.alignment+lateral_tangent*side*h.lateral.travel_distance(h,side,true),Color.MAGENTA)
+			if h.lateral.last_query.has("target"):
+				arrow(h.alignment,h.lateral.last_query.target,Color.GREEN if h.lateral.last_query.valid else Color.RED)
+			if h.lateral.active:
+				for i in 48: line(h.lateral.path(float(i)/48),h.lateral.path(float(i+1)/48),Color.ORANGE)
+				cross_at(h.lateral.expected_position,Color.YELLOW)
+				cross_at(h.motor.global_position,Color.WHITE)
+				cross_at(h.lateral.start+h.lateral.displacement,Color.GREEN)
 		var visual: Vector3=h.motor.visual.global_position
 		var rig: Vector3=h.motor.get_node("AnimationController").rig.global_position
 		cross_at(visual,Color.YELLOW,.06)
