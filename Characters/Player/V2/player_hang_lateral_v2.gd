@@ -21,6 +21,19 @@ var displacement:=Vector3.ZERO
 var last_query: Dictionary={}
 var motion=preload("res://Characters/Player/V2/player_hang_motion_v2.gd").new()
 var expected_position:=Vector3.ZERO
+var idle_previews: Dictionary={}
+
+func preview_idle(h: Node,side: int,hop: bool) -> Dictionary:
+	if not hop: return preview(h,side,false)
+	# Idle HUD hints may lag a changed obstacle by at most one second.
+	# Actual requests always call fresh preview(), and motion rechecks collision.
+	var key: String=str([side,h.source,h.source.global_transform if is_instance_valid(h.source) else Transform3D.IDENTITY,h.alignment,h.wall_normal,travel_distance(h,side,true),h.braced_hang_hop_min_distance,h.braced_hang_partial_hops_enabled])
+	var cached: Dictionary=idle_previews.get(side,{})
+	var now: int=Time.get_ticks_msec()
+	if cached.get("key","")==key and now<int(cached.get("until",0)): return cached.result
+	var result:=preview(h,side,true)
+	idle_previews[side]={"key":key,"until":now+1000,"result":result}
+	return result
 
 func path(p: float) -> Vector3:
 	var sample: Vector3=motion.sample(state,p)
@@ -39,13 +52,82 @@ func travel_distance(h: Node,side: int,hop: bool) -> float:
 func query(h: Node,side: int,distance: float) -> Dictionary:
 	return curve.query(h,side,distance)
 
-func preview(h: Node,side: int,hop: bool) -> Dictionary:
+func preview(h: Node,side: int,hop: bool,arc_search: bool=false) -> Dictionary:
+	var desired: float=travel_distance(h,side,hop)
+	var result:=preview_distance(h,side,hop,desired)
+	if not hop: return result
+	var failed: Dictionary=result.duplicate(true)
+	var available: float=desired if result.valid else 0.0
+	if not result.valid and h.braced_hang_partial_hops_enabled:
+		# Bounded backward coarse search, then refine the furthest valid bracket.
+		# Every trial validates continuity AND the complete authored motion arc.
+		var upper: float=desired
+		if failed.reason!="AUTHORED_ARC_BLOCKED" and failed.samples.size()>1:
+			# The first rejected route sample already bounds continuous travel.
+			var steps: int=maxi(1,ceili(float(failed.route_length)/h.lateral_query_spacing))
+			upper=minf(desired,desired*float(failed.samples.size()-1)/steps)
+		var search_limit: float=upper
+		for i in range(1,13):
+			var trial: float=search_limit*(1-float(i)/12)
+			if trial<.001: break
+			var candidate:=preview_distance(h,side,true,trial,arc_search)
+			if candidate.valid:
+				available=trial
+				result=candidate
+				break
+			upper=trial
+		# Explicit minimum probe avoids skipping a useful very short hop.
+		if available==0 and h.braced_hang_hop_min_distance<=desired:
+			var candidate:=preview_distance(h,side,true,h.braced_hang_hop_min_distance,arc_search)
+			if candidate.valid:
+				available=h.braced_hang_hop_min_distance
+				upper=maxf(upper,available)
+				result=candidate
+		if available>0:
+			for refinement in 8:
+				var trial: float=(available+upper)*.5
+				var candidate:=preview_distance(h,side,true,trial,arc_search)
+				if candidate.valid: available=trial; result=candidate
+				else: upper=trial
+		else:
+			# Measure sub-minimum space for diagnostics, even though no hop plays.
+			var tiny:=preview_distance(h,side,true,.001,arc_search)
+			if tiny.valid:
+				available=.001
+				result=tiny
+				for refinement in 8:
+					var trial: float=(available+upper)*.5
+					var candidate:=preview_distance(h,side,true,trial,arc_search)
+					if candidate.valid: available=trial; result=candidate
+					else: upper=trial
+	if available>0 and not arc_search and not failed.valid:
+		var validated:=preview_distance(h,side,true,available)
+		if not validated.valid: return preview(h,side,hop,true)
+		result=validated
+	result["desired_distance"]=desired
+	result["available_distance"]=available
+	result["actual_distance"]=available if available>=h.braced_hang_hop_min_distance else 0.0
+	result["minimum_distance"]=h.braced_hang_hop_min_distance
+	result["start_anchor"]=h.alignment
+	result["full_target"]=h.alignment+h.facing.cross(Vector3.UP)*side*desired
+	result["blocked_samples"]=failed.samples if not failed.valid else []
+	result["limit_reason"]=failed.reason if not failed.valid else "NONE"
+	result["decision"]="FULL_HOP" if result.valid and is_equal_approx(available,desired) else ("PARTIAL_HOP" if result.actual_distance>0 else "NONE")
+	if result.actual_distance==0:
+		result.valid=false
+		result.reason="BELOW_MINIMUM_HOP" if available>0 else failed.reason
+	return result
+
+func preview_distance(h: Node,side: int,hop: bool,distance: float,validate_arc: bool=true) -> Dictionary:
 	var action: StringName=StringName("Hang"+("Hop" if hop else "Shimmy")+("Left" if side<0 else "Right"))
-	var distance: float=travel_distance(h,side,hop)
 	var peak: float=1.0
 	for value in motion.profiles[action]: peak=maxf(peak,value.x)
 	var result: Dictionary=query(h,side,distance*peak)
+	result["route_length"]=distance*peak
 	if not result.valid: return result
+	if not validate_arc:
+		result.target=curve.at_distance(result.samples,distance,distance*peak).anchor
+		return result
 	var previous: Vector3=h.alignment
 	for i in range(1,motion.SAMPLE_COUNT+1):
 		var value: Vector3=motion.sample(action,float(i)/motion.SAMPLE_COUNT)
@@ -56,6 +138,7 @@ func preview(h: Node,side: int,hop: bool) -> Dictionary:
 			result.reason="AUTHORED_ARC_BLOCKED"
 			return result
 		previous=point
+	result.target=curve.at_distance(result.samples,distance,distance*peak).anchor
 	return result
 
 func request(h: Node,side: int,shift: bool) -> bool:
@@ -66,11 +149,14 @@ func request(h: Node,side: int,shift: bool) -> bool:
 		h.transfer.search_side=side
 		last_query=preview(h,side,true)
 		h.transfer.continuous[side]=last_query.valid
-		if not last_query.valid: return h.transfer.request(h,side)
-		h.transfer.last_resolution="CONTINUOUS_HOP"
-	var distance: float=travel_distance(h,side,shift)
+		if not last_query.valid:
+			var accepted: bool=h.transfer.request(h,side)
+			last_query["decision"]="GAP_TRANSFER" if accepted else "NONE"
+			return accepted
+		h.transfer.last_resolution=last_query.decision
+	var distance: float=float(last_query.actual_distance) if shift else travel_distance(h,side,false)
 	action_distance=distance
-	last_query=query(h,side,distance)
+	if not shift: last_query=query(h,side,distance)
 	if not last_query.valid: return false
 	direction=side
 	hopping=shift
@@ -86,7 +172,7 @@ func request(h: Node,side: int,shift: bool) -> bool:
 	# Preserve source overshoot/settling, including the right hop's overshoot.
 	var peak: float=1
 	for sample in motion.profiles[state]: peak=maxf(peak,sample.x)
-	last_query=query(h,side,distance*peak)
+	if not shift: last_query=query(h,side,distance*peak)
 	if not last_query.valid: return false
 	route=last_query.samples
 	route_length=distance*peak
@@ -166,6 +252,31 @@ func hand_contact(h: Node,arm: Dictionary,animated: Vector3) -> Dictionary:
 	return {"target":target,"weight":weight}
 
 func debug_text(h: Node) -> String:
-	if h.transfer.active: return h.transfer.debug_text()
+	var summary: String=""
+	for side in [-1,1]:
+		var q: Dictionary=h.navigation.targets.get("LEFT HOP" if side<0 else "RIGHT HOP",{})
+		if last_query.get("direction",0)==side and (active or h.transfer.active): q=last_query
+		if q.has("desired_distance"):
+			summary+="\n%s HOP desired %.3f / available %.3f / min %.3f / actual %.3fm | %s | %s"%["L" if side<0 else "R",q.desired_distance,q.available_distance,q.minimum_distance,q.actual_distance,q.decision,q.get("limit_reason",q.reason)]
+	if h.transfer.active: return h.transfer.debug_text()+summary
 	var sample: Vector3=motion.sample(state,progress) if motion.profiles.has(state) else Vector3.ZERO
-	return "LATERAL %s | progress %.2f | %s\nShimmy %.2fm / Hop L %.3fm R %.3fm\nAuthored lateral %.3f / rise %.3fm / retreat %.3fm\nExpected %s / Actual %s / Error %.4fm\nFinal anchor %s / Tangent %s / Query %s" % [state if active else &"IDLE",progress,"RELEASE/REGRAB" if hopping else "LEDGE CONTACT",h.braced_hang_shimmy_distance,travel_distance(h,-1,true),travel_distance(h,1,true),sample.x,sample.y,sample.z,expected_position,h.motor.global_position,expected_position.distance_to(h.motor.global_position),start+displacement,h.facing.cross(Vector3.UP),str(last_query.get("reason","NONE"))]
+	return "LATERAL %s | progress %.2f | %s\nShimmy %.2fm / Hop L %.3fm R %.3fm\nAuthored lateral %.3f / rise %.3fm / retreat %.3fm\nExpected %s / Actual %s / Error %.4fm\nFinal anchor %s / Tangent %s / Query %s" % [state if active else &"IDLE",progress,"RELEASE/REGRAB" if hopping else "LEDGE CONTACT",h.braced_hang_shimmy_distance,travel_distance(h,-1,true),travel_distance(h,1,true),sample.x,sample.y,sample.z,expected_position,h.motor.global_position,expected_position.distance_to(h.motor.global_position),start+displacement,h.facing.cross(Vector3.UP),str(last_query.get("reason","NONE"))]+summary
+
+func draw(view: Node,h: Node) -> void:
+	for side in [-1,1]:
+		var q: Dictionary=h.navigation.targets.get("LEFT HOP" if side<0 else "RIGHT HOP",{})
+		if active and last_query.get("direction",0)==side: q=last_query
+		if not q.has("desired_distance"): continue
+		view.cross_at(q.start_anchor,Color.WHITE,.10)
+		view.cross_at(q.full_target,Color.MAGENTA,.16)
+		view.cross_at(q.target,Color.CYAN,.12)
+		if q.actual_distance>0: view.cross_at(q.target,Color.GREEN,.06)
+		view.cross_at(q.start_anchor+q.tangent*side*q.minimum_distance,Color.YELLOW,.08)
+		for points in [q.samples,q.blocked_samples]:
+			var covered: float=0
+			for i in range(1,points.size()):
+				var a: Vector3=points[i-1].get("anchor",points[i-1].edge-Vector3.UP*h.hang_vertical_offset)
+				var b: Vector3=points[i].get("anchor",points[i].edge-Vector3.UP*h.hang_vertical_offset)
+				covered+=a.distance_to(b)
+				if points==q.blocked_samples and covered<=float(q.route_length): continue
+				view.line(a,b,Color.CYAN if points==q.samples else Color.RED)

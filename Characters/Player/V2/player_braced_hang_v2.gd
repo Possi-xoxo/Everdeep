@@ -55,6 +55,8 @@ var vertical=preload("res://Characters/Player/V2/player_hang_vertical_v2.gd").ne
 @export_group("Lateral Hang")
 @export_range(.1,.8,.05) var braced_hang_shimmy_distance: float=.7
 @export_range(.5,3,.05) var braced_hang_hop_distance: float=3.0
+@export var braced_hang_partial_hops_enabled: bool=true
+@export_range(.1,.7,.01) var braced_hang_hop_min_distance: float=.30
 @export var braced_hang_hop_use_authored_distance: bool=false
 ## Prepared at scene load. Disable and restart play to restore authored Right Hop movement.
 @export var braced_hang_right_hop_mirror_left_curve: bool=false

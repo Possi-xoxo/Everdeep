@@ -118,7 +118,7 @@ func refresh(h: Node,delta: float=0,force: bool=false) -> void:
 	for side in [-1,1]:
 		for hop in [false,true]:
 			var key: String=("LEFT" if side<0 else "RIGHT")+(" HOP" if hop else " SHIMMY")
-			targets[key]=h.lateral.preview(h,side,hop)
+			targets[key]=h.lateral.preview_idle(h,side,hop)
 			if hop:
 				h.transfer.continuous[side]=targets[key].valid
 				if targets[key].valid:

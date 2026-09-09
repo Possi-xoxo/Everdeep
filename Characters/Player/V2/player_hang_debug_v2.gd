@@ -153,4 +153,5 @@ func _process(delta: float) -> void:
 	if h.is_attached(): h.navigation.draw(self,h)
 	if h.is_attached(): h.transfer.draw(self,h)
 	if h.is_attached(): h.outward.draw(self,h)
+	if h.is_attached(): h.lateral.draw(self,h)
 	mesh.surface_end()

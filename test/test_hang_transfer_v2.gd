@@ -15,6 +15,14 @@ func setup_transfer() -> void:
 	tree.callback_mode_process=AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 
 func run_transfer(side: int) -> Vector3:
+	# A useful continuous remainder now takes priority. Consume it before
+	# testing the unchanged remote-transfer path from the actual edge.
+	for attempt in 2:
+		if not hang.lateral.preview(hang,side,true).valid: break
+		check(hang.lateral.request(hang,side,true),"continuous remainder before gap")
+		for tick in 160:
+			await crouch_tick(false)
+			if not hang.lateral.active: break
 	check(hang.navigation.resolve(hang,"LATERAL",side,true),"gap input accepted")
 	check(hang.transfer.active and hang.lateral.active,"transfer uses lateral state")
 	if not hang.transfer.active: return body.position
