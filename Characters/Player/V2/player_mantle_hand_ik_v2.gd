@@ -121,6 +121,8 @@ func prepare_targets(delta: float) -> void:
 		if chest>=0:
 			var chest_pose: Transform3D=skeleton.get_bone_global_pose(chest)
 			var shift: Vector3=-mantle.wall_normal.normalized()*mantle.braced_hang_chest_wall_offset*mantle.idle_pose.visual_weight
+			if mantle.outward.active:
+				shift=-Vector3(mantle.outward.contact_target().normal)*mantle.braced_hang_chest_wall_offset*mantle.idle_pose.visual_weight*mantle.outward.contact_weight(mantle)
 			chest_pose.origin+=skeleton.global_basis.inverse()*shift
 			skeleton.set_bone_global_pose(chest,chest_pose)
 	if not captured or captured_source!=mantle.source or (captured_alignment!=mantle.alignment and not lateral_active): _capture_grips()
@@ -149,6 +151,16 @@ func prepare_targets(delta: float) -> void:
 		if mantle==motor.traversal.hang and mantle.top_entry.active:
 			arm.grip=mantle.idle_pose.hand_target(mantle,arm,pose.origin)
 			correction_cap=mantle.top_entry.maximum_positional_correction
+		elif mantle==motor.traversal.hang and mantle.transfer.active:
+			var contact: Dictionary=mantle.transfer.hand_contact(mantle,arm)
+			arm.grip=contact.target
+			contact_weight*=contact.weight
+			correction_cap=max_hand_correction_distance
+		elif mantle==motor.traversal.hang and mantle.outward.active:
+			var contact: Dictionary=mantle.outward.hand_contact(mantle,arm)
+			arm.grip=contact.target
+			contact_weight*=contact.weight
+			correction_cap=max_hand_correction_distance
 		elif lateral_active:
 			var contact: Dictionary=mantle.lateral.hand_contact(mantle,arm,pose.origin)
 			arm.grip=contact.target

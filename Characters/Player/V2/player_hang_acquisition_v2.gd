@@ -75,7 +75,7 @@ func query(h: Node,delta: float,current_intent: Vector3=Vector3.INF) -> Dictiona
 	candidates.clear()
 	var m=h.motor
 	base=m.global_position
-	forward=-m.visual.global_basis.z
+	forward=h.navigation.catch_forward(h)
 	forward.y=0
 	forward=forward.normalized()
 	motion=Vector3(m.velocity.x,0,m.velocity.z)

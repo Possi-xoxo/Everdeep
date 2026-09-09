@@ -51,3 +51,8 @@ rotation_degrees = Vector3(0, 180, 0)
 rotation_degrees = Vector3(-55, -25, 0)
 light_energy = 1.5
 shadow_enabled = true
+
+[node name="OppositeFillLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(55, 155, 0)
+light_energy = 0.7
+shadow_enabled = false

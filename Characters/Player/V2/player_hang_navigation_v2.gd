@@ -22,12 +22,17 @@ var launch_velocity:=Vector3.ZERO
 var departure_start:=Vector3.ZERO
 var departure: Array[Vector3]=[]
 var jump_root_delta:=Vector3.ZERO
+var jump_turn: Array[float]=[]
 var last_input: String="NONE"
 
 func invalidate() -> void: clock=0
 
 func prepare(h: Node,player: AnimationPlayer,reference: Vector3,idle_z: float) -> void:
 	var clip: Animation=player.get_animation(JUMP_CLIP)
+	h.outward.prepare(h,player,reference,idle_z)
+	# Preserve the original jump's unwrapped root turn independently of the
+	# optional transfer toggle, runtime catch blend and transfer playback rate.
+	jump_turn.assign(h.outward.source_turn)
 	jump_length=clip.length
 	var track: int=h.hip_track(clip)
 	var first: Vector3=clip.position_track_interpolate(track,0)
@@ -103,14 +108,25 @@ func refresh(h: Node,delta: float=0,force: bool=false) -> void:
 	clock-=delta
 	if not force and clock>0: return
 	clock=.25
-	context_id="%s/%s/%s" % [h.source.get_instance_id(),h.ledge_edge.snapped(Vector3.ONE*.01),h.wall_normal.snapped(Vector3.ONE*.01)]
+	var next_context: String="%s/%s/%s" % [h.source.get_instance_id(),h.ledge_edge.snapped(Vector3.ONE*.01),h.wall_normal.snapped(Vector3.ONE*.01)]
+	if context_id!=next_context:
+		h.transfer.previews.clear()
+		h.transfer.candidate_sets.clear()
+	context_id=next_context
 	h.vertical.refresh(h,0,true)
 	safe_ground=release_query(h)
 	for side in [-1,1]:
 		for hop in [false,true]:
 			var key: String=("LEFT" if side<0 else "RIGHT")+(" HOP" if hop else " SHIMMY")
 			targets[key]=h.lateral.preview(h,side,hop)
+			if hop:
+				h.transfer.continuous[side]=targets[key].valid
+				if targets[key].valid:
+					h.transfer.previews.erase(side)
+					h.transfer.candidate_sets.erase(side)
+				elif h.debug_detection_enabled(): h.transfer.previews[side]=h.transfer.query(h,side)
 	scan_interaction(h)
+	if h.debug_detection_enabled(): h.outward.query(h,h.outward.preview_side)
 
 func resolve(h: Node,action: String,side: float=0,shift: bool=false) -> bool:
 	if not h.is_attached() or h.hang_phase!=h.HangPhase.IDLE or interacting: return false
@@ -127,6 +143,9 @@ func resolve(h: Node,action: String,side: float=0,shift: bool=false) -> bool:
 		last_input="E → INTERACT"
 		return true
 	if action=="JUMP":
+		if h.outward.request(h,side):
+			last_input="SPACE → OUTWARD_TRANSFER"
+			return true
 		launch_velocity=h.wall_normal*h.braced_hang_jump_outward_speed+Vector3.UP*h.braced_hang_jump_up_speed+h.facing.cross(Vector3.UP)*clampf(side,-1,1)*h.braced_hang_jump_lateral_influence
 		departure_start=h.motor.global_position
 		jump_time=0
@@ -186,6 +205,19 @@ func jump_step(h: Node,delta: float) -> bool:
 	h.motor.animation_state.is_airborne=true
 	h.motor.animation_state.jump_started=false
 	return true
+
+func catch_forward(h: Node) -> Vector3:
+	var forward: Vector3=-h.motor.visual.global_basis.z
+	forward.y=0
+	forward=forward.normalized()
+	var playback=h.motor.get_node("AnimationController")._playback
+	if h.running or h.motor.animation_state.is_grounded or playback==null or playback.get_current_node()!=&"HangJumpOff" or jump_turn.size()<2:
+		return forward
+	# Use the evaluated animation clock, not the motor's ahead-of-pose timer.
+	# Skeleton +Z maps to DOWN: its authored turn is negative world Y yaw.
+	var index: float=clampf(playback.get_current_play_position()/jump_length,0,1)*(jump_turn.size()-1)
+	var low: int=mini(int(index),jump_turn.size()-2)
+	return forward.rotated(Vector3.UP,-lerpf(jump_turn[low],jump_turn[low+1],index-low))
 
 func air_tick(h: Node,delta: float) -> void:
 	if jumping or not jump_visual: return

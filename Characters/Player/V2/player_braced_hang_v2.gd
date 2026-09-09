@@ -1,6 +1,28 @@
 extends Node
-## Automatic braced hang with continuous same-wall lateral actions. No Free Hang.
-enum HangPhase { NONE, CATCH, SETTLE, IDLE, TO_CROUCH, RELEASE, LATERAL, VERTICAL, JUMP_OFF, TOP_ENTRY }
+## Automatic braced hang and committed static-ledge traversal. No Free Hang.
+enum HangPhase { NONE, CATCH, SETTLE, IDLE, TO_CROUCH, RELEASE, LATERAL, VERTICAL, JUMP_OFF, TOP_ENTRY, OUTWARD }
+@export_group("Outward Hang Transfer")
+## False uses the normal wall-jump impulse and ordinary airborne ledge catch.
+## Changing this during a committed transfer affects the next jump only.
+@export var automatic_ledge_to_ledge_jump_enabled: bool=false
+@export_range(1,5,.1) var braced_hang_transfer_outward_max_distance: float=3.3
+@export_range(.1,1,.05) var braced_hang_transfer_outward_max_vertical_difference: float=.5
+@export_range(5,45,1) var braced_hang_transfer_outward_horizontal_angle: float=30
+@export_range(5,40,1) var braced_hang_transfer_outward_vertical_angle: float=25
+@export_range(0,1,.05) var braced_hang_transfer_directional_input_bias: float=.6
+@export_range(1,2.5,.05) var braced_hang_outward_transfer_max_motion_scale: float=1.8
+@export_range(.5,2,.1) var outward_min_distance: float=1
+@export_range(5,45,1) var outward_destination_wall_angle: float=35
+@export_range(1,8,.1) var outward_alignment_score_weight: float=4
+@export_range(0,1,.05) var outward_distance_score_weight: float=.15
+@export_range(0,1,.05) var outward_height_score_weight: float=.1
+@export_range(.05,.5,.01) var outward_pose_arrival_blend_time: float=.30
+@export_range(.5,2,.005) var outward_playback_speed: float=1.375
+@export_range(.5,2,.0025) var outward_catch_playback_speed: float=1.0625
+@export_range(9,30,1) var outward_catch_start_frame: float=16
+@export_range(.65,.95,.01) var outward_hand_arrival: float=.78
+@export_range(.7,.95,.01) var outward_foot_arrival: float=.86
+var outward=preload("res://Characters/Player/V2/player_hang_outward_v2.gd").new()
 var top_entry: Node3D
 @export_group("Top-Down Hang Entry")
 @export_range(.5,2,.05) var top_down_hang_playback_speed: float=.9
@@ -36,11 +58,25 @@ var vertical=preload("res://Characters/Player/V2/player_hang_vertical_v2.gd").ne
 @export var braced_hang_hop_use_authored_distance: bool=false
 ## Prepared at scene load. Disable and restart play to restore authored Right Hop movement.
 @export var braced_hang_right_hop_mirror_left_curve: bool=false
+## Runtime movement only. Disable and restart to restore the original settling slide.
+@export var braced_hang_right_hop_reduce_tail_slide: bool=true
+@export_range(.06,.15,.01) var braced_hang_right_hop_tail_overshoot: float=.08
 @export_range(.5,2,.05) var braced_hang_lateral_playback_speed: float=1.1
 @export_range(.01,.05,.005) var lateral_query_spacing: float=.025
 @export_range(.005,.04,.005) var lateral_height_tolerance: float=.02
 @export_range(.98,1,.001) var lateral_normal_dot: float=.995
 var lateral=preload("res://Characters/Player/V2/player_hang_lateral_v2.gd").new()
+@export_group("Horizontal Gap Transfer")
+@export_range(1,6,.1) var braced_hang_transfer_max_horizontal_distance: float=4.5
+@export_range(.05,.5,.05) var braced_hang_transfer_max_vertical_difference: float=.35
+@export_range(.05,.5,.025) var braced_hang_transfer_min_gap: float=.15
+@export_range(.05,.3,.025) var braced_hang_transfer_forward_back_tolerance: float=.2
+@export_range(0,15,1) var braced_hang_transfer_wall_normal_tolerance: float=10
+@export_range(0,15,1) var braced_hang_transfer_facing_tolerance: float=10
+@export_range(1,2,.05) var braced_hang_transfer_max_motion_scale: float=1.5
+@export_range(.5,.85,.01) var braced_hang_transfer_hand_arrival: float=.70
+@export_range(.6,.9,.01) var braced_hang_transfer_foot_arrival: float=.80
+var transfer=preload("res://Characters/Player/V2/player_hang_transfer_v2.gd").new()
 const RELEASE_CLIP: StringName=&"TRV_BRACED_HANG_DROP_AND_LAND"
 const RELEASE_START: float=9.0/30.0
 const RELEASE_END: float=18.0/30.0
@@ -139,6 +175,14 @@ func pose_owned() -> bool: return is_attached() or (release_active and release_e
 func project_foot(controller: Node,leg: Dictionary,pose: Transform3D) -> Dictionary:
 	var contact=controller.ClimbContact
 	var samples: Array=[pose.origin,controller._world(controller.skeleton.find_bone("mixamorig_"+leg.side+"ToeBase")).origin]
+	if outward.active:
+		var target: Dictionary=outward.contact_target()
+		var weight: float=outward.contact_weight(self,true) if controller.enabled and controller.climb_foot_ik_enabled else 0.0
+		return contact._surface(controller,leg,pose,samples,target.edge,target.normal,braced_hang_foot_wall_clearance,braced_hang_max_foot_correction,weight,"OUTWARD_WALL",foot_contact_response,self,target.source)
+	if transfer.active:
+		var target: Dictionary=transfer.contact_target(self)
+		var weight: float=transfer.contact_weight(self,true) if controller.enabled and controller.climb_foot_ik_enabled else 0.0
+		return contact._surface(controller,leg,pose,samples,target.edge,target.normal,braced_hang_foot_wall_clearance,braced_hang_max_foot_correction,weight,"TRANSFER_WALL",foot_contact_response,self,target.source)
 	if vertical.active:
 		var target: Dictionary=vertical.contact_target()
 		var weight: float=vertical.contact_weight() if controller.enabled and controller.climb_foot_ik_enabled else 0.0
@@ -478,14 +522,18 @@ func step(delta: float) -> bool:
 		if exit_elapsed>=owner_controller.mantle.mantle_exit_blend_time: owner_controller.finish("HANG_TO_CROUCH_COMPLETED")
 		return false
 	if not is_instance_valid(source) or source.is_queued_for_deletion() or not source.global_transform.is_equal_approx(source_transform): owner_controller.finish("HANG_SOURCE_LOST"); return false
-	if not vertical.active and not contact_still_exists(): owner_controller.finish("HANG_CONTACT_LOST"); return false
+	if not vertical.active and not transfer.active and not outward.active and not contact_still_exists(): owner_controller.finish("HANG_CONTACT_LOST"); return false
 	navigation.advance(self,delta)
+	if outward.active and not outward.advance(self,delta): return false
 	if vertical.active and not vertical.advance(self,delta): return false
-	if lateral.active: lateral.advance(self,delta)
+	if transfer.active:
+		if not transfer.advance(self,delta): return false
+	elif lateral.active: lateral.advance(self,delta)
 	motor.velocity=Vector3.ZERO
 	var target:=alignment
 	if lateral.active: target=lateral.expected_position
 	if vertical.active: target=vertical.expected_position
+	if outward.active: target=outward.expected_position
 	if hang_phase in [HangPhase.CATCH,HangPhase.SETTLE]:
 		elapsed+=delta
 		hang_phase=HangPhase.SETTLE
@@ -503,6 +551,8 @@ func step(delta: float) -> bool:
 	if not clear_segment(motor.global_position,target,motor.crouch.collision.shape.height): owner_controller.finish("HANG_BLOCKED"); return false
 	if motor.move_and_collide(target-motor.global_position)!=null and motor.global_position.distance_to(target)>.02: owner_controller.finish("HANG_BLOCKED"); return false
 	if vertical.active: vertical.complete(self)
+	if transfer.active: transfer.complete(self)
+	if outward.active: outward.complete(self)
 	var s=motor.animation_state
 	s.is_grounded=false
 	s.is_airborne=true
@@ -532,7 +582,9 @@ func step(delta: float) -> bool:
 
 func restore(reason: String) -> void:
 	if not running: return
+	outward.active=false
 	top_entry.active=false
+	transfer.active=false
 	lateral.active=false
 	vertical.active=false
 	navigation.interacting=false

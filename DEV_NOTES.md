@@ -1,3 +1,140 @@
+# Outward transfer: independent jump-to-hang catch and faster playback
+
+Normal hang-jump recatch facing: acquisition now obtains its facing from `navigation.catch_forward()`. Only while airborne, detached, and actually playing `HangJumpOff`, this combines the visual parent's facing with the original clip's sampled root turn at the evaluated playback time. The sample is independent of optional transfer speed/catch blending and respects the imported skeleton's inverted yaw axis. Other states use the original parent facing. No facing-cone widening, momentum change, remote transfer, reach extension or bypass of approach/body/head/regrab checks. `test_hang_jump_recatch_v2.gd` reproduces the previously rejected opposite ledge with default automatic transfers off; it now catches and settles with all safeguards passing. General acquisition regression also passes.
+
+Reversible toggle: PlayerV2 → TraversalController → BracedHang → Outward Hang Transfer → `automatic_ledge_to_ledge_jump_enabled` (default **false**). False disables only the contextual outward target query/commit; Jump falls through to the original wall jump and ordinary airborne acquisition remains enabled, with its existing regrab safeguards. True restores automatic outward transfers. Horizontal/vertical hang hops, top-down entry, tuned speeds and source clips are unchanged. Toggling during an already committed transfer does not interrupt it; the next Jump uses the new setting. `test_hang_outward_toggle_v2.gd` covers disabled ordinary catch/jump and re-enabled transfer against an eligible opposing wall.
+
+Catch-only slowdown / ground landing fix: `outward_catch_playback_speed` is now **1.0625x**, 15% slower than 1.25x; release remains **1.375x**. Catch source frames and travel path are unchanged. Ground contact now cancels normal hang-jump presentation in the animation controller using the current motor result, before the landing-edge branch. Previously `air_tick` checked the previous support state before collisions, allowing the jump-visual early return to swallow an early landing; the next frame had no new landing edge and could retain airborne presentation. `test_hang_jump_ground_v2.gd` covers low ground and early elevated-ground contact, landing/idle recovery, evaluated playback and subsequent walking without pressing jump again.
+
+Validation: hang-jump ground landing, outward pose and outward traversal tests pass. Broader `test_idle_passive_fall_v2.gd` reports a `stair descent completed` failure; stair movement was not changed in this pass and that separate failure remains unresolved.
+
+Release-only speed follow-up: `outward_playback_speed` is now **1.375x** (another 10% over 1.25x), reducing jump travel from 1.04s to approximately **0.945s**. Catch sampling now has its own `outward_catch_playback_speed = 1.25x`, preserving the catch's existing speed and source frames. The catch starts earlier with the accelerated departure, but is not itself accelerated. Travel distance/path, normal jump-off and top-down drop are unchanged. This supersedes the shared-rate timing below.
+
+The wall-to-wall sequence now plays `TRV_JUMP_FROM_BRACED_HANG` into the catch/recovery portion of `TRV_JUMPING_TO_BRACED_HANG`, then normal hang idle. It no longer morphs straight from the jump into a static idle pose. The generated `HangOutward_Runtime` timeline uses a deep copy of the full prepared `HangTopEntry_Full` clip; it never edits that clip, the imported GLB, or the separate short automatic-catch clip. Existing grounded top-down drop timing, path and camera remain unchanged.
+
+Transfer-only `outward_playback_speed = 1.25`: 1.30 source seconds of jump travel now take 1.04 real seconds. The catch starts at source frame 16, after its grounded takeoff/turn; source frames 16–46 play at the same 1.25x rate. It starts blending at 0.80 seconds, fully takes over by arrival at 1.04 seconds, and finishes at about 1.60 seconds. Thus the final 0.56 seconds are actual catch recovery at the destination, not extra airborne travel. The original 0.30 source-second overlap becomes 0.24 real seconds. The existing .12-second exit blend to HangIdle remains. Both jump and catch root travel are canceled in the runtime pose: the unchanged collision-checked transfer path controls motion, then holds the destination anchor while recovery completes. Existing contact limits/envelopes remain in force.
+
+Backups: Codex workspace `work/before_outward_catch/`. Pose regression verifies accelerated jump poses, actual catch clip poses during recovery, full top-down clip length and separate automatic catch length. Outward traversal tests also require a real recovery phase at the destination before idle. Top-down entry/camera and normal jump navigation regressions cover isolation. The previous implementation notes below describe the earlier jump-to-idle refinement; this section supersedes that arrival behavior and its 1.30-second playback duration.
+
+# Contextual outward / wall-to-wall Braced Hang transfer
+
+Jump in stable `BRACED_HANG_IDLE` now resolves centrally in `player_hang_navigation_v2.gd`: fresh outward query -> fully validated committed `OUTWARD` traversal if available -> otherwise the existing `JUMP_FROM_BRACED_HANG` path/impulse/airborne behavior. The fallback code is unchanged. No release and midair retarget, automatic-grab dependency, or second jump trigger. Existing event-based Jump input is retained; busy traversal rejects new actions until stable idle. A/D shimmy and Shift+A/D horizontal transfers retain their existing resolution paths.
+
+## Search and defaults
+
+The new `player_hang_outward_v2.gd` helper searches a limited wall-relative fan, not 360 degrees. Default direction is the source wall normal. A/D contributes the current ledge tangent with **0.60** bias, normalized (about 31 degrees at full input). Jump needs no directional input. W/S are deliberately unchanged and do not add another targeting meaning in this initial pass.
+
+| BracedHang / Outward Hang Transfer setting | Default |
+| --- | --- |
+| Maximum straight-line anchor-to-anchor distance | 3.30 m |
+| Minimum distance | 1.00 m |
+| Maximum absolute ledge height difference | 0.50 m |
+| Horizontal cone half-angle about biased direction | 30 degrees |
+| Maximum target elevation/depression angle | 25 degrees |
+| Destination normal alignment to incoming direction | within 35 degrees |
+| Maximum horizontal motion scale vs source displacement | 1.80x |
+| Scoring: direction alignment / distance / height | 4.00 / 0.15 / 0.10 |
+| Rotation timing / direction | Same as normal jump-off, with final catch alignment |
+| Transfer-only pose blend into hang | Final 0.30 seconds (frames 30–39) |
+| Destination hands / feet begin acquisition | 78% / 86% |
+
+Fan uses 25 horizontal ray directions and five height bands spanning the configured vertical allowance. Face hits lead to downward top probes and geometry-derived anchors. Eligibility requires a different static, non-Animatable body; shared bilateral hand/top/brace validation; support at multiple depths under both hands; standing capsule clearance; and all range, elevation, scale and facing limits. Departure always stays in the outward hemisphere (at most 60 degrees from the original wall normal). Destination walls must oppose the source by at least 120 degrees: no perpendicular corner hopping. Gradually curved local contacts may qualify under the same normal/support tolerances; no curved traversal code changed.
+
+Valid candidates are deterministically sorted by `4*(1-direction_dot) + .15*distance/max_distance + .10*abs(height)/max_height + .05*wall_angle/max_wall_angle`. Lower score wins, with stable fan order for equal scores. Thus intent dominates a slightly nearer off-axis target. Invalid or blocked candidates are skipped before commitment. Remote previews run only with traversal debug enabled; actual Jump always revalidates. Debug reports the last actual decision separately from the current preview.
+
+## Authored movement, orientation and arrival
+
+Source is **TRV_JUMP_FROM_BRACED_HANG**, 1.30 seconds / 39 source frames. Inspection measured about **1.87546 m** net outward hips translation, a push/upward phase with wrists near the source through frame 12, and an authored body turn beginning around frames 12–15. Its ending pose is free flight, not a bilateral hang catch.
+
+A private `HangOutward_Runtime` alias is sampled at 241 points BEFORE the fallback clip's existing hip flattening. Horizontal displacement retains source acceleration, with a C1 soft ease only over the final 30% of normalized distance to reach zero arrival speed. Vertical lift follows sampled source hips, removing endpoint drift and introducing destination-height bias gradually over 25–100% progress. Controller movement is scaled to the exact validated anchor, not linearly interpolated over time. Horizontal scale is checked against the actual 1.87546 m source displacement; the separate 3.3 m limit remains authoritative. Transverse hip drift is not used as target steering.
+
+This clip contains root yaw. The outward-only private alias removes that yaw from its root while retaining pitch/roll, and the controller restores the actual unwrapped source angle at the same clip time. The imported skeleton's +Z axis points DOWN in visual space, so this must use negative Y yaw. The earlier normalized positive half-turn reversed the normal jump's twist and changed its timing. A/D still biases target selection, but no longer reverses the authored animation turn. Only the final 0.30 seconds (frames 30–39) add the shortest remaining destination-facing correction while blending skeletal poses to hang idle. Source key times are retained alongside dense catch samples. At completion the normal .12-second HangIdle crossfade remains; no extra settle lockout. The original GLB and normal jump-off animation are untouched.
+
+Jump-flow refinement: target selection, movement profile, duration (1.30s), collision preflight, source/destination contact envelopes, camera and other traversal modes are unchanged. `outward_pose_arrival_blend_time` replaces the old percentage-based pose/rotation controls. `test_hang_outward_pose_v2.gd` compares every source frame through frame 30 against normal jump-off: root world orientation within 0.10 degrees and limb rotations within 0.06 degrees in the measured run, with exact destination-facing closure and existing idle pose at completion. This preserves the normal jump's pose flow, not its untargeted ballistic trajectory. Pre-edit helper/settings/notes are backed up outside the project in the Codex workspace at `work/before_outward_jump_flow/`. Validation passed: outward pose, outward traversal, outward course, normal hang navigation, horizontal transfer and vertical hop suites. Rendered departure/flight/catch/settled poses were inspected. Editor import completed without script errors; sandbox certificate/editor-settings warnings remain unrelated.
+
+Source hands/feet fade out over **23–36%** (~frames 9–14). Midflight is free of both contact sets. Destination hands blend in **78–100%** (~30–39), feet **86–100%** (~34–39), using actual destination geometry and existing reach/correction limits. The existing chest-only contact offset follows the owning wall and fades out in flight, rather than pulling toward the abandoned wall. Shared body offset, hand orientation, leg lengths and ordinary idle contact tuning are preserved.
+
+## Commitment, collisions and camera
+
+Every candidate's complete curved path gets 240 standing-capsule sweeps before commit; endpoint volume/contact checks are separate. During travel the existing hang motor collision-checks every actual movement step. Source/destination transforms and existence are checked without rescanning for replacement targets. At arrival, contact validation runs again, then source, edge, normal, top, alignment and facing switch atomically and navigation caches invalidate. New obstruction or lost/moved geometry aborts through ordinary traversal cleanup to airborne, allowing normal auto-grab after existing cooldown behavior. `hang.running` remains authoritative throughout a successful transfer, so generic airborne catch cannot steal it.
+
+Camera code is unchanged. The ordinary world-follow/orbit behavior is reused. Tests assert no sudden camera-origin changes during transfer and unchanged orbit yaw; rendered side-view samples confirm departure, flight/turn and stable arrival. No new cinematic hold was needed.
+
+## Permanent course and diagnostics
+
+New `hang_outward_course.gd/.tscn` is instanced in Braced Hang at local **(165,0,-80)**, beyond the horizontal-transfer section, with a connecting ground strip. It includes straight/same-height, +/-25 cm, left/right bias, 3.25 m near-maximum, 3.5 m out-of-range, overhang-blocked, no-brace, two-target intent selection, no-target fallback, opposed vertical chains, shimmy continuation, and horizontal-gap -> outward stations. Compact versions are permanent nodes in BOTH Vertical and Mixed at local **(24,0,8)**: hop up wall A, cross to B, continue upward, return. New floor surfaces are slightly lower to avoid visual overlap with existing floors.
+
+Ctrl+F3 traversal debug places outward direction/input, candidate count, selected target, range/height, alignment, wall angle, scale, path/rejection reason and `TRANSFER / JUMP_OFF` decision at the top of the existing transparent overlay. Geometry shows wall/aim arrows, bounded fan, candidates, destination normal/anchor, sampled path, capsule-sized corridor and source/destination hand targets. FPS and all unrelated UI remain unchanged.
+
+New tests: `test_hang_outward_v2.gd` (round-trip, height retargeting, exact path/anchor/facing, actual hand/foot release, camera and fallback) and `test_hang_outward_course_v2.gd` (permanent valid/invalid stations, input scoring, chains, shimmy/vertical/horizontal integration, motion-scale limit, moved/deleted targets and new live obstruction). Existing focused hang/navigation/acquisition/camera/mantle/crouch/right-hop-tail regressions are retained. The older legacy player/dodge test limitations documented below are not changed by this task. Headless startup and rendered samples checked; Windows certificate-store warning remains unrelated. Editor import completed but the sandbox could not save global Godot editor preferences; project play/startup is unaffected.
+
+Changed integration files: `player_braced_hang_v2.gd`, `player_hang_navigation_v2.gd`, `player_animation_v2.gd`, `player_v2.gd`, `player_mantle_hand_ik_v2.gd`, `player_hang_debug_v2.gd`, `player_debug_v2.gd`, and the Hang/Vertical/Mixed course scenes; added outward helper/course/tests. No camera script, existing hop curve, source animation, or ordinary movement tuning changed. Future Free Hang can reuse the committed origin/destination/path contract with a distinct contact validator, but Free Hang, moving ledges, corners, swinging and grapple behavior are deliberately absent.
+
+Final verification: both new outward tests passed (including +/-50 cm boundary targets and the permanent course rerun), along with thirteen focused regressions: acquisition, top-down entry/camera, lateral tuning, horizontal transfer, vertical traversal, navigation and navigation course, pull-up camera, climb-entry camera, mantle, crouch continuity, and right-hop tail reduction. Project startup and the outward script check passed. Side-view renders and debug rendering completed without script errors. No Git commit/push was requested or performed.
+
+Play-test the source push, half-turn direction, late reach/pose blend, maximum-distance plausibility and camera framing in the actual third-person view. The automated checks establish controller/contact ownership and collision behavior, not final subjective animation polish.
+
+# Right-hop horizontal settling reduction
+
+Right Hop retains its own full 51-frame source clip and movement profile, with only late horizontal overshoot compressed. The previous 3 m hop reached about 3.615 m at source frame 40 before sliding back. Starting at frame 30, a smooth monotonic soft cap reduces that peak to approximately 3.080 m. The cap has unit slope and zero curvature where compression begins; the curve is not hard-clamped or cut. The original departure, vertical arc, wall-normal retreat, 3 m endpoint, 1.1x playback, authored limb poses and .12 s idle blend remain unchanged. No IK locks, clip splices, mirroring or GLB edits.
+
+BracedHang exposes `braced_hang_right_hop_reduce_tail_slide` (true) and `braced_hang_right_hop_tail_overshoot` (.08 m at the configured normal-hop distance). Disable the reduction and restart play to restore the original curve. The earlier mirror experiment remains false and takes precedence only if explicitly enabled. Compression always starts from the preserved original samples, so preparation cannot accumulate correction.
+
+Continuous hop preflight, motion, and gap transfers all consume the same refined profile. Transfers scale the normalized horizontal curve to their actual distance; a 4.5 m transfer therefore has approximately 12 cm overshoot. Left Hop and all other action profiles are unchanged. Backups of the three modified controller scripts are in workspace `work/before_right_hop_tail_compression`. Added `test_right_hop_tail_v2.gd` for the 8 cm peak, preserved early/vertical/retreat samples, exact endpoint, unchanged left profile, idempotence and original-curve restoration. Play-test the right hand/body settling around frames 30–51; this reduces controller travel, not every authored wrist movement.
+
+# Horizontal Braced Hang gap transfer
+
+Adds a narrowly scoped remote fallback to Shift+A/D: full valid continuous hop (including its authored overshoot and swept arc) first, remote horizontal gap transfer second, otherwise remain hanging. A/D shimmy never invokes remote search. The transfer shares `HangHopLeft` / `HangHopRight`, lateral playback clocks and existing full-length `TRV_BRACED_HANG_HOP_LEFT/RIGHT` clips. `hang.transfer.active` distinguishes committed remote motion; there is no new airborne grab or animation asset. Ordinary continuous movement, curved-ledge navigation, W/S, jumping/interactions, visual offset, hop distances/speeds/blends, and camera code remain unchanged.
+
+## Search, distinction and defaults
+
+BracedHang's **Horizontal Gap Transfer** Inspector group exposes:
+
+| Setting | Default |
+| --- | --- |
+| Maximum horizontal anchor-to-anchor distance | 4.50 m |
+| Maximum absolute ledge height difference | 0.35 m |
+| Minimum open gap | 0.15 m |
+| Forward/back wall offset tolerance | 0.20 m |
+| Wall-normal difference / lateral-facing-angle tolerance | 10° / 10° |
+| Maximum motion scale | 1.50 × current normal-hop distance |
+| Destination hand acquisition start | 70% clip progress |
+| Destination foot acquisition start | 80% clip progress |
+
+The scale reference is the existing **tuned 3 m normal hop**, not the original unscaled FBX displacement; if authored-distance mode is enabled, its derived distance becomes the reference. Thus the default maximum is 4.5 m of horizontal anchor displacement, NOT a 4.5 m empty opening. Both horizontal-distance and stretch limits must pass.
+
+Remote search samples every 0.1 m in the requested current ledge tangent, with three forward/back offsets and top rays in the allowed height band. Candidates need a static top/face with compatible normals, the shared bilateral hand/top/brace predicate, lateral-width/deep wall support, and a clear standing capsule anchor. Animatable/moving ledges, large vertical differences, forward-facing transfers and sharp corners are excluded. A gently curved surface is eligible only where its local contacts still satisfy those existing tolerances; ordinary curved traversal is unmodified.
+
+Sort nearest 0.1 m distance bands first to avoid skipping a nearby valid ledge, then prefer less forward/back offset and less height difference within a band. Invalid/unreachable candidates are skipped. Real empty wall space is measured below both ledge tops in <=2.5 cm steps with a conservative one-sample subtraction; at least 15 cm must be missing. Merely changing collider identity, a step, or a seam is not a gap. Disconnected parts of one compound StaticBody may qualify if they have a genuine opening. Tiny unsupported cracks may still fail the unchanged continuous validator; they do not get promoted to remote transfers. The permanent 5 mm visual-seam fixture has a matching tiny collision bridge to retain ordinary continuous support.
+
+Actual transfer queries happen on input. Remote previews are refreshed only while traversal debug is enabled; the normal continuous query remains first. A discrete failed or successful remote attempt latches lateral input until Shift or the lateral key is released. Holding the original press cannot trigger another action after arrival or repeatedly retry an invalid transfer. Fresh input after release is accepted at stable idle.
+
+## Motion and contact ownership
+
+Reuse the existing 241-sample authored hip-motion profiles and animation playback progress. Scale the unsigned lateral profile (including source overshoot/settling) to the validated world endpoint; retain the existing authored residual vertical arc and outward retreat. Blend destination height bias with smoothstep from 20% to 94%, preserving departure rather than translating the entire curve. There is no linear body slide, mirrored-right replacement, clip trim, source GLB edit, or extra root translation: the existing private-clip hip flattening/visual compensation remains authoritative.
+
+Source contact starts fully active, fades out from **8–25%** of clip progress, and is zero during midflight. Destination hands fade in **70–94%**, feet **80–98%**, using destination edge/normal and the established hand offsets/foot projection. These are normalized source-clip phases and stretch with existing 1.1x playback. Contact ramps are tunable starting values, not newly imposed frame locks; limb rotations/reach limits are preserved. No hand pinning across the whole gap. Transfer hands use the existing general correction cap (default .45 m) instead of the smaller stationary cap, with arm reach limits still enforced. Idle resumes the established idle solver. No extra settle delay or exit blend was added.
+
+Before commitment, sweep the standing capsule over all 240 authored path segments, including overshoot and height bias. Validate the endpoint separately. During travel, keep source and destination snapshots, check their continued existence/unchanged transforms and sweep every actual movement step; normal catch detection does not arbitrate the flight. Abort only on genuine lost/moved geometry, obstruction, or stalled animation. After collision-checked arrival, revalidate destination contacts and atomically replace the active source, edge, normal, top, facing and alignment. Invalidate navigation previews so subsequent shimmy, transfer and vertical controls use the new ledge, with no stale source or accumulated displacement.
+
+## Playground and diagnostics
+
+Permanent `test/traversal_playground/hang_transfer_course.tscn` is instanced in the existing `hang_course.tscn` at local **(165, 0, -55)**, beyond the top-down section. The active traversal playground is unchanged. Rear ramps and the shared floor provide access. Labeled stations cover left/right and transfer/shimmy, ±25 cm heights, 4.5 m maximum and beyond, a true gap, a collision-bridged tiny visual seam, blocked corridor, nonbracing slab, two simultaneously in-range targets, a four-wall chain and transfer-to-vertical shelves.
+
+Traversal debug shows per-direction continuous/remote availability, Shift+A/D resolution, requested direction, latch, rejection reason, distance, height/normal/angle differences, gap, scale and path-clear result. The new summary is at the top of the existing overlay. Yellow marks the source anchor, cyan continuous searches, purple remote volume, green/red remote candidates, magenta selected anchor/path and capsule-sized corridor rings; an invalid sweep's final segment is red. No cinematic camera or camera tuning changes.
+
+## Verification and limitations
+
+The legacy `test_player_v2.gd` also stops at its assumption that every animation-map entry exists in the source GLB: `HangTopEntry_Full` is deliberately a private runtime alias from the earlier top-down work. Both this test and `player_animation_v2.gd` are byte-identical to the saved pre-transfer checkout. The stalled test process was stopped; it is not counted as a pass. Fourteen focused tests listed below passed, plus project startup and rendered transfer/debug checks.
+
+The older `test_dodge_curves_v2.gd` is NOT green: it reports 177 assertions against legacy curve/recovery expectations. Repeating it in the live project with the original pre-transfer `player_v2.gd` substituted via ResourceLoader produces the identical 177 assertion messages. The only normal-motor change in this pass is the transfer-input latch reset; no dodge code, curve assets or timing was changed. These pre-existing test failures were left untouched, rather than changing unrelated movement or weakening the test.
+
+`test_hang_transfer_v2.gd` covers both directions, exact authored path/endpoint, zero ordinary flight velocity, midflight hand/foot release, preserved arm lengths, rearming, shimmy integration, +/-height, range/stretch/gap/angle/outward rejection, blockage, and moved/deleted destination cleanup. `test_hang_transfer_course_v2.gd` covers the permanent valid/invalid fixtures, continuous priority, two-target selection, three transfers separated by shimmies, and transfer followed by vertical hop. Both passed. Regression passes: lateral tuning, vertical, navigation, navigation course (including gradual curves/interactions/jump), acquisition, top-down entry/camera, pull-up camera, climb-entry camera, crouch continuity, mantle and camera distance. Startup and rendered right-transfer/debug samples were checked; the known Windows certificate-store warning remains unrelated.
+
+Inspect BOTH hop directions at close range, especially hand release/regrip, the unchanged right-hop overshoot/settling tail, and the 4.5 m maximum stretch. Rendered samples establish basic flight and stable arrival, not subjective animation quality. Existing hand reach limits may leave small residual contact error; do not remove those limits or move the whole body toward the wall to hide it. Camera code is unchanged; manually confirm framing across the larger gap. Unsupported corners, outward wall-to-wall transfer, moving ledges, free hang and large vertical transfers remain deliberately absent. A future outward-transfer implementation can supply its own target search/validation to the committed origin/destination contract, but must not widen this lateral search implicitly.
+
+Files: new `player_hang_transfer_v2.gd`, the two transfer tests, and transfer course script/scene; integration changes in `player_braced_hang_v2.gd`, `player_hang_lateral_v2.gd`, `player_hang_navigation_v2.gd`, `player_v2.gd`, `player_mantle_hand_ik_v2.gd`, `player_hang_debug_v2.gd`, `player_debug_v2.gd`, and `hang_course.tscn`. No source animation files, camera scripts, or movement-tuning resources changed.
+
 # Top-down camera full-animation glide
 
 Replaced the fixed top-down camera hold with a smoothstep glide over the full source animation clock (including .90x playback). Capture the displayed starting world origin and final hang follow origin once at animation start; interpolate between those fixed points from 0 to 100% clip progress. No capsule/IK chasing and no second smoothing filter that delays arrival. Camera reaches its finish as the animation ends, with existing small residual/abort reunion retained. Orbit, SpringArm collision and other traversal cameras are unchanged. Debug mode is TOP_DOWN_HANG_GLIDE. Updated the focused camera test to assert the eased path and near-final arrival rather than a stationary hold.

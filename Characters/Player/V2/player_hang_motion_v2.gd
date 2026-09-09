@@ -65,3 +65,21 @@ func configure_right_hop(mirror_left: bool) -> void:
 	# (outward retreat) are copied unchanged. Right keeps its own clip clock.
 	profiles[&"HangHopRight"]=profiles[&"HangHopLeft"].duplicate() if mirror_left else original_right_profile.duplicate()
 	measurements["HangHopRight"]["movement_profile_source"]="HangHopLeft mirrored" if mirror_left else "HangHopRight authored"
+
+func compress_right_tail(distance: float,overshoot_m: float) -> void:
+	# Preserve the full source pose/clock and all three motion axes up to
+	# frame 30. Afterwards compress only X beyond that point with a smooth,
+	# monotonic soft cap (unit slope and zero curvature at the join).
+	profiles[&"HangHopRight"]=original_right_profile.duplicate()
+	var start: float=30.0/(30.0*float(measurements["HangHopRight"].duration))
+	var threshold: float=sample(&"HangHopRight",start).x
+	var room: float=maxf(.0001,1.0+overshoot_m/maxf(.01,distance)-threshold)
+	var samples: Array=profiles[&"HangHopRight"]
+	for i in range(SAMPLE_COUNT+1):
+		if float(i)/SAMPLE_COUNT<start: continue
+		var value: Vector3=samples[i]
+		var excess: float=value.x-threshold
+		if excess<=0: continue
+		value.x=threshold+excess/sqrt(1.0+pow(excess/room,2))
+		samples[i]=value
+	measurements["HangHopRight"]["movement_profile_source"]="HangHopRight authored / compressed horizontal tail"

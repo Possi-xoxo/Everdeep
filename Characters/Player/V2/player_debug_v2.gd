@@ -2,6 +2,7 @@ extends CanvasLayer
 @export var enabled: bool = true
 @export var lock_tuning_debug: bool = false
 @onready var label: Label = $Panel/Label
+@onready var fps_label: Label = $"../UI/FPSCounter"
 @onready var motor = get_parent()
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -30,6 +31,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		if motor.step_solver.debug_steps: enabled = true
 
 func _process(_delta: float) -> void:
+	fps_label.text = "FPS: %d" % Engine.get_frames_per_second()
 	$Panel.visible = enabled
 	if not enabled:
 		return
@@ -81,6 +83,10 @@ func _process(_delta: float) -> void:
 		if h.is_attached(): label.text+="\n"+h.lateral.debug_text(h)
 		if h.is_attached(): label.text+=h.vertical.debug_text(h)
 		if h.is_attached(): label.text+=h.navigation.debug_text(h)
+		# Put the new input-resolution diagnostics in the visible part of the
+		# existing tall overlay, above the retained IK/navigation details.
+		if h.is_attached(): label.text="HORIZONTAL BRACED HANG\nProgress %.2f" % h.lateral.progress+h.transfer.debug_text()+"\n\n"+label.text
+		if h.is_attached(): label.text=h.outward.debug_text(h)+"\n\n"+label.text
 	var turn = motor.turn_180
 	if turn != null and turn.debug_180:
 		label.text += "\n\nRun180 Active: %s\nStored Entry Speed: %.2f\nTurn Target Direction: %s\nHorizontal Translation Paused: %s" % [turn.active and turn.running, turn.entry_speed, turn.target_direction, turn.active and turn.running and turn.progress >= turn.run_180_carry_end_progress]

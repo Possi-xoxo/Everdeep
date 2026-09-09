@@ -121,7 +121,7 @@ func _process(delta: float) -> void:
 				cross_at(h.alignment+lateral_tangent*side*h.lateral.travel_distance(h,side,true),Color.MAGENTA)
 			if h.lateral.last_query.has("target"):
 				arrow(h.alignment,h.lateral.last_query.target,Color.GREEN if h.lateral.last_query.valid else Color.RED)
-			if h.lateral.active:
+			if h.lateral.active and not h.transfer.active:
 				for i in 48: line(h.lateral.path(float(i)/48),h.lateral.path(float(i+1)/48),Color.ORANGE)
 				cross_at(h.lateral.expected_position,Color.YELLOW)
 				cross_at(h.motor.global_position,Color.WHITE)
@@ -151,4 +151,6 @@ func _process(delta: float) -> void:
 			line(foot.sample,foot.hit,color)
 	if h.is_attached(): h.vertical.draw(self,h)
 	if h.is_attached(): h.navigation.draw(self,h)
+	if h.is_attached(): h.transfer.draw(self,h)
+	if h.is_attached(): h.outward.draw(self,h)
 	mesh.surface_end()

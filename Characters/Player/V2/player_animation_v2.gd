@@ -30,6 +30,7 @@ const CLIPS := {
 	"HangShimmyLeft": &"TRV_BRACED_HANG_SHIMMY_LEFT", "HangShimmyRight": &"TRV_BRACED_HANG_SHIMMY_RIGHT",
 	"HangHopUp": &"TRV_BRACED_HANG_HOP_UP", "HangHopDown": &"TRV_BRACED_HANG_HOP_DOWN",
 	"HangJumpOff": &"TRV_JUMP_FROM_BRACED_HANG",
+	"HangOutward": &"HangOutward_Runtime",
 	"HangTopEntry": &"HangTopEntry_Full",
 	"HangHopLeft": &"TRV_BRACED_HANG_HOP_LEFT", "HangHopRight": &"TRV_BRACED_HANG_HOP_RIGHT",
 	"CrouchIdle": &"CRC_CROUCH_IDLE", "CrouchWalk": &"BOW_STANDING_WALK_FORWARD",
@@ -128,7 +129,7 @@ func _ready() -> void:
 
 func _prepare_library() -> bool:
 	for clip: StringName in CLIPS.values():
-		if clip==&"HangTopEntry_Full": continue # Prepared from full source before Catch's private trim.
+		if clip in [&"HangTopEntry_Full",&"HangOutward_Runtime"]: continue # Private runtime aliases prepared below.
 		if not player.has_animation(clip):
 			push_error("V2 missing canonical action: " + clip)
 			return false
@@ -143,7 +144,7 @@ func _prepare_library() -> bool:
 		if idle.track_get_type(track) == Animation.TYPE_POSITION_3D and String(idle.track_get_path(track)).ends_with(":mixamorig_Hips"):
 			reference = idle.track_get_key_value(track, 0)
 	for state: String in CLIPS:
-		if state=="HangTopEntry": continue
+		if state in ["HangTopEntry","HangOutward"]: continue
 		var clip := player.get_animation(CLIPS[state])
 		if state.begins_with("Hang"): continue
 		if state=="DodgeStand": motor.dodge.prepare_stand_leadin(clip)
@@ -223,6 +224,7 @@ func _build_tree() -> void:
 	states.append_array(["HangShimmyLeft","HangShimmyRight","HangHopLeft","HangHopRight"])
 	states.append_array(["HangHopUp","HangHopDown"])
 	states.append("HangJumpOff")
+	states.append("HangOutward")
 	states.append("HangTopEntry")
 	for state in states:
 		if state=="Locomotion": continue
@@ -273,6 +275,9 @@ func _physics_process(delta: float) -> void:
 		land_visual_offset=0
 		visual_root.position=visual_root_base_position
 		var h=motor.traversal.hang
+		if h.outward.active:
+			_enter(&"HangOutward")
+			return
 		if h.top_entry.active:
 			_enter(&"HangTopEntry")
 			return
@@ -285,10 +290,15 @@ func _physics_process(delta: float) -> void:
 		gait_blend=float(motor.animation_state.gait+1) if motor.animation_state.move_input_magnitude>.01 else 0.0
 		_enter(motor.crouch.animation_node() if motor.crouch.active() else &"Locomotion")
 	if motor.traversal.hang.navigation.jump_visual:
-		_episode_visible=true
-		fall_visual_committed=true
-		_enter(&"HangJumpOff")
-		return
+		# air_tick runs before motor collision detection. End the jump visual
+		# on THIS frame's contact so it cannot swallow the landing edge below.
+		if motor.animation_state.is_grounded or motor.animation_state.jump_started:
+			motor.traversal.hang.navigation.jump_visual=false
+		else:
+			_episode_visible=true
+			fall_visual_committed=true
+			_enter(&"HangJumpOff")
+			return
 	if motor.traversal.hang.release_active:
 		if motor.animation_state.is_grounded or motor.animation_state.jump_started:
 			motor.traversal.hang.end_release_visual()

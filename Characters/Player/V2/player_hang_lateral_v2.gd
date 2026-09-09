@@ -1,5 +1,6 @@
 extends RefCounted
-## Same-wall lateral actions only. Does not use or modify catch acquisition.
+## Continuous lateral actions with a validated gap-transfer request fallback.
+## Does not use or modify automatic catch acquisition.
 const CLIPS={"HangShimmyLeft":&"TRV_BRACED_HANG_SHIMMY_LEFT","HangShimmyRight":&"TRV_BRACED_HANG_SHIMMY_RIGHT","HangHopLeft":&"TRV_BRACED_HANG_HOP_LEFT","HangHopRight":&"TRV_BRACED_HANG_HOP_RIGHT"}
 var curve=preload("res://Characters/Player/V2/player_hang_curve_v2.gd").new()
 var route: Array=[]
@@ -59,6 +60,14 @@ func preview(h: Node,side: int,hop: bool) -> Dictionary:
 
 func request(h: Node,side: int,shift: bool) -> bool:
 	if not h.is_attached() or h.hang_phase!=h.HangPhase.IDLE or h.navigation.interacting or side==0: return false
+	if h.transfer.input_latched: return false
+	# Full continuous path, including authored arc/overshoot, takes priority.
+	if shift:
+		h.transfer.search_side=side
+		last_query=preview(h,side,true)
+		h.transfer.continuous[side]=last_query.valid
+		if not last_query.valid: return h.transfer.request(h,side)
+		h.transfer.last_resolution="CONTINUOUS_HOP"
 	var distance: float=travel_distance(h,side,shift)
 	action_distance=distance
 	last_query=query(h,side,distance)
@@ -138,6 +147,8 @@ func prepare(h: Node,player: AnimationPlayer,reference: Vector3,idle_z: float) -
 			# All sampled translation is now applied once by the controller.
 			clip.track_set_key_value(track,key,Vector3(reference.x,reference.y,idle_z))
 	motion.configure_right_hop(h.braced_hang_right_hop_mirror_left_curve)
+	if h.braced_hang_right_hop_reduce_tail_slide and not h.braced_hang_right_hop_mirror_left_curve:
+		motion.compress_right_tail(travel_distance(h,1,true),h.braced_hang_right_hop_tail_overshoot)
 
 func hand_contact(h: Node,arm: Dictionary,animated: Vector3) -> Dictionary:
 	var tangent: Vector3=h.facing.cross(Vector3.UP).normalized()
@@ -155,5 +166,6 @@ func hand_contact(h: Node,arm: Dictionary,animated: Vector3) -> Dictionary:
 	return {"target":target,"weight":weight}
 
 func debug_text(h: Node) -> String:
+	if h.transfer.active: return h.transfer.debug_text()
 	var sample: Vector3=motion.sample(state,progress) if motion.profiles.has(state) else Vector3.ZERO
 	return "LATERAL %s | progress %.2f | %s\nShimmy %.2fm / Hop L %.3fm R %.3fm\nAuthored lateral %.3f / rise %.3fm / retreat %.3fm\nExpected %s / Actual %s / Error %.4fm\nFinal anchor %s / Tangent %s / Query %s" % [state if active else &"IDLE",progress,"RELEASE/REGRAB" if hopping else "LEDGE CONTACT",h.braced_hang_shimmy_distance,travel_distance(h,-1,true),travel_distance(h,1,true),sample.x,sample.y,sample.z,expected_position,h.motor.global_position,expected_position.distance_to(h.motor.global_position),start+displacement,h.facing.cross(Vector3.UP),str(last_query.get("reason","NONE"))]
