@@ -93,8 +93,8 @@ func step_motor(delta: float, stick: Vector2, shift: bool, jump: bool, dodge_pre
 	traversal.hang.navigation.air_tick(traversal.hang,delta)
 	var hang_intent: Vector3=traversal.hang.acquisition.prepare_tick(traversal.hang,delta,stick)
 	if traversal.free_hang.running:
-		traversal.free_hang.step(delta,jump,stick,shift)
-		return
+		if traversal.free_hang.step(delta,jump,stick,shift): return
+		crouch_requested=crouch.requested
 	if traversal.hang.running:
 		traversal.hang.outward.preview_side=stick.x
 		if jump: traversal.hang.navigation.resolve(traversal.hang,"JUMP",stick.x)

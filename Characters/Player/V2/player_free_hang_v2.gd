@@ -53,6 +53,9 @@ var exit_reason: String = ""
 var release_visual_remaining: float = 0.0
 var release_visual_offset := Vector3.ZERO
 var rig_base_position := Vector3.ZERO
+var entry_crouched: bool = false
+var entry_gait: int = 0
+var entry_run_time: float = 0.0
 @onready var owner_controller = get_parent()
 @onready var motor = get_parent().get_parent()
 var shared: Node:
@@ -66,6 +69,9 @@ func validate(data: Dictionary) -> bool:
 
 func begin(data: Dictionary) -> void:
 	actions.reset()
+	entry_crouched=motor.crouch.requested
+	entry_gait=int(data.get("entry_gait",motor.animation_state.gait))
+	entry_run_time=float(data.get("entry_run_time",0.0))
 	candidate=data.duplicate(true)
 	source=data.source
 	source_transform=source.global_transform
@@ -166,7 +172,7 @@ func step(delta: float,jump: bool=false,stick: Vector2=Vector2.ZERO,shift: bool=
 	actions.input_tick(self,delta,stick,shift,jump)
 	if actions.active:
 		actions.advance(self,delta)
-		return true
+		return running or exit_reason!="FREE_CLIMB_COMPLETED"
 	if not contacts_valid():
 		owner_controller.finish("FREE_CONTACT_LOST")
 		return true
@@ -209,7 +215,15 @@ func restore(reason: String) -> void:
 		grounded.is_airborne=false
 		grounded.jump_started=false
 		grounded.air_time=0
-		motor.get_node("AnimationController")._enter(&"CrouchIdle")
+		motor.crouch.clear_handoff()
+		var stay_crouched: bool=entry_crouched or not motor.crouch.standing_clear()
+		motor.crouch.requested=stay_crouched
+		motor.crouch.phase=motor.crouch.Phase.CROUCHED if stay_crouched else motor.crouch.Phase.STANDING
+		motor.crouch.resize(motor.crouch.crouch_capsule_height if stay_crouched else motor.crouch.standing_capsule_height)
+		motor._run_time=entry_run_time
+		grounded.gait=entry_gait
+		# The normal motor/animation selector receives current input on this
+		# same tick, avoiding a forced idle intermediary for held movement.
 		return
 	release_visual_offset=visual_offset()
 	actions.reset()

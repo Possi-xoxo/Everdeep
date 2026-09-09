@@ -1,5 +1,17 @@
 # Free Hang horizontal movement suite — current controls
 
+## Follow-up: Free pull-up exit parity with Braced Hang
+
+Free pull-up retains `TRV_FREE_HANG_CLIMB_LEDGE` and its existing motion/pose support treatment. Its camera now uses the same world-space pull-up hold, clip-progress easing, follow response, top offset and exponential rejoin as Braced pull-up. The Free hold captures the last displayed world anchor, so initial parent/capsule motion cannot jump the camera. Mouse orbit and SpringArm behavior stay unchanged; interruption also rejoins normal follow.
+
+At catch, Free records pre-hang crouch request, gait and run buildup. Successful pull-up restores standing locomotion/idle or prior crouch; insufficient standing clearance keeps crouch. Current movement input resumes on the completion tick and selects the appropriate grounded animation without a forced crouch-idle intermediary. `FreeHangClimb` exits use the same `mantle_exit_blend_time` as `HangUp` (currently .30s).
+
+Landing now uses `max(Braced landing_setback, minimum_landing_setback())`, with top-plane projection and the existing .015m contact allowance. Current effective inset is **.15m instead of .32m**. Full path/capsule checks, support footprint and confirmed floor contact remain mandatory; no collision bypass or reduced safety thresholds. Existing 8cm Free body drop, 1.2x lateral speeds, fixed hand targets, and all Braced tuning are unchanged.
+
+`test_free_hang_pullup_exit_v2.gd` covers prior standing/crouch, low ceiling, direct moving exit, near-edge support, hold immunity to body correction, orbit, completion/abort rejoin, and matching exit blend.
+
+Verification: the new pull-up exit suite and five regressions (Free movement, horizontal mixed course, Free safety, Braced camera, Braced gait exit) pass with no script/parse errors. Existing environmental certificate-store warning remains unrelated.
+
 ## Follow-up: lower body / faster lateral animations
 
 Free Hang presentation now lowers the body **8cm** (`free_hang_visual_body_drop`) without moving the hand IK targets, gameplay anchor, capsule, or ledge queries. The visual clearance proxy follows the lowered body. The offset eases in with catch alignment, fades through climb-up and uses the existing release fade; it never leaks into ordinary locomotion. A 12cm trial exceeded idle arm reach by about 3.3cm, so the smaller drop was selected to preserve contact without stretching bones or changing wrist rotation.

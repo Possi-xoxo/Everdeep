@@ -300,6 +300,9 @@ func _physics_process(delta: float) -> void:
 		visual_root.position=visual_root_base_position+motor.global_basis.inverse()*free.visual_offset()
 		_enter(free.animation_name())
 		return
+	if current_state==&"FreeHangClimb" and motor.traversal.free_hang.exit_reason=="FREE_CLIMB_COMPLETED":
+		gait_blend=float(motor.animation_state.gait+1) if motor.animation_state.move_input_magnitude>.01 else 0.0
+		_enter(motor.crouch.animation_node() if motor.crouch.active() else &"Locomotion")
 	if motor.traversal.hang.is_attached():
 		_episode_visible=false
 		_intentional_jump_episode=false
@@ -662,7 +665,7 @@ func _enter(next: StringName) -> void:
 			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next:
 				var edge: AnimationNodeStateMachineTransition=tree.tree_root.get_transition(index)
 				edge.xfade_time=maxf(edge.xfade_time,standing_idle_return_blend)
-	if current_state==&"HangUp" and (next==&"Locomotion" or String(next).begins_with("Crouch")):
+	if current_state in [&"HangUp",&"FreeHangClimb"] and (next==&"Locomotion" or String(next).begins_with("Crouch")):
 		for index in tree.tree_root.get_transition_count():
 			if tree.tree_root.get_transition_from(index)==current_state and tree.tree_root.get_transition_to(index)==next:
 				tree.tree_root.get_transition(index).xfade_time=motor.traversal.mantle.mantle_exit_blend_time

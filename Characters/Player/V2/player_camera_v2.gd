@@ -78,6 +78,9 @@ func _process(delta: float) -> void:
 	# starts Mantle only in ACTIVE. Keep ordinary follow through alignment.
 	var climb_tracking: bool=mantle.running and motor.traversal.phase==motor.traversal.Phase.ACTIVE
 	var hang_tracking: bool=hang.running and hang.hang_phase==hang.HangPhase.TO_CROUCH and motor.traversal.phase==motor.traversal.Phase.ACTIVE
+	var free_hang=motor.traversal.free_hang
+	var free_pullup: bool=free_hang.running and free_hang.actions.active and free_hang.actions.state==&"FreeHangClimb"
+	var pullup_tracking: bool=hang_tracking or free_pullup
 	var animation=motor.get_node("AnimationController")
 	var top_playing: bool=hang.running and hang.top_entry.active and motor.traversal.phase==motor.traversal.Phase.ACTIVE and animation._playback!=null and animation._playback.get_current_node()==&"HangTopEntry"
 	if top_playing and not _top_hold:
@@ -93,8 +96,8 @@ func _process(delta: float) -> void:
 	var stable_hang: bool=hang.running and hang.hang_phase==hang.HangPhase.IDLE and motor.global_position.distance_to(hang.alignment)<.02 and absf(hang.idle_pose.offset-hang.braced_hang_visual_vertical_offset)<.005
 	if _top_hold and (stable_hang or not hang.running or motor.traversal.phase!=motor.traversal.Phase.ACTIVE or hang_tracking): _top_hold=false
 	var top_tracking: bool=_top_hold
-	var tracking: bool=climb_tracking or hang_tracking or top_tracking
-	if _top_sequence and (climb_tracking or hang_tracking):
+	var tracking: bool=climb_tracking or pullup_tracking or top_tracking
+	if _top_sequence and (climb_tracking or pullup_tracking):
 		# A prompt follow-up pull-up must capture its own approved anchor.
 		_mantle_tracking=false
 		_top_sequence=false
@@ -102,17 +105,21 @@ func _process(delta: float) -> void:
 		_mantle_start=free_origin
 		_mantle_origin=global_position
 		if hang_tracking: _hang_camera_top=hang.landing+Vector3.UP*(_base_position.y+mantle.mantle_camera_top_offset)
+		if free_pullup:
+			_mantle_start=_last_camera_origin
+			_mantle_origin=_last_camera_origin
+			_hang_camera_top=free_hang.actions.destination.anchor+Vector3.UP*(_base_position.y+mantle.mantle_camera_top_offset)
 		mantle_camera_active=true
 	if mantle_camera_active:
 		if tracking:
 			var weight_top:=smoothstep(12,50,mantle.current_frame())
 			# World-space anchor independent of instantaneous capsule lift.
 			var top_anchor: Vector3=mantle.landing+Vector3.UP*(_base_position.y+mantle.mantle_camera_top_offset)
-			if hang_tracking:
+			if pullup_tracking:
 				# Validated destination + animation clock only, never capsule/IK
 				# corrections. Reuse climb's easing, response and reunion below.
 				top_anchor=_hang_camera_top
-				weight_top=smoothstep(0,1,hang.progress)
+				weight_top=smoothstep(0,1,hang.progress if hang_tracking else free_hang.actions.progress)
 			if top_tracking:
 				top_anchor=_hang_camera_top
 				weight_top=smoothstep(0,1,clampf(hang.top_entry.clock/hang.top_entry.length,0,1))
@@ -140,8 +147,9 @@ func _process(delta: float) -> void:
 			free_origin=_mantle_origin
 	_mantle_tracking=tracking
 	traversal_camera_mode="HANG_PULLUP_HOLD" if hang_tracking else ("CLIMB" if climb_tracking else ("REJOIN" if mantle_camera_active else ("HANG" if hang.is_attached() else "NORMAL")))
-	if motor.traversal.free_hang.running: traversal_camera_mode="FREE_HANG_ANCHOR"
-	if climb_tracking or hang_tracking: _top_sequence=false
+	if free_pullup: traversal_camera_mode="FREE_HANG_PULLUP_HOLD"
+	elif free_hang.running and not mantle_camera_active: traversal_camera_mode="FREE_HANG_ANCHOR"
+	if climb_tracking or pullup_tracking: _top_sequence=false
 	if not mantle_camera_active: _top_sequence=false
 	if _top_sequence: traversal_camera_mode="TOP_DOWN_HANG_GLIDE" if top_tracking else "TOP_DOWN_HANG_REJOIN"
 	var locked_origin: Vector3=motor.global_position+Vector3.UP*lock_camera_height

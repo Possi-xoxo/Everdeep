@@ -244,7 +244,8 @@ func climb_at(f,p: float,start: Vector3,end: Vector3) -> Vector3:
 	return Vector3(lerpf(start.x,end.x,cross),lerpf(start.y,end.y,rise),lerpf(start.z,end.z,cross))
 
 func query_climb(f) -> Dictionary:
-	var landing: Vector3=f.ledge_edge+f.facing*maxf(.32,f.motor.ground_support.minimum_landing_setback())+Vector3.UP*.015
+	var landing: Vector3=f.ledge_edge+f.facing*maxf(f.shared.landing_setback,f.motor.ground_support.minimum_landing_setback())
+	landing.y=f.top.y-(f.landing_plane_normal.x*(landing.x-f.top.x)+f.landing_plane_normal.z*(landing.z-f.top.z))/f.landing_plane_normal.y+.015
 	if not f.motor.ground_support.evaluate(landing,Basis(Vector3.UP,atan2(-f.facing.x,-f.facing.z)),f.source,f.landing_plane_normal).supported: return {}
 	var previous: Vector3=f.alignment
 	var points:=PackedVector3Array([previous])
