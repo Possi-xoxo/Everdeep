@@ -1,3 +1,252 @@
+# Free Hang horizontal movement suite — current controls
+
+## Follow-up: lower body / faster lateral animations
+
+Free Hang presentation now lowers the body **8cm** (`free_hang_visual_body_drop`) without moving the hand IK targets, gameplay anchor, capsule, or ledge queries. The visual clearance proxy follows the lowered body. The offset eases in with catch alignment, fades through climb-up and uses the existing release fade; it never leaks into ordinary locomotion. A 12cm trial exceeded idle arm reach by about 3.3cm, so the smaller drop was selected to preserve contact without stretching bones or changing wrist rotation.
+
+Free shimmy/hop playback is now **1.20x** (`free_hang_lateral_playback_speed`). AnimationTree timeline lengths and traversal progress use the same rate, retaining authored paths, hand phases and endpoint distances. Approximate clip durations: left shimmy 1.167s, right shimmy 1.194s, either hop 1.778s. Catch/idle/climb/release and all Braced settings are unchanged. These values supersede the original 1.0x playback and unlowered presentation described below.
+
+This section supersedes the first-pass controls below. The user explicitly removed **all vertical hops** from this traversal. There is no Free Hang upper/lower-hop search, range, state, animation substitution, or playground dependency. Ordinary airborne catches after a deliberate release still use the established detector.
+
+## Controls and ownership
+
+- A/D: repeatable left/right shimmy on continuous supported ledge.
+- Shift+A/D: one left/right hop per fresh direction/Shift press. Prefer a full continuous hop, then a useful partial continuous hop, then a prevalidated small lateral gap transfer.
+- W: climb onto a valid supported top; otherwise do nothing. No hop-up fallback.
+- S: deliberate release once stable; no lower-ledge priority or ground-proximity restriction.
+- Space: explicitly **NO_FREE_HANG_ACTION**. Never releases, launches, inherits Braced jump-off, or starts an outward transfer.
+
+Commands require settled Free idle. During an action, input edges are consumed but do not restart/reverse the action or queue climb/drop. A held conflicting input must be released/repressed afterward. A/D can repeat after a .12s arrival guard; hop requires a fresh edge. Diagonal conflicting commands do nothing. Catch momentum is cleared when an action starts. Each action uses AnimationTree's actual playback clock, checked for timeout; controller sweeps and `move_and_collide` own collision movement. Arrival atomically replaces the Free source, hand anchors and shared context data, without Braced conversion.
+
+## Inventory, clips, distances and timing
+
+All nine `TRV_FREE_HANG*` clips were verified in the already imported master and source inventory (the full inventory is retained below):
+
+| Source suffix after `TRV_FREE_HANG_` | Duration | Current use |
+| --- | --- | --- |
+| `IDLE` | 4.733s | Not used; keep existing B idle |
+| `IDLE_B` | 2.367s | Settled Free idle, unchanged |
+| `SHIMMY_LEFT` | 1.400s | Full clip; **0.38709m** left |
+| `SHIMMY_RIGHT` | 1.433s | Full clip; **0.41138m** right |
+| `HOP_LEFT` | 2.133s | Full clip; **0.89241m** left |
+| `HOP_RIGHT` | 2.133s | Full clip; **0.89241m** right |
+| `CLIMB_LEDGE` | 3.900s source | Private 0–3.10s planted-crouch portion, then .30s crouched-idle blend |
+| `DROP_TO_IDLE` | 1.367s source | Private 0–.30s release lead-out, then ordinary Fall; omit its scripted ground-landing tail |
+| `TO_BRACED_HANG` | 1.167s | Unused; no automatic conversion |
+
+Existing catch still uses `TRV_JUMP_TO_FREE_HANG`, its .80s post-contact tail. No Free hop-up/down sources exist or are needed. No Braced/BOW/LOC substitutions. Imported animation resources and the GLB/source files are untouched: the new `FreeHang*_Runtime` clips are instance-owned duplicates. Hips translation is canceled in the horizontal copies; 161 raw-source samples independently drive lateral travel, vertical residual and nonnegative outward residual. Rotations/leg poses remain authored. Source hand timing was inspected; both shimmies lead with the left hand, while the hops mirror their lead hand.
+
+Both hops preserve their approximately .53m rise and ~1.315x lateral overshoot followed by authored settling. Validation reserves that extra continuous ledge room instead of truncating the return. Right shimmy retains its small initial reverse wind-up. Partial search resolves travel in 2.5cm steps, with **.40m minimum hop** (`free_hang_minimum_hop_distance`) and .12m minimum shimmy. The 2.3m-wide partial station chooses approximately .6424m from center. Distances/playback are not inherited from the tuned 3m/1.1-speed Braced hops; Free playback is the original 1.0 speed.
+
+Gap transfer is deliberately small: at most the approximately .8924m authored anchor-to-anchor reach, to a separate parallel/coplanar ledge with bilateral hand width. There is no extra gap-distance multiplier, outward-flight phase or airborne state. The permanent gap is .18m wide. Safe partial continuous motion has priority; approach the end before asking for a gap hop. Destinations, body/head space, full trajectory and source transforms are checked. No foot/wall-brace requirement. Moving/deforming sources are unsupported and release safely. New blocking geometry stops/releases the action rather than bypassing collision.
+
+## Climb, release, IK and camera
+
+W validates existing footprint support and the crouched capsule along the full climb route before commitment. It lifts outside the lip, then crosses to the minimum safe near-edge supported destination. A private vertical support correction, sampled around the two animated wrists, keeps the pose's hands near the ledge while the collision capsule clears it; it fades out over the final quarter. No wrist rotation, bone length or source clip edits. The dedicated clip finishes in its crouched planted portion; floor support is confirmed before yielding to the existing crouch controller. Invalid top/path leaves the player hanging.
+
+S fades both hands out during the .30s release lead-out, then relinquishes ownership, restores gravity/Fall and applies the unchanged mild .35m/s outward / .20m/s downward release velocity. The source's later ground landing is not played in midair. Same-source/edge regrab suppression remains; another valid edge can be caught by ordinary airborne mechanics. No vertical targeted transfer is involved.
+
+Hand IK is phase-aware: source support fades out, the animated reaching hand is unpinned, then the destination target fades in. Both hands are not rigidly locked through a hop. Existing correction/reach limits and bone lengths stay enforced; authored wrist rotation is preserved. Full-contact errors in the straight full-distance test peaked at ~2.8mm / .5mm for shimmies and ~6.6cm / 7.3cm transiently for left/right hops; the latter are still a manual contact-polish item, not grounds to stretch the arms. No Free foot/brace IK or automatic Free-to-Braced transition was added.
+
+No camera tuning or new camera mode: the existing Free baseline follows the committed movement route and continues excluding catch swing. Debug shows action/progress/distance, last input resolution, last-requested target statuses, tangent, selected anchor, trajectory samples and phase-specific hand targets. Target statuses are labeled last-requested, not stale data presented as live validation. Free-only curved/90-degree corner following is **not supported in this pass**: the Braced path query requires feet, so the new query conservatively supports straight, near-coplanar ledges and leaves an explicit Free query extension point.
+
+## Permanent course and changed files
+
+Press **6** for the existing Free Hang course. Its original ten catch stations remain; new horizontal modules are behind the starting viewpoint (+Z): long shimmy/hop, partial hop, 18cm separate-ledge gap, climb/release, blocked top, and a three-ledged mixed horizontal chain. Visual-only 10cm ruler marks help judge slide. No vertical Free ladder/hop module. Existing hub, active scene and Twin Tower routes are unchanged.
+
+Production changes: new `Characters/Player/V2/player_free_hang_actions_v2.gd`; Free controller, motor's Free-only input forwarding, Free animation aliases/states, Free-only arm-contact selection, hang debug, `test/traversal_playground/free_hang_course.gd`, and this document. Existing Free tests now use S instead of the obsolete Space-release contract. New movement, path-safety and horizontal-course tests cover the added behavior. No commit/push performed.
+
+## Verification / play-test focus
+
+Final verification: **29 selected suites pass**, with no script/parse errors: seven Free suites (catch, safety, permanent catch course, real airborne catch, movement, paths, horizontal mixed course), plus 22 regressions covering Braced acquisition/lateral/partial/gap/vertical/corner/navigation/input/top-entry/cameras/jump-recatch/outward toggle/gait exit/failed-jump escape, ground support, both tower route checks, tower jump crossings, normal mantle, crouch continuity and running-roll handoff. A separate source-deletion-plus-W check also passes. This does not claim obsolete legacy fixtures are all green; the pre-existing historical-fixture caveats in the first-pass verification section remain. The Windows root-certificate-store warning is still environmental, not a script error.
+
+Preflight timing measured on this machine: approximately 5.5ms for a full shimmy / 6ms for the partial-hop fixture and <.1ms for a blocked edge. Early wind-up/overshoot extent rejection avoids repeatedly sweeping impossible partial candidates; every selected movement still receives the complete swept-path validation.
+
+Headless movement and path tests cover both directions, measured endpoint travel and arc, arm-length preservation, partial/gap arrival, blocked top, grounded crouch exit, release, Space no-op, mid-action input lock and held-input non-replay. The real permanent mixed route is exercised through catch, shimmies, separate-source gap, direction reversal and climb-out. Rendered hop/shimmy/climb samples were inspected, including the corrected hand-supported climb and planted crouched finish.
+
+Manually inspect the transient hop hand reach, shorter-hop poses, and climb hand release/feet around the final quarter; automated collision/state checks do not establish subjective animation feel. Later explicit Free/Braced conversions or corners should extend the Free target/contact helper, not add automatic family flicker or feet to the current Free actions.
+
+# Free Hang framework — historical first catch / settle / idle / release pass
+
+Free Hang is a sibling `TraversalController/FreeHang`, not a Braced Hang mode flag. `player_hang_acquisition_v2.gd` remains the single airborne ledge search. Its existing height, direction, approach/grace, predictive/recent sweep, width, bilateral hand reach, collision, head clearance and same-source regrab gates remain in force. Braced Hang remains the first choice: valid wall-backed candidates rank ahead of every valid Free candidate. Only absent/incomplete bracing enables the Free fallback; failed hands or blocked space never become a catch. The Braced controller and its navigation/movement/animation tuning are unchanged.
+
+The shared result carries `classification`, `classification_reason`, `braced_hang` / `free_hang`, and the diagnostic brace checks. Free candidates receive their own lower body anchor, a second shoulder-to-ledge obstruction check and a conservative visual-body clearance sweep in addition to the original gameplay-capsule sweep. Bracing is informational, not a Free acceptance requirement. Disabling the Free controller's `enabled` property restores rejection of unsupported ledges without changing Braced catches.
+
+## State and momentum ownership
+
+`AIRBORNE -> CATCH -> SETTLE -> IDLE -> Space RELEASE -> AIRBORNE`. Classification is fixed at commitment. Adding/removing a brace does not oscillate between families; loss/movement of the actual hand source or occupied hanging space releases safely. No Free shimmy, hop, pull-up, transfer, corner, swing pumping or jump-off controls were added. W/S/A/D/Shift/E/CTRL do not start traversal actions while Free Hang owns the player.
+
+The controller captures actual incoming XYZ velocity before clearing ordinary airborne motion. A limited fraction initializes a damped spring offset underneath fixed hand anchors. The controller—not IK—owns collision/body translation. The spring is substepped at at most 1/120s and clamped; both the gameplay capsule and independent visual-body proxy are swept. Blocked swing stops rather than passing through geometry; a blocked baseline releases. There is no rigid-body pendulum or animation-driven collision authority.
+
+| Free Hang setting | Initial value |
+| --- | --- |
+| Momentum retention | 0.10 of clamped incoming velocity |
+| Maximum incoming velocity magnitude | 12 m/s |
+| Additional vertical retention multiplier | 0.25 |
+| Maximum swing offset magnitude | 0.10 m |
+| Spring stiffness / damping | 36 / 10 |
+| Gameplay anchor below ledge | 2.20 m |
+| Gameplay capsule wall-normal distance | 0.50 m |
+| Visual origin wall-normal distance | 0.18 m, independent of capsule |
+| Entry position/visual alignment easing | 0.15 s |
+| Input lockout | 0.25 s |
+| Catch animation tail | 0.80 s |
+| Settled-idle tolerance | offset < 0.005 m and swing speed < 0.025 m/s after catch tail |
+| Catch / idle animation crossfade | 0.15 / 0.30 s |
+| Left / right hand spacing | 0.263 / 0.277 m from edge center |
+| Wrist target relative to lip | 0.08 m below, 0.015 m outward |
+| Release velocity | 0.35 m/s outward, 0.20 m/s downward |
+
+The 0.25s input lockout is deliberately shorter than visible settling: a fresh Space press after that lockout can release during SETTLE as well as IDLE. Holding Space across initial catch does not queue an accidental release. Stable release never restores pre-catch velocity. It clears stale ground support and reuses Braced Hang's source/edge suppression and cooldown, allowing a different ledge to be caught. Normal support detection and Fall/landing presentation resume afterward.
+
+## Animation inventory and runtime use
+
+The current imported GLB and source FBXs were inspected before implementation. All nine `TRV_FREE_HANG*` clips are present:
+
+- `TRV_FREE_HANG_CLIMB_LEDGE` — 3.900 s
+- `TRV_FREE_HANG_DROP_TO_IDLE` — 1.367 s
+- `TRV_FREE_HANG_HOP_LEFT` — 2.133 s
+- `TRV_FREE_HANG_HOP_RIGHT` — 2.133 s
+- `TRV_FREE_HANG_IDLE` — 4.733 s
+- `TRV_FREE_HANG_IDLE_B` — 2.367 s
+- `TRV_FREE_HANG_SHIMMY_LEFT` — 1.400 s
+- `TRV_FREE_HANG_SHIMMY_RIGHT` — 1.433 s
+- `TRV_FREE_HANG_TO_BRACED_HANG` — 1.167 s
+
+Related imported clips also found:
+
+- `AIR_JUMP_TO_FREE_HANG` — 2.500 s
+- `TRV_BRACED_HANG_TO_FREE_HANG` — 0.967 s
+- `TRV_DROP_TO_FREEHANG` — 2.433 s
+- `TRV_JUMP_TO_FREE_HANG` — 2.033 s
+- `TRV_JUMP_TO_FREE_HANG_(2)` — 2.500 s
+- `TRV_RUN_AND_SWING_(FREE_HANG)` and `TRV_RUN_AND_SWING_(FREE_HANG)_02` — 2.467 s each
+- `TRV_STAND_TO_FREE_HANG`, `TRV_STAND_TO_FREEHANG`, `TRV_STAND_TO_FREEHANG_02` — 1.733 s each
+
+No incorrect Free-to-Braced or Braced-to-Free clip assignments were found. In particular, Braced left/right hops still use `TRV_BRACED_HANG_HOP_LEFT/RIGHT`, not the similarly named Free clips.
+
+Only two Free clips are used now. Private per-player runtime aliases copy `TRV_JUMP_TO_FREE_HANG`'s post-contact tail (1.2333s through 2.0333s) and `TRV_FREE_HANG_IDLE_B`. The latter matches the catch's ending pose better than the other idle. The catch's preceding airborne lunge is omitted because acquisition has already happened. Both private copies cancel hips translation against the Free idle reference in all three axes, preventing baked root travel from stacking on controller swing. Authored rotations and leg motion remain. The imported/source clips and GLB are untouched; unused Free clips are reserved for future features.
+
+## IK, visual isolation and camera
+
+Free Hang reuses the existing ledge-aware two-bone arm solver and modifier order. Each hand gets a fixed validated world target at commitment, independent of swing; authored wrist rotation is preserved. Positional correction/reach limits and original bone lengths remain enforced. Targets sit below the lip because these clips' curled fingers extend above their wrist bones. Braced offsets and wrist treatment are unchanged.
+
+Free Hang explicitly disables leg IK and ground-pelvis correction. No feet are attached to a missing wall. Free visual offset is applied after the animation mixer, bypassing the normal ground/landing-offset writer so it cannot be reset each frame. Its forward offset eases in with alignment and fades out over 0.15s on release instead of snapping back; a new traversal cancels that release offset. The camera follows the eased baseline anchor, excluding the small swing and all skeleton/IK corrections; no new orbit controls or elaborate camera were introduced.
+
+Debug shows FREE phase, hand/bracing validity, classification reason, incoming/retained velocity, offset/velocity, damping, elapsed/lockout, anchors and release reason. Ctrl+F3's shared detection drawing uses green/cyan Braced, magenta Free and red rejected candidates. During Free Hang it also draws fixed hands, baseline/body targets, incoming/retained vectors and failed brace probes. `free_hang_debug` can enable the geometry independently.
+
+## Permanent playground
+
+Key **6** enters `Courses/FreeHang`; **R** retries it and **Home** returns to the hub. The separate permanent course is at `(80, 0, 70)`, away from established routes. Twin Towers were not edited and have no Free Hang dependency. Ten named stations cover basic, rising, falling, apex, forward/diagonal/fast catches, adjacent Braced/Free geometry, marginal bracing and release. Purple platforms have genuine empty space underneath; the green half of the comparison platform remains Braced. Yellow approach marks help repeat jump timing. A shallow ramp accesses the falling-launch shelf; a broad safe floor supports repeat attempts without resetting. The release station includes a separate lower ledge facing back toward the upper lip.
+
+## Verification and limitations
+
+New permanent automated tests:
+
+- `test_free_hang_v2.gd`: rising/apex/falling/diagonal/fast classification and commitment, retained velocity cap, fixed targets, no feet, arm lengths, stable idle, input lockout, release, suppression, wall-backed Braced preference and invalid hand width.
+- `test_free_hang_safety_v2.gd`: frozen classification, ignored movement actions, camera excludes swing, normal release/landing, different-source catch, moving-source detachment and blocked occupancy rejection.
+- `test_free_hang_course_v2.gd`: all ten permanent stations, the adjacent Braced half and a real release/turn/catch of the lower ledge without teleporting. The lower lip is 1.4m outward from the upper lip, remaining within the existing falling catch envelope.
+- `test_free_hang_airborne_v2.gd`: real ground jump -> automatic catch -> Space -> normal floor landing. Tested incoming vertical velocities approximately +4.41, +0.49 and -5.07 m/s for rising/apex/falling catches. A deliberately too-early jump at 2.2m correctly misses rather than extending reach.
+
+The focused velocity fixtures produce about 0.013–0.043m peak swing with these defaults. After initial acquisition, measured wrist target error stays below 0.001m and bone lengths remain unchanged. Rendered early-settle and idle poses were inspected with visible ledge geometry.
+
+Passing current regression suites include acquisition, lateral tuning (0.7m shimmy / 3m hops / original timelines), partial hops, transfer, vertical hops, corners, navigation, input repress, top-entry jump, top-entry camera, general hang camera, normal jump recatch, outward-target toggle, gait exit, failed-jump escape, ground support, full Twin Tower routes, mid-link routes and the four stronger-speed tower crossings. The detector test's former no-brace rejection assertion now checks Free classification and separately checks rejection with Free disabled.
+
+Not every historical test is green: the old monolithic Braced test still expects lateral inputs to be ignored, and the original lateral test expects unscaled source travel. Their failures reproduce with Free Hang disabled (the lateral failure list is identical). The old hoist arc test retains four hand-tolerance failures, also identical with Free disabled. The original base-player test assumes every runtime alias exists in the raw GLB and still expects a 4m/s walk; it is obsolete for the current controller. These were not used to alter stable Braced tuning or claim a completely green historical suite.
+
+Play-test first: catch firmness and swing amplitude, hand contact against the purple lip, diagonal/fast approaches, settling camera, safe release/retry, and Braced preference on the green half. The conservative swing intentionally stays small. Future extensions should add Free-owned actions/paths, not borrow Braced foot constraints or continuously reclassify the hang.
+
+Files added: `Characters/Player/V2/player_free_hang_v2.gd`, `test/traversal_playground/free_hang_course.gd/.tscn`, and the four Free test scripts. Integration changes: player scene/motor, traversal lifecycle, shared acquisition/debug, animation, mantle-hand IK, foot/pelvis IK, environment-hand eligibility, camera, debug HUD, playground scene/router and the two detector-era test assertions.
+
+# Braced Hang blocked-jump escape and stronger outward launch
+
+Three consecutive collision-blocked normal Jump Off departures from the same hang anchor now force normal wall release. Each accepted Space attempt counts once when its swept departure path fails; busy/held input does not accumulate failures. The first two failures return to hang idle. The third clears stale ground support and uses `request_release()` with its ordinary downward/outward drift, animation, collision and source-regrab suppression. It deliberately bypasses the safe-S ground requirement as an explicit emergency escape, but never teleports, disables collision, or guarantees a safe landing. New catches, successful launches, and moving more than 5cm to another hang anchor reset the failure count; committed optional outward transfers also clear it. Debug's last-input line reports blocked attempts and emergency release.
+
+Normal `braced_hang_jump_outward_speed` increased **4.5 → 4.8m/s (+6.7%)**. Upward speed stays 9m/s; lateral influence, authored departure, animation timing, aerial steering, collision/regrab rules and optional auto-transfer default are unchanged. Larger 5.0–5.4m/s trials disrupted the existing same-height recatch fixture; 5.4m/s also skipped the intended summit-approach grip. Those trials were rejected rather than relaxing acquisition safeguards. `test_hang_failed_jump_escape_v2.gd` covers repeated ceiling-blocked attempts, busy input, third-failure release, intact collision/suppression, new-hang reset and a subsequent successful 4.8m/s jump. `test_hang_jump_speed_crossings_v2.gd` checks all four intended tower destinations with normal free jumps. Top-down launch, landing and recatch suites are also rerun with the stronger impulse.
+
+# Jump after top-down Braced Hang entry
+
+Fixed a stale-ground-support handoff in `player_hang_navigation_v2.gd`. Prompted top-down entry starts grounded, then traversal owns movement without refreshing the normal motor's support sample. Space correctly selected Jump Off and applied its impulse, but the next normal motor tick could still consider the character grounded: it replaced upward velocity with `-0.5m/s` floor pressure and cleared the jump visual. The actual launch now calls the existing `ground_support.consume_jump()` rather than only resetting coyote time. This clears cached support and marks takeoff before normal physics resumes. Jump speeds, authored departure timing, animation, regrab/collision safeguards, optional auto-targeting, and S/down release policy are unchanged.
+
+`test_hang_top_entry_jump_v2.gd` reproduces the old failure twice through grounded prompt entry → settled hang → Space. It verifies departure, retained upward/outward velocity on the first airborne tick, continued Jump Off animation and subsequent rise. Normal hang navigation, landing, recatch, top-entry and top-entry camera regressions are also checked.
+
+# Permanent Twin Tower traversal course
+
+### Mid-level rightward route correction
+
+The continuous connector's collision also matches its existing 2mm visual face offset. This hides coplanar facade-box end seams from the lateral probe, which otherwise could report a false 90-degree corner when leaving the checkpoint opening. The offset is local to this grip; global shimmy/corner tolerances and clearance safeguards are unchanged.
+
+The former 16.8m cross-landing and adjacent 17m grip are now a single continuous **16.8m ledge**. The 20cm step previously rejected sideways movement at the reported anchor `(-30.04, 15.25, -24.1644)`, while being below the minimum vertical-hop separation. The existing cross-landing, rest opening and checkpoint heights are preserved: raising that landing to 17m was tested and rejected because it broke the incoming free catch. No controller tolerances or motion/IK settings were changed. `test_twin_tower_mid_link_v2.gd` reproduces the original rejection, then checks right/left shimmy, checkpoint pull-up, the upper launch and the normal incoming free jump. The A4 route's former 17m grip below is now 16.8m.
+
+## Location, construction and scope
+
+The active `test/traversal_playground/traversal_playground.tscn` now instances `twin_tower_course.tscn` at **(-28, 0, -24)** under `Courses/TwinTowers`. Runtime generator `twin_tower_course.gd` creates `TraversalTwinTower_A` and `_B`, with named section subtrees, static collision, simple colored meshes and world-space signs. Shapes are direct children of their StaticBody3D; corresponding visual meshes live in the section subtrees. Tower A is **32.2m**, Tower B **32m**. Solid D-shaped cores have a 5m outer radius; rounded traversal bands use a 6m radius and roughly 1.8-degree facets. Inner wall faces are approximately **5.08m apart**, with hang anchors approximately **4.08m apart**. The base is a 24m square, reached by the northwest diagonal approach from the hub; its start is approximately 33m from player spawn. Press **5** to go straight to the base.
+
+This is geometry and scene-local development state only. No player/controller, GLB, animation assignment, motion curve, IK, camera tuning, input action or optional auto-transfer default was changed. Flat colored grip collision is flush with its backing wall; its visual face is displaced 2mm to avoid z-fighting. Curved lead-ins are continuous tangent mesh faces, without overlapping box end caps that could be mistaken for sharp corners. Rounded rest sectors provide safe pull-up space; the preceding tall backing walls prevent premature hoists.
+
+## Intended routes (heights in metres)
+
+- **A1:** .6m jump step, normal mantle to 2.6m, jump/automatic catch onto the 5m inner grip.
+- **A2:** travel toward the broken center: a full 3m hop, approximately .85m partial hop, then a real gap transfer across the 1m cut in the wall. At the far side W reaches 6.2m; cross back, move toward the +Z end, and use 7.4/8.6m grips. Hoist at the lower rest opening. Walk outward around the tangent wall onto the front jump platform.
+- **A3:** jump to the 11m tangent lead-in, follow the rounded outside wall (roughly 150 degrees), using shimmy/full/partial hops, then pull onto the rear amber balcony. Walk around the core onto the inner jump apron; jump toward the 13.4m lip outside the rest opening.
+- **A4/A5:** alternate ends of the 13.4, 14.6, 15.8 and 17m ledges. Reposition toward the center to reach 18.2m; Space leaves A for B's 19.2m rest opening. This is the ordinary free wall jump and automatic catch, not a committed auto-target transfer.
+- **B1/B2:** offset .8/1.6m jump steps, normal mantle to 3.6m, catch/hoist onto the 6m front pocket. E reenters hang; **S chooses the 4.8m ledge**. Traverse east, pull up at the lower end and walk to the curve's jump approach.
+- **B outer section:** jump to 7.2m; traverse the rounded exterior from its tangent lead-in near 65 degrees to the rear balcony. The route uses a different side/length from A. Walk onto the rear apron and jump back to the 9.6m inner face.
+- **B inner section:** offset 9.6/10.8/12m grips lead to a lower checkpoint. Reenter hang and move out of the window to continue via 13.2/14.4/15.6m. Space crosses to A's 16.8m rest opening. E/sideways movement rejoins A's center 18.2m launch.
+- **Shared upper route:** from B 19.2m, use the side apron to jump onto 21.6m outside the window. Alternate sideways movement with 22.8/24/25.2/26.4m grips. Free-jump back to A 27.4m, pull up at the checkpoint, then **E top-down reentry** and traverse toward the other end. W cannot continue at the checkpoint's end. Continue via 28.6/29.8m. From the +Z end of 29.8m, free-jump to B 30.8m and pull up via 32m. For A's summit, move toward the center at 29.8m, reach 31m, then hoist via 32.2m. Reset to the upper checkpoint to test the other summit branch quickly.
+
+Crossings are B15.6→A16.8 (+1.2m), A18.2→B19.2 (+1m), B26.4→A27.4 (+1m), and A29.8→B30.8 (+1m). All use the existing normal jump/catch path with automatic wall-to-wall targeting **false**. Their source/destination Z positions and rest/apron relationships differ. Both strands intentionally interweave rather than forming isolated ladders.
+
+## Checkpoints, recovery and interaction
+
+Blue checkpoint discs record a standing arrival; **R** reuses the playground's fresh-player reset at the latest disc. **5** clears that selection and returns to the tower base; Home returns to the hub. Checkpoints: Base, A_Lower (8.6), A_CurveRest (11), A_CrossRest (16.8), A_Upper (27.4), B_Descent (6), B_CurveRest (7.2), B_Lower (12), B_Mid (19.2). Four small recovery shelves occupy the shaft at 10, 12.5, 22 and 25.2m, below relevant transfers, without filling every level. Misses can still fall farther; R is the reliable development recovery. No persistent progression/save system was introduced.
+
+`twin_tower_orb.gd` extends the existing ContextInteractable. Each summit has a visible named orb: normal **E** increases emission, changes its label and prints `TOWER A/B ORB ACTIVATED`. Both active prints `TWIN TOWER TRAVERSAL COMPLETE`. Every playground reset clears orb state; no production reward system. Fresh-player resets continue to clear traversal ownership, IK and camera state.
+
+## Layout review and validation
+
+Neither base has a W-only path to a summit: lateral gaps, alternating grip spans, continuous backing that blocks early pull-up, out-of-range ground-to-hang transitions, rounded routes, the B descent and cross-shaft jumps interrupt vertical chains. Short consecutive hops exist, but not a continuous tower-height stack. Long shimmies can replace some hops (an intentional existing capability); no artificial input gate forces a hop. Curved partial hops are available toward the balcony ends. The course uses smooth curves instead of making experimental sharp outside corners mandatory. Inside corners, free hang, moving geometry, ladders and unimplemented traversal remain unsupported.
+
+Tower regression scripts: `test_twin_tower_v2.gd` (contacts, capsule clearance, automatic catches, curve entry, free crossings); `_routes_v2.gd` (22 upper links, committed hops, no-W shortcut positions, downward target and checkpoint clearance); `_ground_v2.gd` (mantles, seven jump links, summit pull-ups/orbs, top-down and three consecutive resets); `_lateral_v2.gd` (full/partial/gap chain, complete rounded routes, rest pull-ups and summit crossing); `_walkways_v2.gd` (ground connections); `_descent_v2.gd` (B's complete down→sideways→pull-up link). Tests run in the full playground with the normal animation/camera update path, not an isolated empty scene. Existing playground reset and climb/hang/top-down camera suites are also rerun. All six tower suites and those four existing suites passed. Curved partial-hop examples measured approximately 2.93m on A and 2.16m on B, without changing the normal 3m hop setting.
+
+Rendered views were inspected for placement and route readability. These automated link/action checks are not a continuous human base-to-summit playthrough or a camera-quality/performance sign-off. During playtesting inspect route readability at the lower rest openings, curved-wall camera occlusion, manual steering/recovery after a missed crossing, and whether signs make the shared upper strand clear. No tower-specific camera logic was added.
+
+# Outside-corner Braced Hang shimmy — experiment
+
+`braced_hang_corners_enabled = true` enables the new, separate `CORNER` / `HangCornerLeft` / `HangCornerRight` action. Set it false to restore the previous no-corner behavior. No source GLB, locomotion tuning, hop distances/curves, shared -.23m visual baseline, chest offset, camera tuning, or optional outward-jump default was changed. Pre-experiment Git checkpoint: `12814b02ce643684ee0828a7aadd6c79443d3eef`.
+
+## Detection, input and commitment
+
+Ordinary A/D continuous/curved shimmy is tried first, including its authored-path reserve. If it cannot fit, the local corner query scans the current face in 2.5cm increments (up to .85m), refines its end, probes the adjoining face, and intersects the two face planes. Outward-facing continuation in the requested travel direction is classified OUTSIDE; an inward-facing junction is rejected. The angle window is **70–110 degrees**. Gentle curves remain on the existing curve implementation; 60/120-degree fixtures reject. First-pass geometry must be contiguous on the **same static collider**, near the same height, with both face/top samples continuous through the vertex and a valid normal destination brace/hand span. Animatable/moving sources are unsupported.
+
+Shift+A/D never calls corner.request: useful full/partial continuous hops still win, then the existing coplanar gap query is allowed. Its parallel-normal gate rejects around-corner transfers. A box having an outside corner must NOT suppress a valid straight gap beyond it. If no straight route exists, resolution is NONE (`HOP_CORNER_FORBIDDEN` when a corner is found). A/D can instead turn around its current box; the legacy gap-only regression explicitly disables corners to isolate its prior A/D assertion.
+
+The candidate is preflighted, then committed once. Source loss/movement, real swept collision, timeout or invalid final contact abort safely; target selection is not rerun mid-action. All regular hang actions are phase-gated while CORNER is active. Completion installs destination edge/top/normal/tangent/alignment/source, clears stale lateral/vertical/transfer/interaction previews, and refreshes navigation. Repeated corners and post-corner shimmy use the new wall context.
+
+## Path, animation and IK tuning
+
+- Duration **1.8s**, driven by actual AnimationTree playback; private timeline uses the existing directional shimmy clip at full length. No new authored animation and no GLB edits.
+- Radius **.52m**, clamped to capsule radius **.45m** + clearance **.05m**. Destination inset **.36m**, normal hang distance **.50m** unchanged.
+- Progress 0–25% approaches the vertex at constant anchor height; 25–75% follows an outside circular arc and rotates with smoothstep; 75–100% settles onto the destination anchor. Body collision remains authoritative, never disabled.
+- **64 swept capsule segments** cover body/head clearance before commitment; runtime movement also sweeps. Reach validation samples the corresponding authored shoulders/wrists and arm lengths. Correction limit **.60m**, actual reach limited to **99.5%** of unchanged arm length. Left/right 90-degree test maxima are approximately .990/.962 of reach.
+- Direction-side hand is the reaching hand, consistent with existing shimmy staging. Source grip moves toward a pivot 2cm before the vertex. Leading hand releases at 2–15%, acquires the destination at 56–64%; trailing hand remains supporting until 62–74%, then reacquires at 82–96%. At least one hand retains full support throughout these envelopes. Leading destination initially targets 1cm beyond the vertex before spreading to the normal hand spacing. No rotational retargeting override was added.
+- **Corner-only wrist target drop .17m** below the existing hand target is exposed as `braced_hang_corner_grip_drop`. This is NOT a body/pelvis offset. Sampling showed lip-height rigid grips exceeded arm reach with the deliberately lowered hang body and shimmy poses. This experimental side-of-lip grip keeps physical reach limits intact; inspect its visual suitability before considering the feature final. Entry hand targets ease from the current solved positions over the first 8%; exit targets ease back to ordinary idle over **.30s**, matching the corner-to-idle animation blend. Normal idle targets are unchanged.
+- Feet release the source wall at 18–40%, are unpinned around the arc midpoint, and acquire the destination wall at 68–95%. The existing wall-aware foot solver and its correction limits remain in charge.
+
+The phase percentages are documented constants in `player_hang_corner_v2.gd`; angle/distance/radius/duration/reach/drop/sample values are Inspector exports on BracedHang. Pose reach checks are intentionally conservative and can reject geometrically clear corners. No arm-length scaling or permissive collision bypass is used.
+
+## Playground and diagnostics
+
+New permanent `hang_corner_course.tscn` / `.gd` is attached to the active Hang playground at local `(165,0,-140)`, beyond the partial-hop fixtures. Twelve labeled stations cover left/right 90, repeated corners (reverse direction to retrace), long shimmy, partial-hop approach, blocked arc, raised/unreachable destination, 75/105 degrees, unsupported inside junction, gentle cylinder curve, and Shift NoHop. Mesh and collision share prism vertices, with the existing world-space checker material. Compact CornerHangChain instances in **Vertical** and **Mixed** provide a corner followed by an adjacent-face higher grip. No active-scene or camera configuration change.
+
+Debug shows candidate/type/angle/reason, source/destination normals, anchor/path/reach results and progress. It draws the source/destination ledges, pivot/reach targets, wall-plane guides, arc, sampled capsule rings and destination anchor. A candidate blocked before reach evaluation correctly reports no hand-reach result. Nearby debug previews refresh only while stably hanging; committed motion is not reselected.
+
+## Verification and limitations
+
+`test_hang_corner_v2.gd`: both directions, exact stable destination, smooth rotation, input lockout, second corner after real shimmy actions, refreshed context, Shift rejection, full-support envelope, blocked arc, correction-limit rejection, 75/105 acceptance, 60/120 rejection, and inside-corner rejection. Existing lateral tuning, full/partial hop, partial-course, gap-transfer, acquisition, vertical, top-entry camera, hang camera, outward toggle, jump recatch, crouch continuity, mantle and navigation suites were also run. Runtime render captures check staged hand contacts and the debug path. The existing Windows root-certificate-store warning is unrelated.
+
+Still experimental: inspect the below-lip hand position, reach/support pose, feet swinging free during the pivot, idle hand settle and camera occlusion from different orbit angles. Existing camera behavior is retained; no cinematic or camera rewrite. Inside corners, separate-collider corner seams, moving geometry, hop-around-corner, Free Hang and diagonal/3D wraps are not supported. The out-of-reach course uses a raised destination (geometry/reach rejection); the automated test also exercises the numerical hand-correction rejection separately.
+
 # Partial-distance continuous Braced Hang hops — experiment
 
 Shift+A/D previously required the complete configured hop route, including animation overshoot. It now tries the full hop, then finds a shorter safe continuous hop before considering a horizontal gap transfer. `braced_hang_partial_hops_enabled = true` enables this experiment; false restores full-distance-only resolution. `braced_hang_hop_distance` remains **3.00m**, `braced_hang_hop_use_authored_distance` remains unchanged, and the new `braced_hang_hop_min_distance` starts at **0.30m**. This is about 43% of the tuned .70m shimmy, a useful displacement at the .45m capsule/.56m hand-span scale without accepting centimetre-sized hops. Both existing hop clips and the 1.1x lateral playback rate are unchanged.

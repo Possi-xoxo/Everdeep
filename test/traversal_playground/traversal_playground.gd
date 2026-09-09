@@ -23,6 +23,10 @@ func restart_attempt() -> void:
 		remove_child(player)
 		player.queue_free()
 	var marker: Marker3D=$HubStart if current_course==&"Hub" else get_node("Courses/"+String(current_course)+"/Start")
+	if has_node("Courses/TwinTowers"):
+		var towers=$Courses/TwinTowers
+		towers.reset_test_state()
+		if current_course==&"TwinTowers": marker=towers.get_reset_marker()
 	player=PLAYER.instantiate()
 	player.name="PlayerV2"
 	player.position=to_local(marker.global_position)
@@ -41,6 +45,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_2: request_reset(&"Speed")
 		KEY_3: request_reset(&"Mixed")
 		KEY_4: request_reset(&"Hang")
+		KEY_6: request_reset(&"FreeHang")
+		KEY_5:
+			$Courses/TwinTowers.reset_checkpoint()
+			request_reset(&"TwinTowers")
 		_: return
 	get_viewport().set_input_as_handled()
 

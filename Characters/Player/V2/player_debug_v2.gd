@@ -46,6 +46,8 @@ func _process(_delta: float) -> void:
 	label.text = "Player V2\n\nGait: %s\nPhysical: %s\nAnimation: %s\nHorizontal Speed: %.2f m/s\nVertical Velocity: %.2f m/s\nRun Buildup: %.0f%%\nAir Time: %.2f s\n\nWASD: Move  Shift: Run / Sprint\nSpace: Jump  Mouse: Orbit\nF3: Debug  Esc: Release mouse" % [gait, "GROUNDED" if s.is_grounded else "AIRBORNE", $"../AnimationController".presentation_label(), s.horizontal_speed, s.vertical_velocity, s.run_buildup_ratio * 100.0, s.air_time]
 	var animation = $"../AnimationController"
 	label.text+="\nAlt: Dodge"
+	if motor.traversal.free_hang.running:
+		label.text+="\n\n"+motor.traversal.free_hang.debug_text()
 	if (motor.traversal.hang.running or motor.traversal.hang.release_active) and not motor.traversal.hang.debug_detection_enabled():
 		label.text+="\n\n"+motor.traversal.hang.debug_text()
 	if s.locked_on: label.text=label.text.replace("Shift: Run / Sprint","Shift: Combat Run (no Sprint)").replace("Mouse: Orbit","Mouse orbit disabled")

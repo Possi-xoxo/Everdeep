@@ -1,6 +1,20 @@
 extends Node
 ## Automatic braced hang and committed static-ledge traversal. No Free Hang.
-enum HangPhase { NONE, CATCH, SETTLE, IDLE, TO_CROUCH, RELEASE, LATERAL, VERTICAL, JUMP_OFF, TOP_ENTRY, OUTWARD }
+enum HangPhase { NONE, CATCH, SETTLE, IDLE, TO_CROUCH, RELEASE, LATERAL, VERTICAL, JUMP_OFF, TOP_ENTRY, OUTWARD, CORNER }
+@export_group("Outside Corner Shimmy")
+@export var braced_hang_corners_enabled: bool=true
+@export_range(60,90,1) var braced_hang_corner_angle_min: float=70
+@export_range(90,120,1) var braced_hang_corner_angle_max: float=110
+@export_range(.3,1.2,.05) var braced_hang_corner_detection_distance: float=.85
+@export_range(.45,.7,.01) var braced_hang_corner_path_radius: float=.52
+@export_range(.02,.1,.01) var braced_hang_corner_clearance: float=.05
+@export_range(.3,.6,.01) var braced_hang_corner_destination_inset: float=.36
+@export_range(1,3,.05) var braced_hang_corner_duration: float=1.8
+@export_range(.1,.6,.01) var braced_hang_corner_hand_correction: float=.6
+@export_range(.85,.995,.005) var braced_hang_corner_reach_ratio: float=.995
+@export_range(0,.25,.01) var braced_hang_corner_grip_drop: float=.17
+@export_range(24,96,4) var braced_hang_corner_path_samples: int=64
+var corner=preload("res://Characters/Player/V2/player_hang_corner_v2.gd").new()
 @export_group("Outward Hang Transfer")
 ## False uses the normal wall-jump impulse and ordinary airborne ledge catch.
 ## Changing this during a committed transfer affects the next jump only.
@@ -34,7 +48,7 @@ var top_entry: Node3D
 @export_range(.1,.6,.05) var top_down_hang_max_hand_correction: float=.45
 @export_group("Hang Navigation")
 @export_range(.5,3,.05) var braced_hang_safe_release_distance: float=1.75
-@export_range(1,8,.1) var braced_hang_jump_outward_speed: float=4.5
+@export_range(1,8,.1) var braced_hang_jump_outward_speed: float=4.8
 @export_range(4,12,.1) var braced_hang_jump_up_speed: float=9.0
 @export_range(0,3,.1) var braced_hang_jump_lateral_influence: float=1.5
 @export_range(.3,1,.05) var braced_hang_interact_range: float=.75
@@ -177,6 +191,10 @@ func pose_owned() -> bool: return is_attached() or (release_active and release_e
 func project_foot(controller: Node,leg: Dictionary,pose: Transform3D) -> Dictionary:
 	var contact=controller.ClimbContact
 	var samples: Array=[pose.origin,controller._world(controller.skeleton.find_bone("mixamorig_"+leg.side+"ToeBase")).origin]
+	if corner.active:
+		var target: Dictionary=corner.foot_target()
+		var weight: float=corner.foot_weight() if controller.enabled and controller.climb_foot_ik_enabled else 0.0
+		return contact._surface(controller,leg,pose,samples,target.edge,target.normal,braced_hang_foot_wall_clearance,braced_hang_max_foot_correction,weight,"CORNER_WALL",foot_contact_response,self,target.source)
 	if outward.active:
 		var target: Dictionary=outward.contact_target()
 		var weight: float=outward.contact_weight(self,true) if controller.enabled and controller.climb_foot_ik_enabled else 0.0
@@ -253,6 +271,7 @@ func validate(data: Dictionary) -> bool:
 	return data.get("valid",false) and is_instance_valid(data.get("source")) and clear_segment(motor.global_position,data.anchor,motor.crouch.standing_capsule_height)
 
 func begin(data: Dictionary) -> void:
+	navigation.failed_jump_attempts=0
 	navigation.invalidate()
 	navigation.jump_visual=false
 	entry_gait=int(data.get("entry_gait",motor.animation_state.gait))
@@ -349,6 +368,7 @@ func prepare_clips(player: AnimationPlayer,root_reference: Vector3) -> void:
 	match_sprint_tail(player,up)
 	prepare_release(player,root_reference,idle_z)
 	lateral.prepare(self,player,root_reference,idle_z)
+	corner.prepare(self,player)
 	vertical.prepare(self,player,root_reference,idle_z)
 	navigation.prepare(self,player,root_reference,idle_z)
 
@@ -524,8 +544,10 @@ func step(delta: float) -> bool:
 		if exit_elapsed>=owner_controller.mantle.mantle_exit_blend_time: owner_controller.finish("HANG_TO_CROUCH_COMPLETED")
 		return false
 	if not is_instance_valid(source) or source.is_queued_for_deletion() or not source.global_transform.is_equal_approx(source_transform): owner_controller.finish("HANG_SOURCE_LOST"); return false
-	if not vertical.active and not transfer.active and not outward.active and not contact_still_exists(): owner_controller.finish("HANG_CONTACT_LOST"); return false
+	if not vertical.active and not transfer.active and not outward.active and not corner.active and not contact_still_exists(): owner_controller.finish("HANG_CONTACT_LOST"); return false
 	navigation.advance(self,delta)
+	if corner.active and not corner.advance(self,delta): return false
+	if not corner.active: corner.settle_remaining=maxf(0,corner.settle_remaining-delta)
 	if outward.active and not outward.advance(self,delta): return false
 	if vertical.active and not vertical.advance(self,delta): return false
 	if transfer.active:
@@ -536,6 +558,7 @@ func step(delta: float) -> bool:
 	if lateral.active: target=lateral.expected_position
 	if vertical.active: target=vertical.expected_position
 	if outward.active: target=outward.expected_position
+	if corner.active: target=corner.expected_position
 	if hang_phase in [HangPhase.CATCH,HangPhase.SETTLE]:
 		elapsed+=delta
 		hang_phase=HangPhase.SETTLE
@@ -555,6 +578,7 @@ func step(delta: float) -> bool:
 	if vertical.active: vertical.complete(self)
 	if transfer.active: transfer.complete(self)
 	if outward.active: outward.complete(self)
+	if corner.active: corner.complete(self)
 	var s=motor.animation_state
 	s.is_grounded=false
 	s.is_airborne=true
@@ -585,6 +609,8 @@ func step(delta: float) -> bool:
 func restore(reason: String) -> void:
 	if not running: return
 	outward.active=false
+	corner.active=false
+	corner.settle_remaining=0
 	top_entry.active=false
 	transfer.active=false
 	lateral.active=false

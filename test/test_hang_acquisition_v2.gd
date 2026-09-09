@@ -96,7 +96,10 @@ func run() -> void:
 	wall=box(Vector3(200,2.875,8.35),Vector3(4,.25,2))
 	await air_setup()
 	var thin: Dictionary=hang.detect()
-	check(not thin.valid and not thin.checks.Brace,"no brace rejected")
+	check(thin.valid and not thin.checks.Brace and thin.classification=="FREE","valid hands without brace use Free fallback")
+	body.traversal.free_hang.enabled=false
+	check(not hang.detect().valid,"disabled Free Hang preserves no-brace rejection")
+	body.traversal.free_hang.enabled=true
 	check(not hang.hang_debug and not hang.detection_visual.display.visible,"debug default off")
 	hang.hang_debug=true
 	hang.result=hang.detect()

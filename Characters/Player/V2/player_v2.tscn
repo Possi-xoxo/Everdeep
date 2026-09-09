@@ -20,6 +20,7 @@
 [ext_resource type="Script" path="res://Characters/Player/V2/player_ground_support_v2.gd" id="18"]
 [ext_resource type="Script" path="res://Characters/Player/V2/player_mantle_hand_ik_v2.gd" id="19"]
 [ext_resource type="Script" path="res://Characters/Player/V2/player_braced_hang_v2.gd" id="20"]
+[ext_resource type="Script" path="res://Characters/Player/V2/player_free_hang_v2.gd" id="21_free"]
 
 [sub_resource type="CapsuleShape3D" id="Body"]
 radius = 0.45
@@ -49,6 +50,9 @@ script = ExtResource("17")
 
 [node name="BracedHang" type="Node" parent="TraversalController"]
 script = ExtResource("20")
+
+[node name="FreeHang" type="Node" parent="TraversalController"]
+script = ExtResource("21_free")
 
 [node name="ContextInteraction" type="Node3D" parent="."]
 script = ExtResource("15")

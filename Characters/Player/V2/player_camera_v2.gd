@@ -70,6 +70,8 @@ func _process(delta: float) -> void:
 	_lock_weight=move_toward(_lock_weight,1.0 if locked else 0.0,delta/maxf(duration,0.001))
 	var weight:=smoothstep(0,1,_lock_weight)
 	var free_origin: Vector3=motor.to_global(_base_position)
+	if motor.traversal.free_hang.running:
+		free_origin=motor.traversal.free_hang.baseline+motor.global_basis*_base_position
 	var mantle=motor.traversal.mantle
 	var hang=motor.traversal.hang
 	# Commitment owns the motor during ENTRY, but the animation controller
@@ -138,6 +140,7 @@ func _process(delta: float) -> void:
 			free_origin=_mantle_origin
 	_mantle_tracking=tracking
 	traversal_camera_mode="HANG_PULLUP_HOLD" if hang_tracking else ("CLIMB" if climb_tracking else ("REJOIN" if mantle_camera_active else ("HANG" if hang.is_attached() else "NORMAL")))
+	if motor.traversal.free_hang.running: traversal_camera_mode="FREE_HANG_ANCHOR"
 	if climb_tracking or hang_tracking: _top_sequence=false
 	if not mantle_camera_active: _top_sequence=false
 	if _top_sequence: traversal_camera_mode="TOP_DOWN_HANG_GLIDE" if top_tracking else "TOP_DOWN_HANG_REJOIN"

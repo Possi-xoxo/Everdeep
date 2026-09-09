@@ -150,14 +150,21 @@ func request(h: Node,side: int,shift: bool) -> bool:
 		last_query=preview(h,side,true)
 		h.transfer.continuous[side]=last_query.valid
 		if not last_query.valid:
+			# A coplanar gap remains eligible. The transfer query's existing
+			# parallel-normal gate rejects destinations around a hard corner.
 			var accepted: bool=h.transfer.request(h,side)
 			last_query["decision"]="GAP_TRANSFER" if accepted else "NONE"
+			if not accepted:
+				var corner: Dictionary=h.corner.query(h,side,false)
+				if corner.get("found",false):
+					h.corner.last_query=corner
+					last_query.reason="HOP_CORNER_FORBIDDEN"
 			return accepted
 		h.transfer.last_resolution=last_query.decision
 	var distance: float=float(last_query.actual_distance) if shift else travel_distance(h,side,false)
 	action_distance=distance
 	if not shift: last_query=query(h,side,distance)
-	if not last_query.valid: return false
+	if not last_query.valid: return h.corner.request(h,side) if not shift else false
 	direction=side
 	hopping=shift
 	state=StringName("Hang"+("Hop" if shift else "Shimmy")+("Left" if side<0 else "Right"))
@@ -173,7 +180,7 @@ func request(h: Node,side: int,shift: bool) -> bool:
 	var peak: float=1
 	for sample in motion.profiles[state]: peak=maxf(peak,sample.x)
 	if not shift: last_query=query(h,side,distance*peak)
-	if not last_query.valid: return false
+	if not last_query.valid: return h.corner.request(h,side) if not shift else false
 	route=last_query.samples
 	route_length=distance*peak
 	var previous:=start
@@ -252,7 +259,8 @@ func hand_contact(h: Node,arm: Dictionary,animated: Vector3) -> Dictionary:
 	return {"target":target,"weight":weight}
 
 func debug_text(h: Node) -> String:
-	var summary: String=""
+	if h.corner.active: return h.corner.debug_text()
+	var summary: String=h.corner.debug_text()
 	for side in [-1,1]:
 		var q: Dictionary=h.navigation.targets.get("LEFT HOP" if side<0 else "RIGHT HOP",{})
 		if last_query.get("direction",0)==side and (active or h.transfer.active): q=last_query

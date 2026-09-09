@@ -50,6 +50,9 @@ func run_transfer(side: int) -> Vector3:
 
 func run() -> void:
 	await setup_transfer()
+	# Isolate the legacy straight-gap suite: A/D at this box end may now
+	# legitimately turn its own outside corner, but never crosses the gap.
+	hang.braced_hang_corners_enabled=false
 	var source_wall=box(Vector3(200,1.5,-2),Vector3(4,3,4))
 	var target_wall=box(Vector3(205,1.5,-2),Vector3(4,3,4))
 	await physics_frame

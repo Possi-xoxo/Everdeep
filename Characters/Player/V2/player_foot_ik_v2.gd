@@ -157,6 +157,15 @@ func prepare_targets(delta: float) -> void:
 		var pose:=_world(leg.bones[2])
 		leg.animated=pose.origin
 		leg.animated_basis=pose.basis
+		if motor.traversal.free_hang.running:
+			leg.climb_profile=false
+			leg.plant.update(self,data,pose,delta,false)
+			leg.weight=0.0
+			leg.correction=Vector3.ZERO
+			leg.desired_destination=pose.origin
+			leg.swing=1.0
+			leg.clamped=false
+			continue
 		leg.climb_contact=ClimbContact.project(self,leg,pose)
 		leg.climb_profile=motor.traversal.mantle.pose_owned() or motor.traversal.hang.is_attached()
 		if leg.climb_profile:

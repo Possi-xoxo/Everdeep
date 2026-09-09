@@ -196,16 +196,33 @@ func query(h: Node,delta: float,current_intent: Vector3=Vector3.INF) -> Dictiona
 					brace_ok=brace_ok and not br.is_empty() and br.collider==front.collider and br.normal.dot(front.normal)>.98
 			check(c,"Ledge width",width_ok,"HAND_WIDTH")
 			check(c,"Hand reach",hand_reach_ok,"HAND_REACH")
-			check(c,"Brace",brace_ok,"NO_BRACING_WALL")
-			if not brace_ok: c.classification="FREE_HANG_CANDIDATE"
+			c.classification_reason="BRACED_WALL_AVAILABLE" if brace_ok else "FREE_NO_BRACE"
+			var free_profile=h.owner_controller.free_hang
+			if not brace_ok and free_profile.enabled and free_profile.clips_ready:
+				c.checks.Brace=false # Informational for FREE; all other gates remain mandatory.
+				c.classification="FREE"
+				c.braced_hang=false
+				c.free_hang=true
+				anchor=free_profile.anchor_for(edge,front.normal)
+				c.anchor=anchor
+			else:
+				check(c,"Brace",brace_ok,"NO_BRACING_WALL")
 			var body_ok: bool=h.clear_segment(base,anchor,1.1)
 			check(c,"Body",body_ok,"BODY_BLOCKED")
 			check(c,"Head / full sweep",h.clear_segment(base,anchor,m.crouch.standing_capsule_height),"HEAD_BLOCKED")
+			if c.get("free_hang",false):
+				check(c,"Free visual clearance",free_profile.clear_visual_space(base,anchor,front.normal),"FREE_BODY_BLOCKED")
+				var free_hand_reach: bool=true
+				for hand: Vector3 in c.hands:
+					var shoulder: Vector3=anchor+inward*(free_profile.free_hang_body_wall_offset-free_profile.free_hang_visual_wall_offset)+Vector3.UP*1.75+tangent*(hand-edge).dot(tangent)
+					var hit: Dictionary=h.ray(shoulder,hand-Vector3.UP*.03)
+					free_hand_reach=free_hand_reach and not hit.is_empty() and hit.collider==front.collider
+				check(c,"Free shoulder reach",free_hand_reach,"FREE_HAND_PATH_BLOCKED")
 			candidates.append(c)
 	selected={"valid":false,"reason":"NO_LEDGE","classification":"NONE"}
 	var score: float=INF
 	for c in candidates:
-		var rank: float=c.get("distance",INF)+(0 if c.valid else 100)+(0 if c.has("anchor") else 10)
+		var rank: float=c.get("distance",INF)+(0 if c.valid else 100)+(0 if c.has("anchor") else 10)+(10 if c.get("free_hang",false) else 0)
 		if rank<score:
 			score=rank
 			selected=c
@@ -215,6 +232,7 @@ func query(h: Node,delta: float,current_intent: Vector3=Vector3.INF) -> Dictiona
 	if selected.has("checks") and not m.is_on_floor() and not m.ground_support.has_ground_support and not h.running and h.enabled and h.owner_controller.can_begin(false):
 		var eligible: bool=selected.checks.Approach and not selected.grace
 		for key in selected.checks:
+			if key=="Brace" and selected.get("free_hang",false): continue
 			if key not in ["Approach","Vertical reach"]: eligible=eligible and selected.checks[key]
 		if eligible:
 			grace_until=clock+h.candidate_grace_time
@@ -251,7 +269,8 @@ func debug_text(h: Node) -> String:
 		text+="\nHeight %s | Direction %s | Reach %s" % [flag(c.checks.Height),flag(c.checks.Facing and c.checks.Approach),flag(c.checks["Vertical reach"] and c.checks["Horizontal reach"])]
 		text+="\nDirection source: "+c.approach_source+" | Wall contact: "+str(c.wall_contact)
 		text+="\nBrace: %s | Body: %s | Head: %s\nWidth: %s | Hand reach: %s | Regrab: %s" % [flag(c.checks.Brace),flag(c.checks.Body),flag(c.checks["Head / full sweep"]),flag(c.checks["Ledge width"]),flag(c.checks["Hand reach"]),flag(c.checks.Regrab)]
+		text+="\nHand Catch: %s | Bracing: %s" % ["VALID" if c.checks["Ledge width"] and c.checks["Hand reach"] else "INVALID","VALID" if c.checks.Brace else "INVALID"]
 	if persisted: text+="\nLast candidate (short persistence)"
-	return text+"\nReason: "+str(c.get("reason","NONE"))+"\nGreen accepted / Cyan valid / Red rejected"
+	return text+"\nClassification: "+str(c.get("classification","NONE") if c.get("valid",false) else "NONE")+" | "+str(c.get("classification_reason","REJECTED") if c.get("valid",false) else "REJECTED")+"\nReason: "+str(c.get("reason","NONE"))+"\nGreen braced / Magenta free / Red rejected"
 
 func flag(value: bool) -> String: return "PASS" if value else "FAIL"

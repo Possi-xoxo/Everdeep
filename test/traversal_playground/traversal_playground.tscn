@@ -1,4 +1,6 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=14 format=3]
+[ext_resource type="PackedScene" path="res://test/traversal_playground/free_hang_course.tscn" id="FreeHang"]
+[ext_resource type="PackedScene" path="res://test/traversal_playground/twin_tower_course.tscn" id="Towers"]
 [ext_resource type="Script" path="res://test/traversal_playground/traversal_playground.gd" id="1"]
 [ext_resource type="PackedScene" path="res://test/traversal_playground/vertical_course.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://test/traversal_playground/speed_course.tscn" id="3"]
@@ -16,10 +18,22 @@ background_color = Color(0.12, 0.18, 0.24, 1)
 ambient_light_source = 3
 ambient_light_color = Color(0.7, 0.8, 0.95, 1)
 ambient_light_energy = 0.65
+[sub_resource type="BoxShape3D" id="TowerBridgeShape"]
+size = Vector3(3, 0.5, 14)
+[sub_resource type="BoxMesh" id="TowerBridgeMesh"]
+size = Vector3(3, 0.5, 14)
 [node name="TraversalPlayground" type="Node3D"]
 script = ExtResource("1")
 [node name="HubStart" type="Marker3D" parent="."]
 position = Vector3(0, 0.08, 3)
+[node name="TwinTowerApproach" type="StaticBody3D" parent="."]
+position = Vector3(-11, -0.27, -10)
+rotation_degrees = Vector3(0, 45, 0)
+[node name="Collision" type="CollisionShape3D" parent="TwinTowerApproach"]
+shape = SubResource("TowerBridgeShape")
+[node name="Mesh" type="MeshInstance3D" parent="TwinTowerApproach"]
+mesh = SubResource("TowerBridgeMesh")
+material_override = SubResource("HubMaterial")
 [node name="Hub" type="StaticBody3D" parent="."]
 position = Vector3(0, -0.25, 0)
 [node name="Collision" type="CollisionShape3D" parent="Hub"]
@@ -29,11 +43,15 @@ mesh = SubResource("HubMesh")
 material_override = SubResource("HubMaterial")
 [node name="Instructions" type="Label3D" parent="."]
 position = Vector3(0, 2.5, -5)
-text = "TRAVERSAL PLAYGROUND\n1 Vertical / 2 Speed / 3 Mixed / 4 Braced Hang\nR Restart current course / Home Hub\nWASD Move / Shift Run-Sprint / Space Jump / Alt Roll / E Climb\nGaps have no safety floor — falling resets the course"
+text = "TRAVERSAL PLAYGROUND\n1 Vertical / 2 Speed / 3 Mixed / 4 Braced Hang / 5 Twin Towers / 6 Free Hang\nR Retry course/checkpoint / Home Hub\nWASD Move / Shift Run-Sprint / Space Jump / Alt Roll / E Climb\nTwin Towers northwest: follow the diagonal approach"
 font_size = 40
 pixel_size = 0.007
 billboard = 1
 [node name="Courses" type="Node3D" parent="."]
+[node name="FreeHang" parent="Courses" instance=ExtResource("FreeHang")]
+position = Vector3(80,0,70)
+[node name="TwinTowers" parent="Courses" instance=ExtResource("Towers")]
+position = Vector3(-28, 0, -24)
 [node name="Vertical" parent="Courses" instance=ExtResource("2")]
 position = Vector3(0, 0, -9)
 [node name="Speed" parent="Courses" instance=ExtResource("3")]

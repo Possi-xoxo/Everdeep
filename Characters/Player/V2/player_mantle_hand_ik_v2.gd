@@ -28,6 +28,8 @@ var debug_mesh: MeshInstance3D
 @onready var motor=get_parent()
 var mantle: Node:
 	get:
+		var free=motor.get_node("TraversalController/FreeHang")
+		if free.pose_owned(): return free
 		var hang=motor.get_node("TraversalController/BracedHang")
 		return hang if hang.pose_owned() else motor.get_node("TraversalController/Mantle")
 
@@ -99,6 +101,9 @@ func _capture_grips() -> void:
 		arm.valid=not hit.is_empty() and hit.collider==mantle.source and hit.normal.dot(n)>.98
 		arm.grip=edge+Vector3.UP*hand_vertical_offset+mantle.wall_normal*hand_wall_normal_offset
 		arm.base_grip=arm.grip
+		if mantle==motor.traversal.free_hang:
+			arm.grip=mantle.hand_targets[arm.side]
+			arm.base_grip=arm.grip
 		arm.weight=0.0
 		arm.pole_direction=Vector3.ZERO
 
@@ -128,6 +133,7 @@ func prepare_targets(delta: float) -> void:
 	if not captured or captured_source!=mantle.source or (captured_alignment!=mantle.alignment and not lateral_active): _capture_grips()
 	var frame: float=mantle.current_frame()
 	var envelope: float=smoothstep(hand_clamp_start_frame,hand_clamp_full_frame,frame)*(1.0-smoothstep(hand_release_frame,hand_release_end_frame,frame))
+	if mantle==motor.traversal.free_hang: envelope=mantle.hand_weight()
 	if mantle==motor.traversal.hang and mantle.top_entry.active: envelope=mantle.top_entry.hand_weight()
 	if mantle==motor.traversal.hang and mantle.navigation.jumping: envelope*=1-smoothstep(.30,mantle.navigation.LAUNCH_TIME,mantle.navigation.jump_pose_time)
 	for arm in arms:
@@ -143,6 +149,10 @@ func prepare_targets(delta: float) -> void:
 		arm.grip=arm.base_grip
 		var correction_cap: float=max_hand_correction_distance
 		var contact_weight: float=1.0
+		if mantle==motor.traversal.free_hang:
+			var free_contact: Dictionary=mantle.actions.contact(arm.side,arm.base_grip)
+			arm.grip=free_contact.target
+			contact_weight=free_contact.weight
 		if idle_weight>0:
 			var h=motor.traversal.hang
 			arm.grip=arm.base_grip.lerp(h.idle_pose.hand_target(h,arm,pose.origin),idle_weight)
@@ -151,6 +161,15 @@ func prepare_targets(delta: float) -> void:
 		if mantle==motor.traversal.hang and mantle.top_entry.active:
 			arm.grip=mantle.idle_pose.hand_target(mantle,arm,pose.origin)
 			correction_cap=mantle.top_entry.maximum_positional_correction
+		elif mantle==motor.traversal.hang and mantle.corner.active:
+			var contact: Dictionary=mantle.corner.hand_contact(mantle,arm)
+			arm.grip=contact.target
+			contact_weight*=contact.weight
+			correction_cap=mantle.braced_hang_corner_hand_correction
+		elif mantle==motor.traversal.hang and mantle.corner.settle_remaining>0 and mantle.hang_phase==mantle.HangPhase.IDLE:
+			var settle: float=smoothstep(0,1,1-mantle.corner.settle_remaining/.30)
+			arm.grip=Vector3(mantle.corner.hand(mantle,mantle.corner.committed,arm.side,1).target).lerp(arm.grip,settle)
+			correction_cap=lerpf(mantle.braced_hang_corner_hand_correction,correction_cap,settle)
 		elif mantle==motor.traversal.hang and mantle.transfer.active:
 			var contact: Dictionary=mantle.transfer.hand_contact(mantle,arm)
 			arm.grip=contact.target
@@ -215,6 +234,7 @@ func capture_result() -> void:
 			var angle: float=arm.basis.get_rotation_quaternion().angle_to(desired.get_rotation_quaternion())
 			var idle_weight: float=motor.traversal.hang.idle_pose.weight if mantle==motor.traversal.hang else 0.0
 			var orientation_weight: float=lerpf(hand_orientation_weight,.10,idle_weight)
+			if mantle==motor.traversal.free_hang: orientation_weight=0.0 # Preserve authored free-hang wrists.
 			var fraction: float=minf(1.0,deg_to_rad(max_wrist_rotation_degrees)/maxf(angle,.001))*orientation_weight*arm.weight
 			var pose:=skeleton.get_bone_global_pose(arm.bones[2])
 			var scale: Vector3=(skeleton.global_basis*pose.basis).get_scale()

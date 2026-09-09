@@ -39,7 +39,7 @@ func arrow(a: Vector3,b: Vector3,color: Color) -> void:
 	line(b,b-dir*.12-side*.07,color)
 
 func _process(delta: float) -> void:
-	display.visible=h.debug_detection_enabled()
+	display.visible=h.debug_detection_enabled() or h.owner_controller.free_hang.free_hang_debug
 	if not display.visible:
 		retained.clear()
 		retained_result.clear()
@@ -60,6 +60,28 @@ func _process(delta: float) -> void:
 	display.mesh=mesh
 	mesh.surface_begin(Mesh.PRIMITIVE_LINES)
 	h.top_entry.draw(self)
+	var free=h.owner_controller.free_hang
+	if free.running:
+		var a=free.actions
+		arrow(free.ledge_edge,free.ledge_edge+free.facing.cross(Vector3.UP),Color.YELLOW)
+		for i in range(1,a.route.size()): line(a.route[i-1],a.route[i],Color.PINK)
+		if not a.destination.is_empty(): cross_at(a.destination.anchor,Color.GREEN,.16)
+		for value: Dictionary in a.queries.values():
+			if not value.is_empty(): cross_at(value.anchor,Color.YELLOW,.10)
+		if a.active:
+			for side in ["Left","Right"]:
+				var contact: Dictionary=a.contact(side,free.hand_targets[side])
+				cross_at(contact.target,Color.GREEN if contact.weight>.5 else Color.ORANGE,.06)
+		cross_at(free.ledge_edge,Color.MAGENTA)
+		cross_at(free.alignment,Color.CYAN,.12)
+		cross_at(free.motor.global_position,Color.WHITE,.10)
+		for target: Vector3 in free.hand_targets.values():
+			cross_at(target,Color.MAGENTA,.05)
+			line(target,free.motor.global_position,Color.CYAN)
+		arrow(free.alignment,free.alignment+free.incoming_velocity*.10,Color.ORANGE)
+		arrow(free.alignment,free.alignment+free.retained_momentum,Color.PINK)
+		arrow(free.baseline,free.baseline+free.swing_offset,Color.WHITE)
+		for brace: Vector3 in free.candidate.braces: line(brace-free.facing*.12,brace+free.facing*.12,Color.RED)
 	var center: Vector3=q.base+Vector3.UP*h.hang_vertical_offset
 	var low: Vector3=center-Vector3.UP*h.vertical_reach_below
 	var high: Vector3=center+Vector3.UP*h.vertical_reach_allowance
@@ -95,6 +117,7 @@ func _process(delta: float) -> void:
 	for c in retained:
 		var color:=Color.CYAN if c.valid else Color.RED
 		if c.valid and h.result.get("valid",false) and c.edge.distance_to(h.result.get("edge",Vector3.INF))<.025: color=Color.GREEN
+		if c.valid and c.get("free_hang",false): color=Color.MAGENTA
 		if not h.running and (h.motor.is_on_floor() or h.motor.ground_support.has_ground_support): color=Color.RED
 		cross_at(c.edge,color)
 		arrow(c.edge,c.edge+c.normal*.35,color)
@@ -154,4 +177,5 @@ func _process(delta: float) -> void:
 	if h.is_attached(): h.transfer.draw(self,h)
 	if h.is_attached(): h.outward.draw(self,h)
 	if h.is_attached(): h.lateral.draw(self,h)
+	if h.is_attached(): h.corner.draw(self,h)
 	mesh.surface_end()

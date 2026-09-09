@@ -116,6 +116,6 @@ func run() -> void:
 	await air_setup()
 	var no_brace: Dictionary=hang.detect()
 	print("NO BRACE ",no_brace)
-	check(not no_brace.valid and no_brace.classification=="FREE_HANG_CANDIDATE","no bracing classified but not enabled")
+	check(no_brace.valid and no_brace.classification=="FREE" and no_brace.get("free_hang",false),"valid unsupported hands use sibling fallback")
 	print("BRACED_HANG_V2 ","PASS" if failures.is_empty() else "FAIL", " failures=",failures)
 	quit(0 if failures.is_empty() else 1)

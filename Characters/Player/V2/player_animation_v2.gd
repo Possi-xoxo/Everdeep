@@ -16,6 +16,10 @@ const Grounded = preload("res://Characters/Player/V2/player_grounded_animation_v
 @export_range(1,30,0.5) var lock_direction_blend_speed: float = 15.0
 var playback_recoveries: int = 0
 const CLIPS := {
+	"FreeHangCatch": &"FreeHangCatch_Runtime", "FreeHangIdle": &"FreeHangIdle_Runtime",
+	"FreeHangShimmyLeft": &"FreeHangShimmyLeft_Runtime", "FreeHangShimmyRight": &"FreeHangShimmyRight_Runtime",
+	"FreeHangHopLeft": &"FreeHangHopLeft_Runtime", "FreeHangHopRight": &"FreeHangHopRight_Runtime",
+	"FreeHangClimb": &"FreeHangClimb_Runtime", "FreeHangRelease": &"FreeHangRelease_Runtime",
 	"Idle": &"IDL_IDLE_A_RAW", "Walk": &"LOC_WALKING",
 	"Run": &"LOC_RUNNING_FOWARD_A", "Sprint": &"LOC_SPRINT_FORWARD",
 	"JumpStanding": &"AIR_STANDING_JUMP_(2)", "JumpMoving": &"AIR_RUNNING_JUMP",
@@ -31,6 +35,7 @@ const CLIPS := {
 	"HangHopUp": &"TRV_BRACED_HANG_HOP_UP", "HangHopDown": &"TRV_BRACED_HANG_HOP_DOWN",
 	"HangJumpOff": &"TRV_JUMP_FROM_BRACED_HANG",
 	"HangOutward": &"HangOutward_Runtime",
+	"HangCornerLeft": &"TRV_BRACED_HANG_SHIMMY_LEFT", "HangCornerRight": &"TRV_BRACED_HANG_SHIMMY_RIGHT",
 	"HangTopEntry": &"HangTopEntry_Full",
 	"HangHopLeft": &"TRV_BRACED_HANG_HOP_LEFT", "HangHopRight": &"TRV_BRACED_HANG_HOP_RIGHT",
 	"CrouchIdle": &"CRC_CROUCH_IDLE", "CrouchWalk": &"BOW_STANDING_WALK_FORWARD",
@@ -129,6 +134,7 @@ func _ready() -> void:
 
 func _prepare_library() -> bool:
 	for clip: StringName in CLIPS.values():
+		if str(clip).begins_with("FreeHang"): continue
 		if clip in [&"HangTopEntry_Full",&"HangOutward_Runtime"]: continue # Private runtime aliases prepared below.
 		if not player.has_animation(clip):
 			push_error("V2 missing canonical action: " + clip)
@@ -144,6 +150,7 @@ func _prepare_library() -> bool:
 		if idle.track_get_type(track) == Animation.TYPE_POSITION_3D and String(idle.track_get_path(track)).ends_with(":mixamorig_Hips"):
 			reference = idle.track_get_key_value(track, 0)
 	for state: String in CLIPS:
+		if state.begins_with("FreeHang"): continue
 		if state in ["HangTopEntry","HangOutward"]: continue
 		var clip := player.get_animation(CLIPS[state])
 		if state.begins_with("Hang"): continue
@@ -165,6 +172,7 @@ func _prepare_library() -> bool:
 	_trim_backstep()
 	motor.get_node("TraversalController/Mantle").prepare_clip(player.get_animation(CLIPS.Mantle))
 	motor.get_node("TraversalController/BracedHang").prepare_clips(player,reference)
+	motor.get_node("TraversalController/FreeHang").prepare_clips(player)
 	return grounded.prepare(player)
 
 func _trim_backstep() -> void:
@@ -189,6 +197,10 @@ func _trim_backstep() -> void:
 func _clip(state: String) -> AnimationNodeAnimation:
 	var node := AnimationNodeAnimation.new()
 	node.animation = CLIPS[state]
+	if state in ["HangCornerLeft","HangCornerRight"]:
+		node.use_custom_timeline=true
+		node.stretch_time_scale=true
+		node.timeline_length=motor.get_node("TraversalController/BracedHang").braced_hang_corner_duration
 	if state in ["HangTopEntry","HangHopUp","HangHopDown"]:
 		var hang_controller=motor.get_node("TraversalController/BracedHang")
 		var rate: float=hang_controller.top_down_hang_playback_speed if state=="HangTopEntry" else hang_controller.braced_hang_vertical_playback_speed
@@ -209,6 +221,11 @@ func _clip(state: String) -> AnimationNodeAnimation:
 		var crouch_controller=motor.get_node("CrouchController")
 		var rate: float=crouch_controller.crouch_enter_playback_speed if state=="CrouchEnter" else crouch_controller.crouch_exit_playback_speed
 		node.timeline_length=player.get_animation(CLIPS[state]).length/rate
+	if state.begins_with("FreeHangShimmy") or state.begins_with("FreeHangHop"):
+		var free=motor.get_node("TraversalController/FreeHang")
+		node.use_custom_timeline=true
+		node.stretch_time_scale=true
+		node.timeline_length=player.get_animation(CLIPS[state]).length/free.actions.playback_rate(free,state)
 	if state == "Land":
 		node.use_custom_timeline = true
 		node.stretch_time_scale = false
@@ -225,7 +242,9 @@ func _build_tree() -> void:
 	states.append_array(["HangHopUp","HangHopDown"])
 	states.append("HangJumpOff")
 	states.append("HangOutward")
+	states.append_array(["HangCornerLeft","HangCornerRight"])
 	states.append("HangTopEntry")
+	states.append_array(["FreeHangCatch","FreeHangIdle","FreeHangShimmyLeft","FreeHangShimmyRight","FreeHangHopLeft","FreeHangHopRight","FreeHangClimb","FreeHangRelease"])
 	for state in states:
 		if state=="Locomotion": continue
 		if state in ["CrouchLocked","CrouchLockedRun"]:
@@ -248,8 +267,11 @@ func _build_tree() -> void:
 			var transition := AnimationNodeStateMachineTransition.new()
 			transition.xfade_time = land_blend_out if to == "Locomotion" else (land_blend_in if to == "Land" else (jump_to_fall_blend if to == "Fall" else jump_blend_in))
 			if to=="Mantle": transition.xfade_time=.15
+			if to=="FreeHangCatch": transition.xfade_time=.15
+			if to=="FreeHangIdle": transition.xfade_time=.30
+			if to.begins_with("FreeHang") and to not in ["FreeHangIdle","FreeHangCatch"]: transition.xfade_time=.15
 			if to.begins_with("Hang"): transition.xfade_time=.12
-			if from in ["HangShimmyLeft","HangShimmyRight"] and to=="HangIdle": transition.xfade_time=.30
+			if from in ["HangShimmyLeft","HangShimmyRight","HangCornerLeft","HangCornerRight"] and to=="HangIdle": transition.xfade_time=.30
 			if to.begins_with("Crouch"): transition.xfade_time=motor.get_node("CrouchController").crouch_enter_blend_time
 			if from=="CrouchExit" or to=="CrouchExit": transition.xfade_time=motor.get_node("CrouchController").crouch_exit_blend_time
 			if from in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"] and to in ["CrouchIdle","CrouchWalk","CrouchRun","CrouchLocked","CrouchLockedRun"]:
@@ -268,6 +290,16 @@ func _build_tree() -> void:
 func _physics_process(delta: float) -> void:
 	_pose_delta = delta
 	motor.traversal.hang.idle_pose.update(motor.traversal.hang,self,delta)
+	if motor.traversal.free_hang.running:
+		var free=motor.traversal.free_hang
+		rig.position=free.rig_base_position # Do not inherit a fading Braced body offset.
+		_episode_visible=false
+		_intentional_jump_episode=false
+		fall_visual_committed=false
+		land_visual_offset=0
+		visual_root.position=visual_root_base_position+motor.global_basis.inverse()*free.visual_offset()
+		_enter(free.animation_name())
+		return
 	if motor.traversal.hang.is_attached():
 		_episode_visible=false
 		_intentional_jump_episode=false
@@ -275,6 +307,9 @@ func _physics_process(delta: float) -> void:
 		land_visual_offset=0
 		visual_root.position=visual_root_base_position
 		var h=motor.traversal.hang
+		if h.corner.active:
+			_enter(h.corner.state)
+			return
 		if h.outward.active:
 			_enter(&"HangOutward")
 			return
@@ -446,6 +481,10 @@ func playback_debug_text() -> String:
 	return "Logical: %s\nActual Tree Node: %s (%s)\nActual Locomotion Node: %s (%s)\nAnimationTree Active: %s\nGait Blend: %.2f [Idle / Walk / Run / Sprint]\nAir Episode Visible: %s\nPlayback Recoveries: %d" % [presentation_label(), _playback.get_current_node(), _playback.is_playing(), child.get_current_node(), child.is_playing(), tree.active, gait_blend, _episode_visible, playback_recoveries + grounded.playback_recoveries]
 
 func _on_pose_applied() -> void:
+	if motor.traversal.free_hang.running:
+		rig.position=motor.traversal.free_hang.rig_base_position
+		visual_root.position=visual_root_base_position+motor.global_basis.inverse()*motor.traversal.free_hang.visual_offset()
+		return # Free profile owns translation; ground compression must not erase it.
 	grounded.on_pose_applied(visual_root)
 	if current_state in [&"DodgeStand", &"DodgeRun", &"DodgeBack"] and _playback.get_current_node()==current_state:
 		motor.dodge.evaluate(_playback.get_current_play_position())
@@ -458,6 +497,8 @@ func _on_pose_applied() -> void:
 		# 0..1 describes the remaining source clip, independent of early exit.
 		land_window_progress = clampf((land_source_progress - start) / maxf(1.0 - start, 0.001), 0.0, 1.0)
 	_update_land_visual_compression(_pose_delta)
+	if not motor.traversal.is_traversing and current_state==&"Fall":
+		visual_root.position+=motor.global_basis.inverse()*motor.traversal.free_hang.exit_offset()
 	if debug_land_visual_compression and current_state == &"Land":
 		_sample_land_feet()
 		if _debug_entry_pending or (not _debug_peak_reported and land_window_progress >= float(_land_profile.peak)):

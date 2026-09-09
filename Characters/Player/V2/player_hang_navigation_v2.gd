@@ -24,6 +24,9 @@ var departure: Array[Vector3]=[]
 var jump_root_delta:=Vector3.ZERO
 var jump_turn: Array[float]=[]
 var last_input: String="NONE"
+const FAILED_JUMP_LIMIT: int=3
+var failed_jump_attempts: int=0
+var failed_jump_anchor:=Vector3.ZERO
 
 func invalidate() -> void: clock=0
 
@@ -112,6 +115,7 @@ func refresh(h: Node,delta: float=0,force: bool=false) -> void:
 	if context_id!=next_context:
 		h.transfer.previews.clear()
 		h.transfer.candidate_sets.clear()
+		h.corner.last_query={"valid":false,"found":false,"type":"NONE","reason":"NOT_QUERIED"}
 	context_id=next_context
 	h.vertical.refresh(h,0,true)
 	safe_ground=release_query(h)
@@ -119,6 +123,9 @@ func refresh(h: Node,delta: float=0,force: bool=false) -> void:
 		for hop in [false,true]:
 			var key: String=("LEFT" if side<0 else "RIGHT")+(" HOP" if hop else " SHIMMY")
 			targets[key]=h.lateral.preview_idle(h,side,hop)
+			if not hop and not targets[key].valid and h.debug_detection_enabled():
+				var corner_query: Dictionary=h.corner.query(h,side)
+				if corner_query.found: h.corner.last_query=corner_query
 			if hop:
 				h.transfer.continuous[side]=targets[key].valid
 				if targets[key].valid:
@@ -143,7 +150,10 @@ func resolve(h: Node,action: String,side: float=0,shift: bool=false) -> bool:
 		last_input="E → INTERACT"
 		return true
 	if action=="JUMP":
+		if h.alignment.distance_to(failed_jump_anchor)>.05: failed_jump_attempts=0
+		failed_jump_anchor=h.alignment
 		if h.outward.request(h,side):
+			failed_jump_attempts=0
 			last_input="SPACE → OUTWARD_TRANSFER"
 			return true
 		launch_velocity=h.wall_normal*h.braced_hang_jump_outward_speed+Vector3.UP*h.braced_hang_jump_up_speed+h.facing.cross(Vector3.UP)*clampf(side,-1,1)*h.braced_hang_jump_lateral_influence
@@ -188,10 +198,21 @@ func jump_step(h: Node,delta: float) -> bool:
 	var offset: Vector3=departure[low].lerp(departure[low+1],index-low)
 	var target: Vector3=departure_start+Vector3.UP*offset.y+h.wall_normal*offset.z
 	if not h.clear_segment(h.motor.global_position,target,h.motor.crouch.standing_capsule_height):
-		jumping=false; jump_visual=false; h.hang_phase=h.HangPhase.IDLE; return true
+		jumping=false; jump_visual=false; h.hang_phase=h.HangPhase.IDLE
+		failed_jump_attempts+=1
+		last_input="SPACE → BLOCKED (%d/%d)"%[failed_jump_attempts,FAILED_JUMP_LIMIT]
+		if failed_jump_attempts>=FAILED_JUMP_LIMIT:
+			# Three separate accepted jump attempts are an explicit escape request.
+			# Detach through normal release; never teleport or disable collision.
+			h.motor.ground_support.consume_jump()
+			h.request_release()
+			failed_jump_attempts=0
+			last_input="SPACE → EMERGENCY_RELEASE (3 blocked jumps)"
+		return true
 	h.motor.move_and_collide(target-h.motor.global_position)
 	if time<LAUNCH_TIME and jump_time<2: return true
 	h.owner_controller.finish("HANG_JUMP_OFF")
+	failed_jump_attempts=0
 	jumping=false
 	jump_visual=true
 	jump_time=time
@@ -199,7 +220,10 @@ func jump_step(h: Node,delta: float) -> bool:
 	h.release_suppression_active=true
 	h.release_suppression_remaining=h.release_regrab_timeout
 	h.motor.velocity=launch_velocity
-	h.motor.ground_support.reset_coyote()
+	# Top-down entry can retain the last grounded support sample while hang
+	# owns motion. Mark actual takeoff, not just coyote expiry, so the first
+	# normal motor tick cannot replace the jump impulse with floor pressure.
+	h.motor.ground_support.consume_jump()
 	h.motor.animation_state.is_grounded=false
 	h.motor.animation_state.was_grounded=false
 	h.motor.animation_state.is_airborne=true

@@ -14,7 +14,7 @@ var corrected_position := Vector3.ZERO
 func prepare(delta: float) -> void:
 	var s = controller.motor.animation_state
 	var allowed: bool = controller.pelvis_enabled and controller.enabled and controller.motor.physical_ground_contact() and not s.jump_started and not controller.motor.dodge.is_dodging
-	allowed=allowed and not controller.motor.traversal.mantle.pose_owned() and not controller.motor.traversal.hang.is_attached()
+	allowed=allowed and not controller.motor.traversal.mantle.pose_owned() and not controller.motor.traversal.hang.is_attached() and not controller.motor.traversal.free_hang.running
 	var lowest := 0.0
 	for i in controller.legs.size():
 		var leg = controller.legs[i]
@@ -28,6 +28,7 @@ func prepare(delta: float) -> void:
 	effective_weight=1.0 if controller.is_grounded_idle() else controller.pelvis_ik_weight
 	target_offset = maxf(lowest, -controller.pelvis_drop_limit()) * effective_weight
 	current_offset = lerpf(current_offset, target_offset, 1.0 - exp(-controller.pelvis_adjust_speed * delta))
+	if controller.motor.traversal.free_hang.running: current_offset=0.0
 	if absf(current_offset) < 0.0001: current_offset = 0.0
 	# Landing already lowers VisualRoot. It pays this shared downward budget;
 	# Hips never adds its entire drop on top of the authored landing compression.
